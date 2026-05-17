@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 
 const VERSION = '1.0.0';
@@ -14,6 +15,8 @@ export function main(argv = process.argv): void {
   createProgram().parse(argv);
 }
 
-if (require.main === module) {
+const isDirectExecution = process.argv[1] === fileURLToPath(import.meta.url);
+
+if (isDirectExecution) {
   main();
 }

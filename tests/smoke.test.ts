@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { createProgram } from '../src/cli';
+import { createProgram } from '../src/cli.js';
 
 describe('CLI scaffold', () => {
   test('exposes the package CLI name', () => {
