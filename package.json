@@ -1,0 +1,41 @@
+{
+  "name": "@lkangd/cc-settings-preset",
+  "version": "1.0.0",
+  "description": "Preset manager for Claude Code settings.",
+  "license": "ISC",
+  "type": "commonjs",
+  "bin": {
+    "cc-settings-preset": "dist/cli.js",
+    "ccsp": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && chmod +x dist/cli.js",
+    "prepack": "pnpm build",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "engines": {
+    "node": ">=12"
+  },
+  "dependencies": {
+    "commander": "^9.5.0",
+    "cross-spawn": "^7.0.6",
+    "fs-extra": "^10.1.0",
+    "ink": "^3.2.0",
+    "react": "^17.0.2",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/cross-spawn": "^6.0.6",
+    "@types/fs-extra": "^9.0.13",
+    "@types/node": "^12.20.55",
+    "@types/react": "^17.0.83",
+    "tsx": "^3.14.0",
+    "typescript": "^4.9.5",
+    "vitest": "^0.34.6"
+  }
+}
