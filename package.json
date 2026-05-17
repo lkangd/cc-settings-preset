@@ -1,12 +1,16 @@
 {
   "name": "@lkangd/cc-settings-preset",
   "version": "1.0.0",
-  "description": "Preset manager for Claude Code settings.",
+  "description": "A preset selector for Claude Code runtime settings",
   "homepage": "https://github.com/lkangd/cc-settings-preset#readme",
   "bugs": {
     "url": "https://github.com/lkangd/cc-settings-preset/issues"
   },
-  "repository": "git+https://github.com/lkangd/cc-settings-preset.git",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lkangd/cc-settings-preset.git"
+  },
+  "author": "",
   "license": "ISC",
   "type": "commonjs",
   "bin": {
