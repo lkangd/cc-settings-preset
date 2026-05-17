@@ -2,6 +2,11 @@
   "name": "@lkangd/cc-settings-preset",
   "version": "1.0.0",
   "description": "Preset manager for Claude Code settings.",
+  "homepage": "https://github.com/lkangd/cc-settings-preset#readme",
+  "bugs": {
+    "url": "https://github.com/lkangd/cc-settings-preset/issues"
+  },
+  "repository": "git+https://github.com/lkangd/cc-settings-preset.git",
   "license": "ISC",
   "type": "commonjs",
   "bin": {
@@ -9,11 +14,19 @@
     "ccsp": "dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "package.json",
+    "README.md",
+    "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "packageManager": "pnpm@9.5.0+sha256.dbdf5961c32909fb030595a9daa1dae720162e658609a8f92f2fa99835510ca5",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && chmod +x dist/cli.js",
-    "prepack": "pnpm build",
+    "build": "tsc -p tsconfig.build.json",
+    "postbuild": "chmod +x dist/cli.js",
+    "prepack": "pnpm run build",
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage"
