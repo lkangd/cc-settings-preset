@@ -39,7 +39,7 @@
     "node": ">=20.19.2"
   },
   "dependencies": {
-    "@inkjs/ui": "latest",
+    "@inkjs/ui": "^2.0.0",
     "commander": "^14.0.0",
     "cross-spawn": "^7.0.6",
     "figlet": "^1.9.3",
