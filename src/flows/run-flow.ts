@@ -85,6 +85,10 @@ function activePresetName(state: RunFlowState): string | undefined {
   return state.presets[state.settingsCursor]?.name
 }
 
+function activePreset(state: RunFlowState): PresetMeta | undefined {
+  return state.presets[state.settingsCursor]
+}
+
 function getPresetPlugins(state: RunFlowState): PluginState[] {
   const presetName = activePresetName(state)
   if (!presetName) return []
@@ -124,6 +128,12 @@ function moveFocus(state: RunFlowState, direction: -1 | 1): RunFlowState {
   if (index === -1) return state
   const nextFocus = focuses[clamp(index + direction, focuses.length)]
   return nextFocus ? { ...state, focus: nextFocus } : state
+}
+
+export function shouldShowDerivedHint(state: RunFlowState): boolean {
+  const preset = activePreset(state)
+  if (!preset || preset.type !== 'base') return false
+  return Boolean(state.draftsByPreset[preset.name])
 }
 
 export function reduceRunFlow(state: RunFlowState, event: RunFlowEvent): RunFlowState {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createRunFlowState, reduceRunFlow } from '../../src/flows/run-flow.js'
+import { createRunFlowState, reduceRunFlow, shouldShowDerivedHint } from '../../src/flows/run-flow.js'
 
 describe('run flow', () => {
   const state = createRunFlowState({
@@ -112,5 +112,28 @@ describe('run flow', () => {
     expect(backToA.plugins[0]?.enabled).toBe(false)
     expect(backToA.skills[0]?.name).toBe('personal')
     expect(backToA.skills[0]?.enabled).toBe(true)
+  })
+
+  it('only shows the derived hint for a base preset with an active draft', () => {
+    const state = createRunFlowState({
+      presets: [
+        { type: 'base', name: 'base', fileName: 'base.json', createdAt: '2026-05-17T00:00:00.000Z', updatedAt: '2026-05-17T00:00:00.000Z' },
+        { type: 'derived', name: 'base-work', parentName: 'base', fileName: 'base-work.json', createdAt: '2026-05-17T00:00:00.000Z', updatedAt: '2026-05-17T00:00:00.000Z' },
+      ],
+      pluginsByPreset: {
+        base: [{ name: 'alpha', enabled: true, source: 'user' }],
+        'base-work': [{ name: 'alpha', enabled: false, source: 'project' }],
+      },
+      skillsByPreset: {
+        base: [{ name: 'personal', enabled: true, source: 'user', toggleable: true }],
+        'base-work': [{ name: 'personal', enabled: false, source: 'user', toggleable: true }],
+      },
+    })
+
+    const selectedDerived = reduceRunFlow(state, { type: 'down' })
+    const focusedPlugins = reduceRunFlow({ ...selectedDerived, focus: 'settings' }, { type: 'focus-right' })
+    const editedDerived = reduceRunFlow(focusedPlugins, { type: 'toggle-current' })
+
+    expect(shouldShowDerivedHint(editedDerived)).toBe(false)
   })
 })

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Box, Text, useApp, useInput } from 'ink'
 
 import type { PresetMeta } from '../core/schema.js'
-import { createRunFlowState, reduceRunFlow } from '../flows/run-flow.js'
+import { createRunFlowState, reduceRunFlow, shouldShowDerivedHint } from '../flows/run-flow.js'
 import type { PluginState } from '../services/plugin-service.js'
 import type { SkillState } from '../services/skill-service.js'
 import { TextInput } from './components/text-input.js'
@@ -91,7 +91,7 @@ export function RunApp({ presets, pluginsByPreset, skillsByPreset, onSubmit }: P
         skillCursor={state.skillCursor}
         sortMode={state.sortMode}
       />
-      {state.dirty ? <Text color="yellow">Changes will create or reuse a derived preset.</Text> : null}
+      {shouldShowDerivedHint(state) ? <Text color="yellow">Changes will create or reuse a derived preset.</Text> : null}
     </Box>
   )
 }
