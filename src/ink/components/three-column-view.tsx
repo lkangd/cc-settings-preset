@@ -22,6 +22,14 @@ function cursor(isFocused: boolean, isCurrent: boolean): string {
   return isFocused && isCurrent ? '❯ ' : '  '
 }
 
+function formatPresetLabel(preset: PresetMeta): string {
+  if (preset.type === 'derived') {
+    return `  └─ ${preset.name}`
+  }
+
+  return preset.name
+}
+
 export function ThreeColumnView({ title, presets, plugins, skills, focus, settingsCursor, pluginCursor, skillCursor, help }: Props) {
   return (
     <Box flexDirection="column">
@@ -32,7 +40,7 @@ export function ThreeColumnView({ title, presets, plugins, skills, focus, settin
           <Text bold>Settings</Text>
           {presets.map((preset, index) => (
             <Text key={preset.name} {...(index === settingsCursor ? { color: 'cyan' as const } : {})}>
-              {cursor(focus === 'settings' || focus === 'derived', index === settingsCursor)}{preset.name}{preset.type === 'derived' ? ' (derived)' : ''}
+              {cursor(focus === 'settings' || focus === 'derived', index === settingsCursor)}{formatPresetLabel(preset)}
             </Text>
           ))}
         </Box>

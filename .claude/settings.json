@@ -1,5 +1,19 @@
 {
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pnpm run build && pnpm run test",
+            "timeout": 120,
+            "statusMessage": "Running build & test..."
+          }
+        ]
+      }
+    ]
   }
 }
