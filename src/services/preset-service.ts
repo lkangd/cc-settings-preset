@@ -93,7 +93,23 @@ export function createPresetService(globalRoot: string) {
 
     async listPresets(): Promise<PresetMeta[]> {
       const index = await readIndex()
-      return Object.values(index.presets).sort((a, b) => a.name.localeCompare(b.name))
+      const bases = Object.values(index.presets)
+        .filter((preset): preset is BasePresetMeta => preset.type === 'base')
+        .sort((a, b) => a.name.localeCompare(b.name))
+      const derivedByParent = Object.values(index.presets)
+        .filter((preset): preset is DerivedPresetMeta => preset.type === 'derived')
+        .reduce<Record<string, DerivedPresetMeta[]>>((groups, preset) => {
+          const group = groups[preset.parentName] ?? []
+          group.push(preset)
+          groups[preset.parentName] = group
+          return groups
+        }, {})
+
+      for (const presets of Object.values(derivedByParent)) {
+        presets.sort((a, b) => a.name.localeCompare(b.name))
+      }
+
+      return bases.flatMap(base => [base, ...(derivedByParent[base.name] ?? [])])
     },
 
     async readPresetSettings(name: string): Promise<Settings> {
@@ -220,10 +236,12 @@ export function createPresetService(globalRoot: string) {
 
     async renamePreset(nameInput: string, newNameInput: string): Promise<PresetMeta> {
       const name = normalizePresetName(nameInput)
-      const newName = normalizePresetName(newNameInput)
+      const requestedName = normalizePresetName(newNameInput)
       const index = await readIndex()
       const meta = index.presets[name]
       if (!meta) throw new CliError(`Preset not found: ${name}`)
+
+      const newName = meta.type === 'base' ? requestedName : normalizePresetName(`${meta.parentName}-${requestedName}`)
       if (index.presets[newName]) throw new CliError(`Preset already exists: ${newName}`)
 
       const updated: PresetMeta = meta.type === 'base'

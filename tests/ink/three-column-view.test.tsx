@@ -77,4 +77,27 @@ describe('three-column view', () => {
     expect(output).toContain('[PL] demo-plugin:sync (plugin)')
     expect(output).toContain('[P] legacy-skill')
   })
+
+  it('renders a derived preset label from parent metadata instead of the full preset name', () => {
+    const output = renderToString(
+      <ThreeColumnView
+        title="Run settings presets"
+        help="help"
+        presets={[
+          { type: 'base', name: 'test', fileName: 'test-settings.json', createdAt: '2026-05-17T00:00:00.000Z', updatedAt: '2026-05-17T00:00:00.000Z' },
+          { type: 'derived', name: 'good', parentName: 'test', fileName: 'good-settings.json', createdAt: '2026-05-17T00:00:00.000Z', updatedAt: '2026-05-17T00:00:00.000Z' },
+        ]}
+        plugins={[]}
+        skills={[]}
+        focus="settings"
+        settingsCursor={0}
+        pluginCursor={0}
+        skillCursor={0}
+      />,
+      { columns: 120 },
+    )
+
+    expect(output).toContain('└─ good')
+    expect(output).not.toContain('└─ test-good')
+  })
 })

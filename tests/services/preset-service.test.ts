@@ -2,6 +2,8 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { writeJsonFile } from '../../src/core/json.js'
+import { resolveIndexPath, resolvePresetPath } from '../../src/core/paths.js'
 import { createPresetService } from '../../src/services/preset-service.js'
 
 describe('preset service', () => {
@@ -92,5 +94,62 @@ describe('preset service', () => {
       enabledPlugins: { alpha: true },
       skillOverrides: { legacy: 'on', archive: 'off' },
     })
+  })
+
+  it('keeps derived preset parent grouping after renaming the derived preset', async () => {
+    const { service } = await createService()
+
+    await service.createBasePreset('test', { model: 'opus' })
+    const derived = await service.createDerivedPreset('test', 'work', {})
+
+    const renamed = await service.renamePreset(derived.name, 'good')
+    const presets = await service.listPresets()
+
+    expect(renamed.type).toBe('derived')
+    if (renamed.type !== 'derived') throw new Error('expected derived preset')
+    expect(renamed.name).toBe('test-good')
+    expect(renamed.parentName).toBe('test')
+    expect(presets).toEqual([
+      { type: 'base', name: 'test', fileName: 'test-settings.json', createdAt: expect.any(String), updatedAt: expect.any(String) },
+      { type: 'derived', name: 'test-good', parentName: 'test', fileName: 'test-good-settings.json', createdAt: expect.any(String), updatedAt: expect.any(String) },
+    ])
+  })
+
+  it('lists legacy derived presets after their parent base preset', async () => {
+    const { root, service } = await createService()
+
+    await writeJsonFile(resolvePresetPath(root, 'test-settings.json'), { model: 'opus' })
+    await writeJsonFile(resolvePresetPath(root, 'good-settings.json'), { model: 'haiku' })
+    await writeJsonFile(resolvePresetPath(root, 'test-test-settings.json'), { model: 'sonnet' })
+    await writeJsonFile(resolveIndexPath(root), {
+      version: 1,
+      presets: {
+        test: {
+          type: 'base',
+          name: 'test',
+          fileName: 'test-settings.json',
+          createdAt: '2026-05-18T02:30:13.669Z',
+          updatedAt: '2026-05-18T02:30:13.669Z',
+        },
+        good: {
+          type: 'derived',
+          name: 'good',
+          parentName: 'test',
+          fileName: 'good-settings.json',
+          createdAt: '2026-05-18T03:02:38.515Z',
+          updatedAt: '2026-05-18T07:32:55.794Z',
+        },
+        'test-test': {
+          type: 'derived',
+          name: 'test-test',
+          parentName: 'test',
+          fileName: 'test-test-settings.json',
+          createdAt: '2026-05-18T02:30:25.396Z',
+          updatedAt: '2026-05-18T02:30:25.401Z',
+        },
+      },
+    })
+
+    expect((await service.listPresets()).map(preset => preset.name)).toEqual(['test', 'good', 'test-test'])
   })
 })
