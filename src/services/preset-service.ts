@@ -135,6 +135,20 @@ export function createPresetService(globalRoot: string) {
       return updated
     },
 
+    async writePresetSettingsByName(nameInput: string, settingsInput: unknown): Promise<PresetMeta> {
+      const name = normalizePresetName(nameInput)
+      const settings = parseSettings(settingsInput)
+      const index = await readIndex()
+      const existing = index.presets[name]
+      if (!existing) throw new CliError(`Preset not found: ${name}`)
+
+      const updated: PresetMeta = { ...existing, updatedAt: nowIso() }
+      index.presets[name] = updated
+      await writePresetSettings(updated, settings)
+      await writeIndex(index)
+      return updated
+    },
+
     async createDerivedPreset(parentNameInput: string, derivedNameInput: string, toggles: ToggleState): Promise<DerivedPresetMeta> {
       const parentName = normalizePresetName(parentNameInput)
       const derivedSegment = normalizePresetName(derivedNameInput)

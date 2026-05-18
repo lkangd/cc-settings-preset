@@ -81,7 +81,7 @@ describe('run flow', () => {
     ])
   })
 
-  it('refreshes plugins and skills when the selected preset changes', () => {
+  it('keeps a draft per preset when switching after edits', () => {
     const state = createRunFlowState({
       presets: [
         { type: 'base', name: 'a', fileName: 'a-settings.json', createdAt: '2026-05-17T00:00:00.000Z', updatedAt: '2026-05-17T00:00:00.000Z' },
@@ -97,11 +97,20 @@ describe('run flow', () => {
       },
     })
 
-    const next = reduceRunFlow(state, { type: 'down' })
+    const editedA = reduceRunFlow({ ...state, focus: 'plugins' }, { type: 'toggle-current' })
+    const focusedSettings = reduceRunFlow(editedA, { type: 'focus-left' })
+    const movedToB = reduceRunFlow(focusedSettings, { type: 'down' })
 
-    expect(next.settingsCursor).toBe(1)
-    expect(next.plugins[0]?.enabled).toBe(false)
-    expect(next.skills[0]?.enabled).toBe(false)
-    expect(next.dirty).toBe(false)
+    expect(movedToB.settingsCursor).toBe(1)
+    expect(movedToB.plugins[0]?.name).toBe('alpha')
+    expect(movedToB.plugins[0]?.enabled).toBe(false)
+    expect(movedToB.skills[0]?.name).toBe('personal')
+    expect(movedToB.skills[0]?.enabled).toBe(false)
+
+    const backToA = reduceRunFlow(movedToB, { type: 'up' })
+    expect(backToA.plugins[0]?.name).toBe('alpha')
+    expect(backToA.plugins[0]?.enabled).toBe(false)
+    expect(backToA.skills[0]?.name).toBe('personal')
+    expect(backToA.skills[0]?.enabled).toBe(true)
   })
 })

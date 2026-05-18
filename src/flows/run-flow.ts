@@ -6,12 +6,18 @@ export type RunFlowFocus = 'settings' | 'plugins' | 'skills' | 'derived'
 
 export type RunFlowSortMode = 'status' | 'name'
 
+export type RunFlowDraft = {
+  plugins: PluginState[]
+  skills: SkillState[]
+}
+
 export type RunFlowState = {
   presets: PresetMeta[]
   plugins: PluginState[]
   skills: SkillState[]
   pluginsByPreset: Record<string, PluginState[]>
   skillsByPreset: Record<string, SkillState[]>
+  draftsByPreset: Record<string, RunFlowDraft>
   focus: RunFlowFocus
   settingsCursor: number
   pluginCursor: number
@@ -42,6 +48,7 @@ export function createRunFlowState(input: {
   const firstPreset = input.presets[0]?.name
   const pluginsByPreset = input.pluginsByPreset ?? {}
   const skillsByPreset = input.skillsByPreset ?? {}
+  const draftsByPreset: Record<string, RunFlowDraft> = {}
   const plugins = input.plugins ?? (firstPreset ? (pluginsByPreset[firstPreset] ?? []) : [])
   const skills = input.skills ?? (firstPreset ? (skillsByPreset[firstPreset] ?? []) : [])
 
@@ -51,6 +58,7 @@ export function createRunFlowState(input: {
     skills,
     pluginsByPreset,
     skillsByPreset,
+    draftsByPreset,
     focus: 'settings',
     settingsCursor: 0,
     pluginCursor: 0,
@@ -79,12 +87,14 @@ function activePresetName(state: RunFlowState): string | undefined {
 
 function getPresetPlugins(state: RunFlowState): PluginState[] {
   const presetName = activePresetName(state)
-  return presetName ? (state.pluginsByPreset[presetName] ?? []) : []
+  if (!presetName) return []
+  return state.draftsByPreset[presetName]?.plugins ?? state.pluginsByPreset[presetName] ?? []
 }
 
 function getPresetSkills(state: RunFlowState): SkillState[] {
   const presetName = activePresetName(state)
-  return presetName ? (state.skillsByPreset[presetName] ?? []) : []
+  if (!presetName) return []
+  return state.draftsByPreset[presetName]?.skills ?? state.skillsByPreset[presetName] ?? []
 }
 
 function sortPluginsForMode(plugins: PluginState[], sortMode: RunFlowSortMode): PluginState[] {
@@ -96,8 +106,6 @@ function sortSkillsForMode(skills: SkillState[], sortMode: RunFlowSortMode): Ski
 }
 
 function syncResolvedState(state: RunFlowState): RunFlowState {
-  if (state.dirty) return state
-
   const plugins = sortPluginsForMode(getPresetPlugins(state), state.sortMode)
   const skills = sortSkillsForMode(getPresetSkills(state), state.sortMode)
 
@@ -153,10 +161,19 @@ export function reduceRunFlow(state: RunFlowState, event: RunFlowEvent): RunFlow
 
   if (event.type === 'toggle-current') {
     if (state.focus === 'plugins') {
+      const presetName = activePresetName(state)
+      if (!presetName) return state
       const plugins = state.plugins.map((plugin, index) => index === state.pluginCursor ? { ...plugin, enabled: !plugin.enabled } : plugin)
       return {
         ...state,
         plugins: sortPluginsForMode(plugins, state.sortMode),
+        draftsByPreset: {
+          ...state.draftsByPreset,
+          [presetName]: {
+            plugins: sortPluginsForMode(plugins, state.sortMode),
+            skills: getPresetSkills(state),
+          },
+        },
         dirty: true,
       }
     }
@@ -164,10 +181,19 @@ export function reduceRunFlow(state: RunFlowState, event: RunFlowEvent): RunFlow
     if (state.focus === 'skills') {
       const current = state.skills[state.skillCursor]
       if (!current?.toggleable) return state
+      const presetName = activePresetName(state)
+      if (!presetName) return state
       const skills = state.skills.map((skill, index) => index === state.skillCursor ? { ...skill, enabled: !skill.enabled } : skill)
       return {
         ...state,
         skills: sortSkillsForMode(skills, state.sortMode),
+        draftsByPreset: {
+          ...state.draftsByPreset,
+          [presetName]: {
+            plugins: getPresetPlugins(state),
+            skills: sortSkillsForMode(skills, state.sortMode),
+          },
+        },
         dirty: true,
       }
     }

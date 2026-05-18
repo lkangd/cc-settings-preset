@@ -72,4 +72,25 @@ describe('preset service', () => {
     expect(settings.enabledPlugins).toEqual({ alpha: false })
     expect(settings.skillOverrides).toEqual({ legacy: 'off' })
   })
+
+  it('writes updated settings for an existing derived preset by name', async () => {
+    const { service } = await createService()
+
+    await service.createBasePreset('base', { model: 'opus', enabledPlugins: { alpha: true } })
+    const derived = await service.createDerivedPreset('base', 'work', {
+      enabledPlugins: { alpha: false },
+      skillOverrides: { legacy: 'off' },
+    })
+
+    const updated = await service.writePresetSettingsByName(derived.name, {
+      enabledPlugins: { alpha: true },
+      skillOverrides: { legacy: 'on', archive: 'off' },
+    })
+
+    expect(updated.updatedAt).toBeDefined()
+    expect(await service.readPresetSettings(derived.name)).toEqual({
+      enabledPlugins: { alpha: true },
+      skillOverrides: { legacy: 'on', archive: 'off' },
+    })
+  })
 })

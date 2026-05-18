@@ -138,6 +138,15 @@ async function runInteractive(rawClaudeArgs: string[]): Promise<void> {
   const selection = await renderRunApp(presets)
   if (!selection) return
 
+  for (const [presetName, draft] of Object.entries(selection.draftsByPreset)) {
+    const preset = presets.find(candidate => candidate.name === presetName)
+    if (!preset || preset.type !== 'derived') continue
+    await presetService.writePresetSettingsByName(preset.name, {
+      enabledPlugins: pluginStatesToEnabledPlugins(draft.plugins),
+      skillOverrides: skillStatesToOverrides(draft.skills),
+    })
+  }
+
   if (selection.type === 'derive') {
     const toggles = {
       enabledPlugins: pluginStatesToEnabledPlugins(selection.plugins),

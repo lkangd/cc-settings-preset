@@ -14,6 +14,7 @@ export type RunResult = {
   derivedName?: string
   plugins: PluginState[]
   skills: SkillState[]
+  draftsByPreset: ReturnType<typeof createRunFlowState>['draftsByPreset']
 }
 
 type Props = {
@@ -47,12 +48,13 @@ export function RunApp({ presets, pluginsByPreset, skillsByPreset, onSubmit }: P
       const preset = state.presets[state.settingsCursor]
       if (!preset) return
 
-      if (state.dirty) {
+      const hasActiveDraft = Boolean(state.draftsByPreset[preset.name])
+      if (state.dirty && preset.type === 'base' && hasActiveDraft) {
         setNamingDerived(true)
         return
       }
 
-      onSubmit({ type: 'launch', preset, plugins: state.plugins, skills: state.skills })
+      onSubmit({ type: 'launch', preset, plugins: state.plugins, skills: state.skills, draftsByPreset: state.draftsByPreset })
       exit()
     }
   })
@@ -68,7 +70,7 @@ export function RunApp({ presets, pluginsByPreset, skillsByPreset, onSubmit }: P
         onSubmit={() => {
           const preset = state.presets[state.settingsCursor]
           if (!preset) return
-          onSubmit({ type: 'derive', preset, derivedName, plugins: state.plugins, skills: state.skills })
+          onSubmit({ type: 'derive', preset, derivedName, plugins: state.plugins, skills: state.skills, draftsByPreset: state.draftsByPreset })
           exit()
         }}
       />
