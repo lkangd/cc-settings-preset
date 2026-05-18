@@ -16,16 +16,18 @@ export type ManageResult =
 
 type Props = {
   presets: PresetMeta[]
-  plugins: PluginState[]
-  skills: SkillState[]
+  pluginsByPreset: Record<string, PluginState[]>
+  skillsByPreset: Record<string, SkillState[]>
   onSubmit: (result: ManageResult) => void
 }
 
-export function ManageApp({ presets, plugins, skills, onSubmit }: Props) {
+export function ManageApp({ presets, pluginsByPreset, skillsByPreset, onSubmit }: Props) {
   const { exit } = useApp()
   const [state, setState] = useState(() => createManageFlowState(presets))
   const [newName, setNewName] = useState('')
   const active = state.presets[state.cursor]
+  const activePlugins = active ? (pluginsByPreset[active.name] ?? []) : []
+  const activeSkills = active ? (skillsByPreset[active.name] ?? []) : []
 
   useInput((input, key) => {
     if (state.mode !== 'browsing') return
@@ -87,8 +89,8 @@ export function ManageApp({ presets, plugins, skills, onSubmit }: Props) {
       title="Manage settings presets"
       help="↑/k ↓/j navigate · enter/l launch · r rename · d delete · q quit"
       presets={state.presets}
-      plugins={plugins}
-      skills={skills}
+      plugins={activePlugins}
+      skills={activeSkills}
       focus="settings"
       settingsCursor={state.cursor}
       pluginCursor={0}

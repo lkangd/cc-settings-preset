@@ -149,6 +149,16 @@ export function sortSkillStatesByStatus(states: SkillState[]): SkillState[] {
   })
 }
 
+export function applySkillOverrides(
+  states: SkillState[],
+  overrides: Record<string, SkillOverrideValue> = {},
+): SkillState[] {
+  return sortSkillStates(states.map(skill => {
+    if (skill.source === 'plugin') return skill
+    return { ...skill, enabled: overrides[skill.name] !== 'off' }
+  }))
+}
+
 export async function discoverSkillStates(input: SkillDiscoveryInput): Promise<SkillState[]> {
   const projectSkills = await discoverProjectSkills(input.cwd)
   const commandSkills = await discoverCommandSkills(resolveProjectCommandsDir(input.cwd))
@@ -160,13 +170,6 @@ export async function discoverSkillStates(input: SkillDiscoveryInput): Promise<S
   for (const skill of commandSkills) if (!byName.has(skill.name)) byName.set(skill.name, skill)
   for (const skill of userSkills) byName.set(skill.name, skill)
   for (const skill of pluginSkills) byName.set(skill.name, skill)
-
-  const overrides = input.skillOverrides ?? {}
-  for (const [name, skill] of byName.entries()) {
-    if (skill.source !== 'plugin') {
-      byName.set(name, { ...skill, enabled: overrides[name] !== 'off' })
-    }
-  }
 
   return sortSkillStates(Array.from(byName.values()))
 }

@@ -80,4 +80,28 @@ describe('run flow', () => {
       ['archive', false],
     ])
   })
+
+  it('refreshes plugins and skills when the selected preset changes', () => {
+    const state = createRunFlowState({
+      presets: [
+        { type: 'base', name: 'a', fileName: 'a-settings.json', createdAt: '2026-05-17T00:00:00.000Z', updatedAt: '2026-05-17T00:00:00.000Z' },
+        { type: 'base', name: 'b', fileName: 'b-settings.json', createdAt: '2026-05-17T00:00:00.000Z', updatedAt: '2026-05-17T00:00:00.000Z' },
+      ],
+      pluginsByPreset: {
+        a: [{ name: 'alpha', enabled: true, source: 'user' }],
+        b: [{ name: 'alpha', enabled: false, source: 'project' }],
+      },
+      skillsByPreset: {
+        a: [{ name: 'personal', enabled: true, source: 'user', toggleable: true }],
+        b: [{ name: 'personal', enabled: false, source: 'user', toggleable: true }],
+      },
+    })
+
+    const next = reduceRunFlow(state, { type: 'down' })
+
+    expect(next.settingsCursor).toBe(1)
+    expect(next.plugins[0]?.enabled).toBe(false)
+    expect(next.skills[0]?.enabled).toBe(false)
+    expect(next.dirty).toBe(false)
+  })
 })

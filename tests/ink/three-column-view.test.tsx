@@ -5,6 +5,35 @@ import { describe, expect, it } from 'vitest'
 import { ThreeColumnView } from '../../src/ink/components/three-column-view.js'
 
 describe('three-column view', () => {
+  it('counts enabled skills and plugins from resolved state', () => {
+    const output = renderToString(
+      <ThreeColumnView
+        title="Manage settings presets"
+        help="help"
+        presets={[
+          { type: 'base', name: 'base-a', fileName: 'base-a.json', createdAt: '2026-05-17T00:00:00.000Z', updatedAt: '2026-05-17T00:00:00.000Z' },
+        ]}
+        plugins={[
+          { name: 'alpha', enabled: false, source: 'project' },
+          { name: 'beta', enabled: true, source: 'user' },
+        ]}
+        skills={[
+          { name: 'personal', enabled: false, source: 'user', toggleable: true },
+          { name: 'project', enabled: true, source: 'project', toggleable: true },
+        ]}
+        focus="settings"
+        settingsCursor={0}
+        pluginCursor={0}
+        skillCursor={0}
+      />,
+      { columns: 120 },
+    )
+
+    expect(output).toContain('Plugins(1/2)')
+    expect(output).toContain('Skills(1/2)')
+    expect(output).toContain('OFF')
+  })
+
   it('renders derived presets as a tree under their base preset', () => {
     const output = renderToString(
       <ThreeColumnView

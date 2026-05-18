@@ -13,10 +13,10 @@ import { spawnClaude } from './core/spawn.js'
 import { CreateApp, type CreateResult } from './ink/create-app.js'
 import { ManageApp, type ManageResult } from './ink/manage-app.js'
 import { RunApp, type RunResult } from './ink/run-app.js'
-import { pluginStatesToEnabledPlugins, resolvePluginStates } from './services/plugin-service.js'
+import { pluginStatesToEnabledPlugins, resolvePluginStates, type PluginState } from './services/plugin-service.js'
 import { createPresetService } from './services/preset-service.js'
-import { createSettingsSourceService } from './services/settings-source-service.js'
-import { discoverSkillStates, skillStatesToOverrides } from './services/skill-service.js'
+import { createSettingsSourceService, type SettingsSource } from './services/settings-source-service.js'
+import { applySkillOverrides, discoverSkillStates, skillStatesToOverrides, type SkillState } from './services/skill-service.js'
 
 const h = React.createElement
 const VERSION = '1.0.0'
@@ -61,30 +61,48 @@ async function renderCreateApp(): Promise<CreateResult | undefined> {
   return result
 }
 
+async function resolveStatesByPreset(
+  presets: PresetMeta[],
+  sources: SettingsSource[],
+): Promise<{
+  pluginsByPreset: Record<string, PluginState[]>
+  skillsByPreset: Record<string, SkillState[]>
+}> {
+  const pluginsByPreset: Record<string, PluginState[]> = {}
+  const skillsByPreset: Record<string, SkillState[]> = {}
+
+  for (const preset of presets) {
+    const presetSettings = await presetService.readPresetSettings(preset.name)
+    const plugins = resolvePluginStates([...sources, { scope: 'preset', filePath: preset.name, settings: presetSettings }])
+    const discoveredSkills = await discoverSkillStates({
+      homeDir: context.homeDir,
+      cwd: context.cwd,
+      enabledPlugins: pluginStatesToEnabledPlugins(plugins),
+    })
+
+    pluginsByPreset[preset.name] = plugins
+    skillsByPreset[preset.name] = applySkillOverrides(discoveredSkills, presetSettings.skillOverrides)
+  }
+
+  return { pluginsByPreset, skillsByPreset }
+}
+
 async function renderRunApp(presets: PresetMeta[]): Promise<RunResult | undefined> {
   const sources = await settingsSourceService.discoverSettingsSources()
-  const plugins = resolvePluginStates(sources)
-  const enabledPlugins = pluginStatesToEnabledPlugins(plugins)
-  const skills = await discoverSkillStates({
-    homeDir: context.homeDir,
-    cwd: context.cwd,
-    enabledPlugins,
-  })
+  const { pluginsByPreset, skillsByPreset } = await resolveStatesByPreset(presets, sources)
 
   let result: RunResult | undefined
-  const app = render(h(RunApp, { presets, plugins, skills, onSubmit: (value: RunResult) => { result = value } }))
+  const app = render(h(RunApp, { presets, pluginsByPreset, skillsByPreset, onSubmit: (value: RunResult) => { result = value } }))
   await app.waitUntilExit()
   return result
 }
 
 async function renderManageApp(presets: PresetMeta[]): Promise<ManageResult | undefined> {
   const sources = await settingsSourceService.discoverSettingsSources()
-  const plugins = resolvePluginStates(sources)
-  const enabledPlugins = pluginStatesToEnabledPlugins(plugins)
-  const skills = await discoverSkillStates({ homeDir: context.homeDir, cwd: context.cwd, enabledPlugins })
+  const { pluginsByPreset, skillsByPreset } = await resolveStatesByPreset(presets, sources)
 
   let result: ManageResult | undefined
-  const app = render(h(ManageApp, { presets, plugins, skills, onSubmit: (value: ManageResult) => { result = value } }))
+  const app = render(h(ManageApp, { presets, pluginsByPreset, skillsByPreset, onSubmit: (value: ManageResult) => { result = value } }))
   await app.waitUntilExit()
   return result
 }

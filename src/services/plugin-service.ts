@@ -21,14 +21,18 @@ export function sortPluginStates(states: PluginState[]): PluginState[] {
 }
 
 export function resolvePluginStates(sources: PluginSettingsSource[]): PluginState[] {
+  const sourceRank: Record<PluginSettingsSource['scope'], number> = {
+    user: 0,
+    project: 1,
+    'project-local': 2,
+    preset: 3,
+  }
   const resolved = new Map<string, PluginState>()
 
-  for (const source of sources) {
+  for (const source of [...sources].sort((a, b) => sourceRank[a.scope] - sourceRank[b.scope])) {
     const enabledPlugins = source.settings.enabledPlugins ?? {}
     for (const [name, enabled] of Object.entries(enabledPlugins)) {
-      if (!resolved.has(name)) {
-        resolved.set(name, { name, enabled, source: source.scope })
-      }
+      resolved.set(name, { name, enabled, source: source.scope })
     }
   }
 

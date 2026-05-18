@@ -18,14 +18,14 @@ export type RunResult = {
 
 type Props = {
   presets: PresetMeta[]
-  plugins: PluginState[]
-  skills: SkillState[]
+  pluginsByPreset: Record<string, PluginState[]>
+  skillsByPreset: Record<string, SkillState[]>
   onSubmit: (result: RunResult) => void
 }
 
-export function RunApp({ presets, plugins, skills, onSubmit }: Props) {
+export function RunApp({ presets, pluginsByPreset, skillsByPreset, onSubmit }: Props) {
   const { exit } = useApp()
-  const [state, setState] = useState(() => createRunFlowState({ presets, plugins, skills }))
+  const [state, setState] = useState(() => createRunFlowState({ presets, pluginsByPreset, skillsByPreset }))
   const [namingDerived, setNamingDerived] = useState(false)
   const [derivedName, setDerivedName] = useState('')
 

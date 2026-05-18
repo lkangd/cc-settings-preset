@@ -26,6 +26,7 @@ vi.mock('../src/services/preset-service.js', () => ({
     renamePreset: vi.fn(),
     syncDerivedPreset: vi.fn(),
     getPresetPath: vi.fn(),
+    readPresetSettings: vi.fn().mockResolvedValue({}),
     findMatchingDerivedPreset: vi.fn(),
     createDerivedPreset: vi.fn(),
     createBasePreset: vi.fn(),
@@ -44,6 +45,7 @@ vi.mock('../src/services/plugin-service.js', () => ({
 }))
 
 vi.mock('../src/services/skill-service.js', () => ({
+  applySkillOverrides: vi.fn((skills) => skills),
   discoverSkillStates: vi.fn().mockResolvedValue([]),
   skillStatesToOverrides: vi.fn(() => ({})),
 }))
