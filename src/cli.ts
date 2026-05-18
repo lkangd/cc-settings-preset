@@ -136,22 +136,25 @@ async function runInteractive(rawClaudeArgs: string[]): Promise<void> {
 }
 
 async function manageInteractive(): Promise<void> {
-  const presets = await presetService.listPresets()
-  const selection = await renderManageApp(presets)
-  if (!selection || selection.type === 'exit') return
+  while (true) {
+    const presets = await presetService.listPresets()
+    const selection = await renderManageApp(presets)
+    if (!selection || selection.type === 'exit') return
 
-  if (selection.type === 'launch') {
-    await launchPreset(selection.preset, [])
-    return
-  }
+    if (selection.type === 'launch') {
+      await launchPreset(selection.preset, [])
+      return
+    }
 
-  if (selection.type === 'rename') {
-    await presetService.renamePreset(selection.preset.name, selection.newName)
-    return
-  }
+    if (selection.type === 'rename') {
+      await presetService.renamePreset(selection.preset.name, selection.newName)
+      continue
+    }
 
-  if (selection.type === 'delete') {
-    await presetService.deletePreset(selection.preset.name)
+    if (selection.type === 'delete') {
+      await presetService.deletePreset(selection.preset.name)
+      continue
+    }
   }
 }
 
