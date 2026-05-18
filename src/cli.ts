@@ -41,6 +41,7 @@ export function createProgram(): Command {
     .command('create')
     .description('Create a first-level settings preset')
     .action(async () => {
+      printBanner()
       await createPresetInteractive()
     })
 
@@ -48,14 +49,15 @@ export function createProgram(): Command {
     .command('manage')
     .description('Manage settings presets')
     .action(async () => {
+      printBanner()
       await manageInteractive()
     })
 
   return program
 }
 
-function printBanner() {
-  const banner = figlet.textSync('CCSP', { font: 'ANSI Shadow' })
+export function printBanner() {
+  const banner = figlet.textSync('C C S P', { font: 'ANSI Shadow' })
   const line = '─'.repeat(48)
   const styled = gradient(['#00d2ff', '#7b2ff7', '#ff0080'])(banner)
   process.stderr.write(`\n${styled}\x1b[2m\n${line}\x1b[0m\n\n`)
@@ -162,6 +164,7 @@ async function launchPreset(preset: PresetMeta, claudeArgs: string[]): Promise<v
 }
 
 async function runInteractive(rawClaudeArgs: string[]): Promise<void> {
+  printBanner()
   const sanitized = sanitizeClaudeArgs(rawClaudeArgs)
   if (sanitized.removedSettings) {
     process.stderr.write('\x1b[31mWarning: ccsp ignores passthrough --settings because it manages that flag.\x1b[0m\n')

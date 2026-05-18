@@ -13,7 +13,7 @@ export function normalizePresetName(input: string, fallbackDate = new Date()): s
     .replace(/^-+|-+$/g, '')
     .replace(/-{2,}/g, '-')
 
-  return normalized || `preset-${formatTimestampForName(fallbackDate)}`
+  return normalized || formatTimestampForName(fallbackDate)
 }
 
 export function buildSettingsFileName(name: string): string {

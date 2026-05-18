@@ -41,8 +41,8 @@ describe('three-column view', () => {
         help="help"
         presets={[
           { type: 'base', name: 'base-a', fileName: 'base-a.json', createdAt: '2026-05-17T00:00:00.000Z', updatedAt: '2026-05-17T00:00:00.000Z' },
-          { type: 'derived', name: 'derived-a1', parentName: 'base-a', fileName: 'derived-a1.json', createdAt: '2026-05-17T00:00:00.000Z', updatedAt: '2026-05-17T00:00:00.000Z' },
-          { type: 'derived', name: 'derived-a2', parentName: 'base-a', fileName: 'derived-a2.json', createdAt: '2026-05-17T00:00:00.000Z', updatedAt: '2026-05-17T00:00:00.000Z' },
+          { type: 'derived', name: 'base-a-derived-a1', parentName: 'base-a', fileName: 'derived-a1.json', createdAt: '2026-05-17T00:00:00.000Z', updatedAt: '2026-05-17T00:00:00.000Z' },
+          { type: 'derived', name: 'base-a-derived-a2', parentName: 'base-a', fileName: 'derived-a2.json', createdAt: '2026-05-17T00:00:00.000Z', updatedAt: '2026-05-17T00:00:00.000Z' },
           { type: 'base', name: 'base-b', fileName: 'base-b.json', createdAt: '2026-05-17T00:00:00.000Z', updatedAt: '2026-05-17T00:00:00.000Z' },
         ]}
         plugins={[
@@ -63,10 +63,12 @@ describe('three-column view', () => {
       { columns: 120 },
     )
 
-    expect(output).toContain('❯   └─ derived-a1')
-    expect(output).toContain('    └─ derived-a2')
-    expect(output).not.toContain('derived-a1 (derived)')
+    expect(output).toContain('derived-a1')
+    expect(output).toContain('derived-a2')
+    expect(output).toContain('└─')
+    expect(output).not.toContain('base-a-derived-a1')
     expect(output).toContain('Settings(2)')
+    expect(output).toContain('[L] local [P] project [U] user [C] command [PL] plugin [D] default')
     expect(output).toContain('Plugins(1/2) · A-Z')
     expect(output).toContain('Skills(2/3) · A-Z')
     expect(output).toContain('[U] alpha-plugin')

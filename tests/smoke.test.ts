@@ -1,8 +1,21 @@
-import { describe, expect, test } from 'vitest';
-import { createProgram } from '../src/cli.js';
+import { afterEach, describe, expect, test, vi } from 'vitest'
+import { createProgram, printBanner } from '../src/cli.js'
 
 describe('CLI scaffold', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   test('exposes the package CLI name', () => {
-    expect(createProgram().name()).toBe('cc-settings-preset');
-  });
-});
+    expect(createProgram().name()).toBe('cc-settings-preset')
+  })
+
+  test('prints the banner to stderr', () => {
+    const write = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+
+    printBanner()
+
+    expect(write).toHaveBeenCalled()
+    expect(String(write.mock.calls[0]?.[0] ?? '')).toContain('─'.repeat(48))
+  })
+})

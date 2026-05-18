@@ -26,7 +26,9 @@ function cursor(isFocused: boolean, isCurrent: boolean): string {
 
 function formatPresetLabel(preset: PresetMeta): string {
   if (preset.type === 'derived') {
-    return `  └─ ${preset.name}`
+    const prefix = `${preset.parentName}-`
+    const derivedName = preset.name.startsWith(prefix) ? preset.name.slice(prefix.length) : preset.name
+    return ` └─ ${derivedName}`
   }
 
   return preset.name
@@ -59,6 +61,7 @@ export function ThreeColumnView({ title, presets, plugins, skills, focus, settin
     <Box flexDirection="column">
       <Text bold color="cyan">{title}</Text>
       <Text dimColor>{help}</Text>
+      <Text dimColor>[L] local [P] project [U] user [C] command [PL] plugin [D] default</Text>
       <Box marginTop={1} width={innerWidth}>
         <Box flexDirection="column" width={settingsWidth} marginRight={1} borderStyle="round" borderColor={focus === 'settings' || focus === 'derived' ? 'cyan' : 'gray'} paddingX={1}>
           <Text bold wrap="truncate-end">Settings({presets.filter(preset => preset.type === 'base').length})</Text>

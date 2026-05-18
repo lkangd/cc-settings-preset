@@ -8,8 +8,8 @@ describe('normalizePresetName', () => {
     expect(normalizePresetName('../evil')).toBe('evil')
   })
 
-  it('uses fallback when the input has no safe characters', () => {
-    expect(normalizePresetName('中文')).toMatch(/^preset-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}$/)
+  it('uses timestamp fallback when the input has no safe characters', () => {
+    expect(normalizePresetName('中文')).toMatch(/^\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}$/)
   })
 })
 
