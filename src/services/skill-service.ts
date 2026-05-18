@@ -29,13 +29,26 @@ async function readDirSafe(dirPath: string): Promise<Dirent[]> {
   }
 }
 
+async function isDirectoryLike(entryPath: string, entry: Dirent): Promise<boolean> {
+  if (entry.isDirectory()) return true
+  if (!entry.isSymbolicLink()) return false
+
+  try {
+    return (await fs.stat(entryPath)).isDirectory()
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
+    throw error
+  }
+}
+
 async function discoverSkillDir(dirPath: string, source: 'user' | 'project'): Promise<SkillState[]> {
   const entries = await readDirSafe(dirPath)
   const skills: SkillState[] = []
 
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue
-    const skillPath = join(dirPath, entry.name, 'SKILL.md')
+    const entryPath = join(dirPath, entry.name)
+    if (!await isDirectoryLike(entryPath, entry)) continue
+    const skillPath = join(entryPath, 'SKILL.md')
     if (await pathExists(skillPath)) {
       skills.push({ name: entry.name, enabled: true, source, toggleable: true })
     }

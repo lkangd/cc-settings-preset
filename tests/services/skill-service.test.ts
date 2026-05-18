@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -32,5 +32,26 @@ describe('discoverSkillStates', () => {
     expect(skills.map(skill => skill.name)).toEqual(['deploy', 'demo-plugin:plugin-skill', 'personal', 'project'])
     expect(skills.find(skill => skill.name === 'personal')?.enabled).toBe(false)
     expect(skills.find(skill => skill.name === 'demo-plugin:plugin-skill')?.toggleable).toBe(false)
+  })
+
+  it('discovers user skills exposed as symlinks to directories', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ccsp-symlink-skills-'))
+    const home = join(root, 'home')
+    const cwd = join(root, 'repo')
+    const realSkillDir = join(root, 'shared-skills', 'context7-mcp')
+    const linkedSkillDir = join(home, '.claude', 'skills', 'context7-mcp')
+
+    await mkdir(realSkillDir, { recursive: true })
+    await mkdir(join(home, '.claude', 'skills'), { recursive: true })
+    await writeFile(join(realSkillDir, 'SKILL.md'), '---\nname: context7-mcp\n---\n')
+    await symlink(realSkillDir, linkedSkillDir)
+
+    const skills = await discoverSkillStates({
+      homeDir: home,
+      cwd,
+      enabledPlugins: {},
+    })
+
+    expect(skills.map(skill => skill.name)).toContain('context7-mcp')
   })
 })
