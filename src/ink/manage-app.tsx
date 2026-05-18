@@ -93,6 +93,7 @@ export function ManageApp({ presets, plugins, skills, onSubmit }: Props) {
       settingsCursor={state.cursor}
       pluginCursor={0}
       skillCursor={0}
+      sortMode="status"
     />
   )
 }

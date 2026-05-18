@@ -6,14 +6,27 @@ describe('run flow', () => {
     presets: [
       { type: 'base', name: 'base', fileName: 'base-settings.json', createdAt: '2026-05-17T00:00:00.000Z', updatedAt: '2026-05-17T00:00:00.000Z' },
     ],
-    plugins: [{ name: 'alpha', enabled: true, source: 'user' }],
-    skills: [{ name: 'legacy', enabled: true, source: 'user', toggleable: true }],
+    plugins: [
+      { name: 'alpha', enabled: true, source: 'user' },
+      { name: 'beta', enabled: false, source: 'project' },
+    ],
+    skills: [
+      { name: 'legacy', enabled: true, source: 'user', toggleable: true },
+      { name: 'archive', enabled: false, source: 'project', toggleable: true },
+    ],
   })
 
   it('moves focus between settings, plugins, and skills', () => {
     expect(reduceRunFlow(state, { type: 'focus-plugins' }).focus).toBe('plugins')
     expect(reduceRunFlow(state, { type: 'focus-skills' }).focus).toBe('skills')
     expect(reduceRunFlow({ ...state, focus: 'skills' }, { type: 'escape' }).focus).toBe('settings')
+  })
+
+  it('moves focus left and right across columns', () => {
+    expect(reduceRunFlow(state, { type: 'focus-right' }).focus).toBe('plugins')
+    expect(reduceRunFlow({ ...state, focus: 'plugins' }, { type: 'focus-right' }).focus).toBe('skills')
+    expect(reduceRunFlow({ ...state, focus: 'skills' }, { type: 'focus-left' }).focus).toBe('plugins')
+    expect(reduceRunFlow({ ...state, focus: 'plugins' }, { type: 'focus-left' }).focus).toBe('settings')
   })
 
   it('toggles plugin and skill state', () => {
@@ -34,5 +47,37 @@ describe('run flow', () => {
 
     expect(next.skills[0]?.enabled).toBe(true)
     expect(next.dirty).toBe(false)
+  })
+
+  it('toggles sort mode between status and name order', () => {
+    const sortedByName = reduceRunFlow(state, { type: 'toggle-sort-mode' })
+    expect(sortedByName.sortMode).toBe('name')
+    expect(sortedByName.plugins.map(plugin => plugin.name)).toEqual(['alpha', 'beta'])
+    expect(sortedByName.skills.map(skill => skill.name)).toEqual(['archive', 'legacy'])
+
+    const sortedByStatus = reduceRunFlow(sortedByName, { type: 'toggle-sort-mode' })
+    expect(sortedByStatus.sortMode).toBe('status')
+    expect(sortedByStatus.plugins.map(plugin => [plugin.name, plugin.enabled])).toEqual([
+      ['alpha', true],
+      ['beta', false],
+    ])
+    expect(sortedByStatus.skills.map(skill => [skill.name, skill.enabled])).toEqual([
+      ['legacy', true],
+      ['archive', false],
+    ])
+  })
+
+  it('re-sorts plugins and skills after toggle in status mode', () => {
+    const pluginState = reduceRunFlow({ ...state, focus: 'plugins' }, { type: 'toggle-current' })
+    expect(pluginState.plugins.map(plugin => [plugin.name, plugin.enabled])).toEqual([
+      ['alpha', false],
+      ['beta', false],
+    ])
+
+    const skillState = reduceRunFlow({ ...state, focus: 'skills' }, { type: 'toggle-current' })
+    expect(skillState.skills.map(skill => [skill.name, skill.enabled])).toEqual([
+      ['legacy', false],
+      ['archive', false],
+    ])
   })
 })

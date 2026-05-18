@@ -36,8 +36,11 @@ export function RunApp({ presets, plugins, skills, onSubmit }: Props) {
     if (input === 'q') exit()
     if (input === 'p') setState(current => reduceRunFlow(current, { type: 'focus-plugins' }))
     if (input === 's') setState(current => reduceRunFlow(current, { type: 'focus-skills' }))
+    if (key.leftArrow || input === 'h') setState(current => reduceRunFlow(current, { type: 'focus-left' }))
+    if (key.rightArrow || input === 'l') setState(current => reduceRunFlow(current, { type: 'focus-right' }))
     if (key.upArrow || input === 'k') setState(current => reduceRunFlow(current, { type: 'up' }))
     if (key.downArrow || input === 'j') setState(current => reduceRunFlow(current, { type: 'down' }))
+    if (input === 't') setState(current => reduceRunFlow(current, { type: 'toggle-sort-mode' }))
     if (input === ' ') setState(current => reduceRunFlow(current, { type: 'toggle-current' }))
 
     if (key.return) {
@@ -76,7 +79,7 @@ export function RunApp({ presets, plugins, skills, onSubmit }: Props) {
     <Box flexDirection="column">
       <ThreeColumnView
         title="Select Claude Code settings preset"
-        help="↑/k ↓/j navigate · p plugins · s skills · space toggle · enter launch · q quit"
+        help="↑/k ↓/j navigate · ←/→ switch column · p plugins · s skills · t sort · space toggle · enter launch · q quit"
         presets={state.presets}
         plugins={state.plugins}
         skills={state.skills}
@@ -84,6 +87,7 @@ export function RunApp({ presets, plugins, skills, onSubmit }: Props) {
         settingsCursor={state.settingsCursor}
         pluginCursor={state.pluginCursor}
         skillCursor={state.skillCursor}
+        sortMode={state.sortMode}
       />
       {state.dirty ? <Text color="yellow">Changes will create or reuse a derived preset.</Text> : null}
     </Box>

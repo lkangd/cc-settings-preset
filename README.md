@@ -1,123 +1,269 @@
-# 目标
+# cc-settings-preset
 
-从零开始，构建一个在运行时启动 claude code 命令时，指定 --settings 参数加载的运行时配置文件的命令行工具。
+`cc-settings-preset`（缩写命令 `ccsp`）是一个用于启动 Claude Code 前选择运行时 settings 的命令行工具。
 
-## 关键概念
-
-### 一级预设
-
-合法的 claude code settings.json，服务于 claude code 的 --settings 参数。
-
-### 二级预设
-
-基于一级预设创建的，专门用于管理 plugin 和 skill 的预设，主要是使用黑名单模式来屏蔽 plugin 和 skill，以达到不加载指定 plugin 和 skill 的作用。
-
-## 使用方式
-
-### 启动命令
+它解决的是这样一个问题：你可能有多套 Claude Code `settings.json`，或者想在某个基础配置之上临时关闭部分 plugins / skills，然后再用这套配置启动 Claude Code。`ccsp` 会在启动前帮你完成预设选择、派生配置复用/生成，并最终等价执行：
 
 ```bash
-# 启动 cc-settings-preset 的缩写命令：ccsp
-# 启动后进入一级预设列表，如果没有任何一级预设，则自动进入 create 流程，跑完 create 流程后，再进入一级预设列表
-# 进入一级预设列表后，展示一个现有的 settings 的三栏视图，左侧是 settings 列表，中间是 plugin 列表，展示每个 plugin 的开启和关闭状态，开启的放在上边，右侧是 skill 列表，展示每个 skill 的开启和关闭状态。中间视图和右侧视图，根据左侧当前选中的 settings 实时切换对应的配置
-# 在 settings 选择界面，使用按钮 p 进入 plugin 实时操作模式，此时光标切换到 plugin 列表中，上下光标切换当前选择的 plugin，按空格键切换开启和关闭状态，按 esc 键返回到 settings 选择列表
-# 在 settings 选择界面，使用按钮 s 进入 skill 实时操作模式，此时光标切换到 skill 列表中，上下光标切换当前选择的 skill，按空格键切换开启和关闭状态，按 esc 键返回到 settings 选择列表
-# 注意，如果已经进入 plugin 列表中，按 s 亦可切换到 skill 列表中，在 skill 列表中按 p 可切换到 plugin 列表
-# 确认后回车，如果 plugin 和 skill 发生了变动，基于选择的文件，copy 出来创建一个二级预设文件，让用户输入名称，不输入则使用 YYYY-MM-DD-HH-mm-ss 来自动命名，文件保存为 [name]-[new name]-settings.json，然后以这个最新的配置文件来启动。
-# 在创建二级预设前，如果当前的 plugin 和 skill 组合已经被现有的二级预设文件相同，则不用进入创建二级预设的流程，直接以已经存在的二级预设进行启动
-# 如果在当前选中的 settings 下没有操作过 plugin 和 skill 直接回车，如果存在历史创建的二级预设，则进入二级选择列表，展示模式跟一级一样，左中右三栏，其中第一栏是 origin，后续的就是其他的二级预设列表。如果不存在二级预设，则不用进入二级预设的相关流程
-# 进入二级预设列表后，可以按 esc 建返回到一级预设列表，在二级预设列表，将不可再使用 p 和 s 来操作 plugin 和 skill 的开关
-# 选定预设后，回车启动启动 claude code，后续等同于 claude --settings=[刚刚指定的配置路径]
-ccsp
-
-# 也可以启动的时候，接受 claude code 的其他参数，输入 claude 关键字，claude 关键字后面的参数都归属于 claude
-# 以下命令启动后，选择完 settings 后，后续等同于 claude --settings=[刚刚指定的配置路径] --resume e8eb7b78-c35a-4f60-ab52-6ce7825e86a0
-ccsp claude --resume e8eb7b78-c35a-4f60-ab52-6ce7825e86a0
-
-# 注意 --settings 是 ccsp 保留的参数，以下命令指定的 --settings 将会被忽略，此时需要弹出一个红色的告警提示，入参 --settings 将会被忽略
-ccsp claude --resume e8eb7b78-c35a-4f60-ab52-6ce7825e86a0 --settings=[显示指定的 settings]
+claude --settings <selected-settings-file> ...
 ```
 
-注意，claude code 是通过自动机制来发现 skill 的，因此进入一级预设列表后，skill 的可见范围为(官方说明)：
+## Features
+
+- 管理 Claude Code 一级预设（base preset）
+- 基于一级预设按 plugin / skill 开关生成二级预设（derived preset）
+- 自动复用 toggle 结果一致的二级预设，避免重复生成
+- 启动前自动同步二级预设与父一级预设的非 toggle 字段，避免配置漂移
+- 自动发现本地可访问的 Claude settings、plugins、skills
+- 基于 Ink 的三栏 TUI
+- 支持 `ccsp claude ...` 透传 Claude 参数
+
+## Installation
+
+### Requirements
+
+- Node.js `>= 20.19.2`
+- pnpm `>= 9`
+
+### Install dependencies
+
+```bash
+pnpm install
+```
+
+### Build
+
+```bash
+pnpm run build
+```
+
+### Optional: link for local use
+
+```bash
+pnpm link --global
+```
+
+之后就可以直接使用：
+
+```bash
+ccsp
+```
+
+## Commands
+
+### `ccsp`
+
+进入默认运行流程：
+
+1. 读取现有预设
+2. 如果没有一级预设，先进入创建流程
+3. 展示三栏界面选择预设 / plugins / skills
+4. 选定后启动 Claude Code
+
+### `ccsp claude ...args`
+
+和 `ccsp` 一样进入运行流程，但会把后续参数透传给 Claude Code。
+
+例如：
+
+```bash
+ccsp claude --resume
+ccsp claude --continue
+ccsp claude --print "hello"
+```
+
+`--settings` 是 `ccsp` 保留参数。如果用户透传了 `--settings`，它会被忽略，并输出红色警告。
+
+### `ccsp create`
+
+创建一个一级预设。
+
+创建时会优先提供已检测到的 Claude settings 文件作为导入来源，也可以手动输入路径。
+
+### `ccsp manage`
+
+管理已有预设。
+
+支持：
+
+- 启动某个预设
+- 重命名预设
+- 删除预设
+
+删除或重命名后会返回预设列表，不会直接退出。
+
+## Preset Model
+
+### 一级预设（base preset）
+
+一级预设是一个完整、可直接传给 Claude Code 的 `settings.json`。
+
+### 二级预设（derived preset）
+
+二级预设也是一个完整的 `settings.json`，但它来源于某个一级预设，并通过以下两个字段表达运行时 toggle：
+
+- `enabledPlugins`
+- `skillOverrides`
+
+二级预设的用途是：在不改动一级预设原文件的情况下，按当前交互界面里的 plugin / skill 开关结果生成一份可启动配置。
+
+### Derived preset reuse
+
+当你修改了 plugin / skill 开关后，`ccsp` 会：
+
+1. 计算当前 resolved toggle 状态
+2. 查找是否已有 toggle 结果完全一致的二级预设
+3. 如果有则直接复用
+4. 如果没有则提示输入名称并创建新的二级预设
+
+### Derived preset sync
+
+每次使用二级预设启动前，`ccsp` 都会从其父一级预设同步除以下字段之外的所有内容：
+
+- `enabledPlugins`
+- `skillOverrides`
+
+这样可以避免父预设更新后，二级预设长期漂移。
+
+## Storage Layout
+
+所有预设都保存在：
 
 ```text
-你存储 skill 的位置决定了谁可以使用它：
-位置 路径 适用于
-企业 请参阅托管设置 你的组织中的所有用户
-个人 ~/.claude/skills/<skill-name>/SKILL.md 你的所有项目
-项目 .claude/skills/<skill-name>/SKILL.md 仅此项目
-插件 <plugin>/skills/<skill-name>/SKILL.md 启用插件的位置
-当 skills 在各个级别共享相同的名称时，企业覆盖个人，个人覆盖项目。插件 skills 使用 plugin-name:skill-name 命名空间，因此它们不能与其他级别冲突。如果你在 .claude/commands/ 中有文件，它们的工作方式相同，但如果 skill 和命令共享相同的名称，skill 优先。
+~/.ccsp/settings/
 ```
 
-因此，需要先去遍历这些位置，来确定 skill 的列表。如果有明确禁用的 skill，使用“从设置覆盖 skill 可见性”（见下方参考文档）设置禁用 skill：
+索引信息保存在：
 
-```json
-{
-  "skillOverrides": {
-    "some-skill": "off"
-  }
-}
+```text
+~/.ccsp/index.json
 ```
 
-而 plugin 的可选列表，从以下配置文件的 enabledPlugins 字段来决定(优先级从高到低)：
-1、本地项目设置（.claude/settings.local.json）个人项目特定设置
-2、共享项目设置（.claude/settings.json）源代码管理中的团队共享项目设置
-3、用户设置（~/.claude/settings.json）个人全局设置
+其中索引记录预设类型、父子关系、文件名和时间戳等元数据。
 
-因此，需要遍历这些 settings 的 enabledPlugins 字段，然后根据优先级来确定 plugin 的列表。如果有明确禁用的 plugin，使用 false 字段来禁用 plugin：
+## TUI Overview
 
-```json
-{
-  "enabledPlugins": {
-    "some-plugin": false
-  }
-}
+运行 `ccsp` 后，主界面为三栏：
 
-```
+- 左栏：Settings
+- 中栏：Plugins
+- 右栏：Skills
 
-### 创建一级预设
+一级和二级预设会同时显示在左栏中，二级预设以树状结构展示在其父一级预设下。
+
+### Run mode keys
+
+- `↑ / k`：上移
+- `↓ / j`：下移
+- `p`：聚焦到 plugins 列
+- `s`：聚焦到 skills 列
+- `space`：切换当前 plugin / skill 开关
+- `esc`：返回 settings 列
+- `enter`：启动当前选择
+- `q`：退出
+
+### Manage mode keys
+
+- `↑ / k`：上移
+- `↓ / j`：下移
+- `enter / l`：启动当前预设
+- `r`：重命名
+- `d`：删除
+- `q`：退出
+
+## Discovery Rules
+
+`ccsp` 只发现磁盘上当前可访问的内容，不处理 managed / enterprise 远端配置。
+
+### Settings discovery
+
+创建一级预设时，会按优先级检测以下 Claude settings 文件：
+
+1. 当前项目：`.claude/settings.local.json`
+2. 当前项目：`.claude/settings.json`
+3. 用户目录：`~/.claude/settings.json`
+
+### Skill discovery
+
+非 plugin skills 从以下位置发现：
+
+- `~/.claude/skills/<skill-name>/SKILL.md`
+- 当前项目 `.claude/skills/<skill-name>/SKILL.md`
+- 适用的父级项目 `.claude/skills/<skill-name>/SKILL.md`
+- 当前项目 `.claude/commands/*.md`，作为 skill 兼容条目
+
+说明：
+
+- 如果某个 skill 目录是指向目录的符号链接，也会被识别
+- 当同名 skill 和 command 同时存在时，skill 优先
+
+### Plugin skill rules
+
+plugin 提供的 skills 会以 `plugin-name:skill-name` 形式展示。
+
+这类 skills：
+
+- 会被自动发现
+- 不能单独 toggle
+- 只能通过所属 plugin 的开关控制
+
+### Plugin state
+
+plugin 冲突显示的是 resolved state，而不是逐来源展开。
+
+## Launch Behavior
+
+最终启动 Claude Code 时，`ccsp` 使用子进程执行，而不是替换当前进程。
+
+效果等价于：
 
 ```bash
-# 以下命令启动后，让用户输入一个 json 文件路径，需要校验为合法的 json 文件，回车确认，然后让用户输入预设名称
-# 确认后文件保存到 ~/.ccsp/settings/[name]-settings.json
-ccsp create
+claude --settings <preset-file> ...passthroughArgs
 ```
 
-### 管理预设
+## Development
+
+### Scripts
 
 ```bash
-# 执行后进入一级预设列表，回车后进入二级预设列表，大致流程和 ccsp 启动的流程类似，增加以下操作：
-# 按 r 对预设进行改名
-# 按 d 快捷键，删除预设
-# 按 l 快捷键以当前所选预设进行启动
-ccsp manage
+pnpm run typecheck   # TypeScript 全量类型检查（包含 tests）
+pnpm run test        # 运行 Vitest
+pnpm run build       # 构建 dist
+pnpm run check       # typecheck + build + test
+pnpm run test:coverage
 ```
 
-## 其他要求
+### Local development
 
-### 技术栈
+```bash
+pnpm install
+pnpm run check
+pnpm run dev
+```
 
-使用 @package.json#L39-65 声明的技术栈来进行开发：
+## Tech Stack
 
-- 使用 ink 来做界面展示和交互
-- 使用 commander 来创建和管理命令
-- 使用 zod 来做数据结构校验和限制
+- TypeScript
+- Ink
+- React
+- Commander
+- Zod
+- Vitest
 
-可视具体情况，按需安装新的模块依赖。
+## Status
 
-### 架构
+当前实现已覆盖：
 
-可参考 cc-env 项目：/Users/liangkangda/Fe-project/code/cc-env/src
+- base / derived preset 模型
+- 三栏运行界面
+- create / manage / `claude` 透传命令
+- plugin / skill 自动发现
+- derived preset 复用与启动前同步
 
-### 运行环境要求
+如果你要继续扩展，推荐优先查看：
 
-需要满足最低 nodejs 运行版本为 12 及以上
-
-## 参考文档
-
-### claude code
-
-- claude code 官方 settings 说明文档：<https://code.claude.com/docs/en/settings>
-- Skills 的位置：<https://code.claude.com/docs/zh-CN/skills#skills-%E7%9A%84%E4%BD%8D%E7%BD%AE>
-- 从设置覆盖 skill 可见性：<https://code.claude.com/docs/zh-CN/skills#override-skill-visibility-from-settings>
+- `src/cli.ts`
+- `src/services/preset-service.ts`
+- `src/services/plugin-service.ts`
+- `src/services/skill-service.ts`
+- `src/ink/`

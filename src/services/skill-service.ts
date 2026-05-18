@@ -126,6 +126,29 @@ async function discoverPluginSkills(homeDir: string, enabledPlugins: Record<stri
   return skills
 }
 
+function compareSkillSourceThenName(a: SkillState, b: SkillState): number {
+  const sourceRank: Record<SkillState['source'], number> = {
+    command: 0,
+    plugin: 1,
+    user: 2,
+    project: 3,
+  }
+
+  if (sourceRank[a.source] !== sourceRank[b.source]) return sourceRank[a.source] - sourceRank[b.source]
+  return a.name.localeCompare(b.name)
+}
+
+export function sortSkillStates(states: SkillState[]): SkillState[] {
+  return [...states].sort(compareSkillSourceThenName)
+}
+
+export function sortSkillStatesByStatus(states: SkillState[]): SkillState[] {
+  return [...states].sort((a, b) => {
+    if (a.enabled !== b.enabled) return a.enabled ? -1 : 1
+    return compareSkillSourceThenName(a, b)
+  })
+}
+
 export async function discoverSkillStates(input: SkillDiscoveryInput): Promise<SkillState[]> {
   const projectSkills = await discoverProjectSkills(input.cwd)
   const commandSkills = await discoverCommandSkills(resolveProjectCommandsDir(input.cwd))
@@ -145,17 +168,7 @@ export async function discoverSkillStates(input: SkillDiscoveryInput): Promise<S
     }
   }
 
-  const sourceRank: Record<SkillState['source'], number> = {
-    command: 0,
-    plugin: 1,
-    user: 2,
-    project: 3,
-  }
-
-  return Array.from(byName.values()).sort((a, b) => {
-    if (sourceRank[a.source] !== sourceRank[b.source]) return sourceRank[a.source] - sourceRank[b.source]
-    return a.name.localeCompare(b.name)
-  })
+  return sortSkillStates(Array.from(byName.values()))
 }
 
 export function skillStatesToOverrides(states: SkillState[]): Record<string, SkillOverrideValue> {

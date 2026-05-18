@@ -13,6 +13,13 @@ export type PluginSettingsSource = {
   settings: Settings
 }
 
+export function sortPluginStates(states: PluginState[]): PluginState[] {
+  return [...states].sort((a, b) => {
+    if (a.enabled !== b.enabled) return a.enabled ? -1 : 1
+    return a.name.localeCompare(b.name)
+  })
+}
+
 export function resolvePluginStates(sources: PluginSettingsSource[]): PluginState[] {
   const resolved = new Map<string, PluginState>()
 
@@ -25,10 +32,7 @@ export function resolvePluginStates(sources: PluginSettingsSource[]): PluginStat
     }
   }
 
-  return Array.from(resolved.values()).sort((a, b) => {
-    if (a.enabled !== b.enabled) return a.enabled ? -1 : 1
-    return a.name.localeCompare(b.name)
-  })
+  return sortPluginStates(Array.from(resolved.values()))
 }
 
 export function pluginStatesToEnabledPlugins(states: PluginState[]): Record<string, boolean> {
