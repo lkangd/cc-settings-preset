@@ -3,6 +3,8 @@ import { fileURLToPath } from 'node:url'
 import React from 'react'
 import { Command } from 'commander'
 import { render } from 'ink'
+import figlet from 'figlet'
+import gradient from 'gradient-string'
 
 import { sanitizeClaudeArgs } from './core/args.js'
 import { CliError } from './core/errors.js'
@@ -16,7 +18,12 @@ import { RunApp, type RunResult } from './ink/run-app.js'
 import { pluginStatesToEnabledPlugins, resolvePluginStates, type PluginState } from './services/plugin-service.js'
 import { createPresetService } from './services/preset-service.js'
 import { createSettingsSourceService, type SettingsSource } from './services/settings-source-service.js'
-import { applySkillOverrides, discoverSkillStates, skillStatesToOverrides, type SkillState } from './services/skill-service.js'
+import {
+  applySkillOverrides,
+  discoverSkillStates,
+  skillStatesToOverrides,
+  type SkillState
+} from './services/skill-service.js'
 
 const h = React.createElement
 const VERSION = '1.0.0'
@@ -28,10 +35,7 @@ const settingsSourceService = createSettingsSourceService(context)
 
 export function createProgram(): Command {
   const program = new Command()
-  program
-    .name('cc-settings-preset')
-    .description('Select Claude Code runtime settings presets')
-    .version(VERSION)
+  program.name('cc-settings-preset').description('Select Claude Code runtime settings presets').version(VERSION)
 
   program
     .command('create')
@@ -50,20 +54,34 @@ export function createProgram(): Command {
   return program
 }
 
+function printBanner() {
+  const banner = figlet.textSync('CCSP', { font: 'ANSI Shadow' })
+  const line = '─'.repeat(48)
+  const styled = gradient(['#00d2ff', '#7b2ff7', '#ff0080'])(banner)
+  process.stderr.write(`\n${styled}\x1b[2m\n${line}\x1b[0m\n\n`)
+}
+
 async function renderCreateApp(): Promise<CreateResult | undefined> {
   const sources = (await settingsSourceService.discoverSettingsSources()).map(source => ({
     label: source.scope,
-    filePath: source.filePath,
+    filePath: source.filePath
   }))
   let result: CreateResult | undefined
-  const app = render(h(CreateApp, { sources, onSubmit: (value: CreateResult) => { result = value } }))
+  const app = render(
+    h(CreateApp, {
+      sources,
+      onSubmit: (value: CreateResult) => {
+        result = value
+      }
+    })
+  )
   await app.waitUntilExit()
   return result
 }
 
 async function resolveStatesByPreset(
   presets: PresetMeta[],
-  sources: SettingsSource[],
+  sources: SettingsSource[]
 ): Promise<{
   pluginsByPreset: Record<string, PluginState[]>
   skillsByPreset: Record<string, SkillState[]>
@@ -73,11 +91,14 @@ async function resolveStatesByPreset(
 
   for (const preset of presets) {
     const presetSettings = await presetService.readPresetSettings(preset.name)
-    const plugins = resolvePluginStates([...sources, { scope: 'preset', filePath: preset.name, settings: presetSettings }])
+    const plugins = resolvePluginStates([
+      ...sources,
+      { scope: 'preset', filePath: preset.name, settings: presetSettings }
+    ])
     const discoveredSkills = await discoverSkillStates({
       homeDir: context.homeDir,
       cwd: context.cwd,
-      enabledPlugins: pluginStatesToEnabledPlugins(plugins),
+      enabledPlugins: pluginStatesToEnabledPlugins(plugins)
     })
 
     pluginsByPreset[preset.name] = plugins
@@ -92,7 +113,16 @@ async function renderRunApp(presets: PresetMeta[]): Promise<RunResult | undefine
   const { pluginsByPreset, skillsByPreset } = await resolveStatesByPreset(presets, sources)
 
   let result: RunResult | undefined
-  const app = render(h(RunApp, { presets, pluginsByPreset, skillsByPreset, onSubmit: (value: RunResult) => { result = value } }))
+  const app = render(
+    h(RunApp, {
+      presets,
+      pluginsByPreset,
+      skillsByPreset,
+      onSubmit: (value: RunResult) => {
+        result = value
+      }
+    })
+  )
   await app.waitUntilExit()
   return result
 }
@@ -102,7 +132,16 @@ async function renderManageApp(presets: PresetMeta[]): Promise<ManageResult | un
   const { pluginsByPreset, skillsByPreset } = await resolveStatesByPreset(presets, sources)
 
   let result: ManageResult | undefined
-  const app = render(h(ManageApp, { presets, pluginsByPreset, skillsByPreset, onSubmit: (value: ManageResult) => { result = value } }))
+  const app = render(
+    h(ManageApp, {
+      presets,
+      pluginsByPreset,
+      skillsByPreset,
+      onSubmit: (value: ManageResult) => {
+        result = value
+      }
+    })
+  )
   await app.waitUntilExit()
   return result
 }
@@ -143,18 +182,19 @@ async function runInteractive(rawClaudeArgs: string[]): Promise<void> {
     if (!preset || preset.type !== 'derived') continue
     await presetService.writePresetSettingsByName(preset.name, {
       enabledPlugins: pluginStatesToEnabledPlugins(draft.plugins),
-      skillOverrides: skillStatesToOverrides(draft.skills),
+      skillOverrides: skillStatesToOverrides(draft.skills)
     })
   }
 
   if (selection.type === 'derive') {
     const toggles = {
       enabledPlugins: pluginStatesToEnabledPlugins(selection.plugins),
-      skillOverrides: skillStatesToOverrides(selection.skills),
+      skillOverrides: skillStatesToOverrides(selection.skills)
     }
     const parentName = selection.preset.type === 'base' ? selection.preset.name : selection.preset.parentName
     const existing = await presetService.findMatchingDerivedPreset(parentName, toggles)
-    const derived = existing ?? await presetService.createDerivedPreset(parentName, selection.derivedName ?? '', toggles)
+    const derived =
+      existing ?? (await presetService.createDerivedPreset(parentName, selection.derivedName ?? '', toggles))
     await launchPreset(derived, sanitized.args)
     return
   }

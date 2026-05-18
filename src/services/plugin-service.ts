@@ -21,18 +21,40 @@ export function sortPluginStates(states: PluginState[]): PluginState[] {
 }
 
 export function resolvePluginStates(sources: PluginSettingsSource[]): PluginState[] {
-  const sourceRank: Record<PluginSettingsSource['scope'], number> = {
+  const ownershipPrecedence: Record<SettingsSourceScope, number> = {
     user: 0,
     project: 1,
     'project-local': 2,
-    preset: 3,
   }
   const resolved = new Map<string, PluginState>()
 
-  for (const source of [...sources].sort((a, b) => sourceRank[a.scope] - sourceRank[b.scope])) {
+  for (const source of sources) {
     const enabledPlugins = source.settings.enabledPlugins ?? {}
     for (const [name, enabled] of Object.entries(enabledPlugins)) {
-      resolved.set(name, { name, enabled, source: source.scope })
+      const current = resolved.get(name)
+
+      if (source.scope === 'preset') {
+        if (current) {
+          resolved.set(name, { ...current, enabled })
+        } else {
+          resolved.set(name, { name, enabled, source: 'preset' })
+        }
+        continue
+      }
+
+      if (!current) {
+        resolved.set(name, { name, enabled, source: source.scope })
+        continue
+      }
+
+      if (current.source === 'preset') {
+        resolved.set(name, { ...current, source: source.scope })
+        continue
+      }
+
+      if (ownershipPrecedence[source.scope] >= ownershipPrecedence[current.source]) {
+        resolved.set(name, { name, enabled, source: source.scope })
+      }
     }
   }
 

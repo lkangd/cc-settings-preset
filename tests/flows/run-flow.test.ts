@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createRunFlowState, reduceRunFlow, shouldShowDerivedHint } from '../../src/flows/run-flow.js'
+import { resolvePluginStates } from '../../src/services/plugin-service.js'
 
 describe('run flow', () => {
   const state = createRunFlowState({
@@ -135,5 +136,50 @@ describe('run flow', () => {
     const editedDerived = reduceRunFlow(focusedPlugins, { type: 'toggle-current' })
 
     expect(shouldShowDerivedHint(editedDerived)).toBe(false)
+  })
+
+  it('uses preset overrides for enabled state without losing plugin ownership source', () => {
+    const states = resolvePluginStates([
+      {
+        scope: 'user',
+        filePath: '/user-settings.json',
+        settings: {
+          enabledPlugins: {
+            'claude-hud': true,
+            'commit-commands': true,
+            superpowers: false,
+            'typescript-lsp': false,
+          },
+        },
+      },
+      {
+        scope: 'project',
+        filePath: '/project/.claude/settings.json',
+        settings: {
+          enabledPlugins: {
+            superpowers: true,
+            'typescript-lsp': true,
+          },
+        },
+      },
+      {
+        scope: 'preset',
+        filePath: '/presets/test.json',
+        settings: {
+          enabledPlugins: {
+            'commit-commands': false,
+            superpowers: false,
+            'typescript-lsp': false,
+          },
+        },
+      },
+    ])
+
+    expect(states).toEqual([
+      { name: 'claude-hud', enabled: true, source: 'user' },
+      { name: 'commit-commands', enabled: false, source: 'user' },
+      { name: 'superpowers', enabled: false, source: 'project' },
+      { name: 'typescript-lsp', enabled: false, source: 'project' },
+    ])
   })
 })

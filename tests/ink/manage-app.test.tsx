@@ -51,5 +51,34 @@ describe('manage app', () => {
     expect(output).toContain('Plugins(0/1)')
     expect(output).toContain('Skills(0/1)')
     expect(output).toContain('OFF')
+    expect(output).toContain('[P] demo')
+  })
+
+  it('renders preset-disabled plugins as OFF while keeping their ownership badge', () => {
+    const output = renderToString(
+      <ManageApp
+        presets={[
+          { type: 'base', name: 'test', fileName: 'test-settings.json', createdAt: '2026-05-17T00:00:00.000Z', updatedAt: '2026-05-17T00:00:00.000Z' },
+        ]}
+        pluginsByPreset={{
+          test: [
+            { name: 'commit-commands@coding-agent-skills', enabled: false, source: 'user' },
+            { name: 'superpowers@claude-plugins-official', enabled: false, source: 'project' },
+            { name: 'typescript-lsp@claude-plugins-official', enabled: false, source: 'project' },
+          ],
+        }}
+        skillsByPreset={{
+          test: [],
+        }}
+        onSubmit={() => undefined}
+      />,
+      { columns: 140 },
+    )
+
+    expect(output).toContain('Plugins(0/3)')
+    expect(output).toContain('OFF')
+    expect(output).toContain('[U] commit-commands')
+    expect(output).toContain('[P] superpowers')
+    expect(output).toContain('[P] typescript-lsp')
   })
 })
