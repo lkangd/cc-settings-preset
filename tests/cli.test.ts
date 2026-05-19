@@ -16,8 +16,6 @@ const listPresetsMock = vi.fn()
 const deletePresetMock = vi.fn()
 const renamePresetMock = vi.fn()
 const writePresetSettingsByNameMock = vi.fn()
-const findMatchingDerivedPresetMock = vi.fn()
-const createDerivedPresetMock = vi.fn()
 const createProjectLaunchPresetMock = vi.fn()
 const writeLastUsedLaunchPresetMock = vi.fn()
 const writeTempSettingsMock = vi.fn().mockResolvedValue('/tmp/project/.claude/.ccsp/tmp/temp-settings.json')
@@ -44,19 +42,9 @@ vi.mock('../src/services/preset-service.js', () => ({
     listPresets: listPresetsMock,
     deletePreset: deletePresetMock,
     renamePreset: renamePresetMock,
-    syncDerivedPreset: vi.fn((name: string) => Promise.resolve({
-      type: 'derived' as const,
-      name,
-      parentName: 'base',
-      fileName: `${name}.json`,
-      createdAt: '2026-05-17T00:00:00.000Z',
-      updatedAt: '2026-05-17T00:00:00.000Z',
-    })),
     getPresetPath: vi.fn((name: string) => Promise.resolve(`/tmp/.ccsp/settings/${name}.json`)),
     readPresetSettings: vi.fn().mockResolvedValue({}),
     writePresetSettingsByName: writePresetSettingsByNameMock,
-    findMatchingDerivedPreset: findMatchingDerivedPresetMock,
-    createDerivedPreset: createDerivedPresetMock,
     createBasePreset: vi.fn(),
   }),
 }))
@@ -124,8 +112,6 @@ describe('run command', () => {
     listPresetsMock.mockReset()
     deletePresetMock.mockReset()
     writePresetSettingsByNameMock.mockReset()
-    findMatchingDerivedPresetMock.mockReset()
-    createDerivedPresetMock.mockReset()
     renamePresetMock.mockReset()
     createProjectLaunchPresetMock.mockReset()
     createProjectLaunchPresetMock.mockResolvedValue({ name: 'web', fileName: 'web-launch.json', createdAt: '2026-05-19T00:00:00.000Z', updatedAt: '2026-05-19T00:00:00.000Z' })
@@ -185,10 +171,9 @@ describe('run command', () => {
       deniedMcpServers: [{ serverName: 'github' }],
     })
     expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
-    expect(createDerivedPresetMock).not.toHaveBeenCalled()
   })
 
-  it('does not create global derived presets during launch', async () => {
+  it('launches temporary settings without saving a project launch preset', async () => {
     const basePreset = {
       type: 'base' as const,
       name: 'base',
@@ -211,7 +196,7 @@ describe('run command', () => {
     const { main } = await import('../src/cli.js')
     await main(['node', 'cli'])
 
-    expect(createDerivedPresetMock).not.toHaveBeenCalled()
+    expect(createProjectLaunchPresetMock).not.toHaveBeenCalled()
     expect(writeTempSettingsMock).toHaveBeenCalledWith({})
   })
 })
@@ -247,8 +232,6 @@ describe('manage command', () => {
     listPresetsMock.mockReset()
     deletePresetMock.mockReset()
     writePresetSettingsByNameMock.mockReset()
-    findMatchingDerivedPresetMock.mockReset()
-    createDerivedPresetMock.mockReset()
     renamePresetMock.mockReset()
     spawnClaudeMock.mockReset()
     spawnClaudeMock.mockResolvedValue(0)

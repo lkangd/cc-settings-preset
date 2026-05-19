@@ -275,13 +275,6 @@ async function createPresetInteractive(): Promise<PresetMeta | undefined> {
   return presetService.createBasePreset(selection.name, settings)
 }
 
-async function launchPreset(preset: PresetMeta, claudeArgs: string[]): Promise<void> {
-  const finalPreset = preset.type === 'derived' ? await presetService.syncDerivedPreset(preset.name) : preset
-  const settingsPath = await presetService.getPresetPath(finalPreset.name)
-  const code = await spawnClaude(settingsPath, claudeArgs)
-  process.exitCode = code
-}
-
 async function runInteractive(rawClaudeArgs: string[]): Promise<void> {
   printBanner()
   const sanitized = sanitizeClaudeArgs(rawClaudeArgs)
