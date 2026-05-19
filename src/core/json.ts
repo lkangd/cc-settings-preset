@@ -13,7 +13,7 @@ export async function pathExists(filePath: string): Promise<boolean> {
   }
 }
 
-export async function ensureParentDir(filePath: string): Promise<void> {
+async function ensureParentDir(filePath: string): Promise<void> {
   await fs.mkdir(dirname(filePath), { recursive: true })
 }
 
@@ -36,7 +36,7 @@ export async function readJsonFile(filePath: string): Promise<unknown> {
   }
 }
 
-export async function atomicWriteFile(filePath: string, content: string): Promise<void> {
+async function atomicWriteFile(filePath: string, content: string): Promise<void> {
   await ensureParentDir(filePath)
   const tempFilePath = join(dirname(filePath), `.${basename(filePath)}.${process.pid}.${Date.now()}.tmp`)
   await fs.writeFile(tempFilePath, content, 'utf8')

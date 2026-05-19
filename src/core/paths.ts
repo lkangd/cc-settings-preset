@@ -16,7 +16,7 @@ export function resolveGlobalRoot(homeDir = process.env.HOME ?? process.cwd()): 
   return join(homeDir, '.ccsp')
 }
 
-export function resolveSettingsDir(globalRoot: string): string {
+function resolveSettingsDir(globalRoot: string): string {
   return join(globalRoot, 'settings')
 }
 
@@ -92,6 +92,6 @@ export function resolveUserClaudeJsonPath(homeDir: string): string {
   return join(homeDir, '.claude.json')
 }
 
-export function resolveGlobalLastSettingsPath(globalRoot: string): string {
+function resolveGlobalLastSettingsPath(globalRoot: string): string {
   return join(globalRoot, 'last-settings.json')
 }

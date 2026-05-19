@@ -138,7 +138,7 @@ function compareSkillSourceThenName(a: SkillState, b: SkillState): number {
   return a.name.localeCompare(b.name)
 }
 
-export function sortSkillStates(states: SkillState[]): SkillState[] {
+function sortSkillStates(states: SkillState[]): SkillState[] {
   return [...states].sort(compareSkillSourceThenName)
 }
 

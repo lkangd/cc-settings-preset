@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const skillOverrideValueSchema = z.enum(['on', 'name-only', 'user-invocable-only', 'off'])
+const skillOverrideValueSchema = z.enum(['on', 'name-only', 'user-invocable-only', 'off'])
 
 const mcpPolicyEntrySchema = z.union([
   z.object({ serverName: z.string().min(1) }).strict(),
@@ -14,7 +14,7 @@ export const settingsSchema = z.looseObject({
   deniedMcpServers: z.array(mcpPolicyEntrySchema).optional(),
 })
 
-export const launchPresetSettingsSchema = z.object({
+const launchPresetSettingsSchema = z.object({
   enabledPlugins: z.record(z.string(), z.boolean()).optional(),
   skillOverrides: z.record(z.string(), skillOverrideValueSchema).optional(),
   deniedMcpServers: z.array(mcpPolicyEntrySchema).optional(),
@@ -46,7 +46,7 @@ const launchPresetMetaSchema = z.object({
   updatedAt: timestampSchema,
 })
 
-export const presetMetaSchema = z.discriminatedUnion('type', [basePresetMetaSchema, derivedPresetMetaSchema])
+const presetMetaSchema = z.discriminatedUnion('type', [basePresetMetaSchema, derivedPresetMetaSchema])
 
 export const indexSchema = z.object({
   version: z.literal(1),
