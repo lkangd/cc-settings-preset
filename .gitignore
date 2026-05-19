@@ -64,6 +64,7 @@ test-results/
 
 # private configs
 .configs
+.claude/.ccsp/
 
 # docs internal
 docs/superpowers/

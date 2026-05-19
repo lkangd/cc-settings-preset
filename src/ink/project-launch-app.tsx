@@ -54,13 +54,16 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedNa
   const [newName, setNewName] = useState('')
 
   function submitLaunch(saveAs?: string) {
+    const normalizedSaveAs = saveAs?.trim()
+    if (saveAs !== undefined && !normalizedSaveAs) return
+
     const item = getActiveProjectLaunchItem(state)
     const toggles = getActiveProjectLaunchState(state)
     onSubmit({
       type: 'launch',
       toggles,
       ...(item?.type === 'preset' ? { presetName: item.name } : {}),
-      ...(saveAs ? { saveAs } : {}),
+      ...(normalizedSaveAs ? { saveAs: normalizedSaveAs } : {}),
     })
     exit()
   }
@@ -93,7 +96,7 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedNa
     return (
       <Box flexDirection="column">
         <Text color="yellow">Save changes as a new project launch preset?</Text>
-        <Text dimColor>press y to save · n for retained temp settings · esc cancel</Text>
+        <Text dimColor>press Y to save · n for retained temp settings · esc cancel</Text>
         <ConfirmSaveChoice
           onSave={() => setSaveChoice('name-new')}
           onTemp={() => {
@@ -155,7 +158,7 @@ function ToggleColumn({ title, focused, items, cursor }: { title: string; focuse
 
 function ConfirmSaveChoice({ onSave, onTemp, onCancel }: { onSave: () => void; onTemp: () => void; onCancel: () => void }) {
   useInput((input, key) => {
-    if (input === 'y') onSave()
+    if (input === 'y' || key.return) onSave()
     if (input === 'n') onTemp()
     if (key.escape) onCancel()
   })
