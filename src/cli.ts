@@ -261,6 +261,17 @@ async function renderManageApp(items: SettingsSelectResult[]): Promise<ManageRes
       onSubmit: (value: ManageResult) => {
         result = value
       },
+      onRenameSubmit: async (item: SettingsSelectResult, newName: string) => {
+        try {
+          await presetService.renamePreset(item.name, newName)
+          return null
+        } catch (error) {
+          if (error instanceof Error && error.message.startsWith('Preset already exists: ')) {
+            return error.message
+          }
+          throw error
+        }
+      },
     })
   )
   await app.waitUntilExit()
@@ -323,6 +334,10 @@ async function manageInteractive(): Promise<void> {
 
     if (selection.type === 'rename') {
       await presetService.renamePreset(selection.item.name, selection.newName)
+      continue
+    }
+
+    if (selection.type === 'refresh') {
       continue
     }
 

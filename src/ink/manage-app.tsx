@@ -8,13 +8,21 @@ export type ManageResult =
   | { type: 'launch'; item: SettingsSelectItem }
   | { type: 'rename'; item: SettingsSelectItem; newName: string }
   | { type: 'delete'; item: SettingsSelectItem }
+  | { type: 'refresh' }
   | { type: 'exit' }
 
-export function ManageApp({ items, onSubmit }: { items: SettingsSelectItem[]; onSubmit: (result: ManageResult) => void }) {
+type Props = {
+  items: SettingsSelectItem[]
+  onSubmit: (result: ManageResult) => void
+  onRenameSubmit?: (item: SettingsSelectItem, newName: string) => Promise<string | null>
+}
+
+export function ManageApp({ items, onSubmit, onRenameSubmit }: Props) {
   const { exit } = useApp()
   const [state, setState] = useState(() => createSettingsSelectFlowState({ items }))
   const [mode, setMode] = useState<'browse' | 'rename' | 'delete'>('browse')
   const [newName, setNewName] = useState('')
+  const [renameError, setRenameError] = useState<string | null>(null)
   const active = state.items[state.cursor]
 
   useInput((input, key) => {
@@ -31,23 +39,42 @@ export function ManageApp({ items, onSubmit }: { items: SettingsSelectItem[]; on
       onSubmit({ type: 'launch', item: active })
       exit()
     }
-    if (input === 'r') setMode('rename')
+    if (input === 'r') {
+      setRenameError(null)
+      setMode('rename')
+    }
     if (input === 'd') setMode('delete')
   })
 
   if (mode === 'rename') {
     return (
-      <TextInput
-        label={`Rename ${active?.name ?? 'preset'} to`}
-        value={newName}
-        onChange={setNewName}
-        onCancel={() => setMode('browse')}
-        onSubmit={() => {
-          if (!active) return
-          onSubmit({ type: 'rename', item: active, newName })
-          exit()
-        }}
-      />
+      <Box flexDirection="column">
+        <Text color={renameError ? 'red' : ''}>{renameError ?? ' '}</Text>
+        <TextInput
+          label={`Rename ${active?.name ?? 'preset'} to`}
+          value={newName}
+          onChange={value => {
+            setRenameError(null)
+            setNewName(value)
+          }}
+          onCancel={() => setMode('browse')}
+          onSubmit={async () => {
+            if (!active) return
+            if (onRenameSubmit) {
+              const error = await onRenameSubmit(active, newName)
+              if (error) {
+                setRenameError(error)
+                return
+              }
+              onSubmit({ type: 'refresh' })
+              exit()
+              return
+            }
+            onSubmit({ type: 'rename', item: active, newName })
+            exit()
+          }}
+        />
+      </Box>
     )
   }
 

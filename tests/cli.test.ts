@@ -345,7 +345,7 @@ describe('manage command', () => {
 
     const result = await runInTty({
       command: ['node', 'dist/cli.js', 'manage'],
-      cwd: '/Users/liangkangda/Fe-project/code/cc-settings-preset',
+      cwd: process.cwd(),
       env: {
         HOME: homeDir,
         TERM: 'xterm-256color',
