@@ -16,6 +16,7 @@ import { CreateApp, type CreateResult } from './ink/create-app.js'
 import type { ProjectLaunchToggleState } from './flows/project-launch-flow.js'
 import { ManageApp, type ManageResult } from './ink/manage-app.js'
 import { ProjectLaunchApp, type ProjectLaunchResult } from './ink/project-launch-app.js'
+import { ProjectManageApp, type ProjectManageResult } from './ink/project-manage-app.js'
 import { SettingsSelectApp, type SettingsSelectResult } from './ink/settings-select-app.js'
 import {
   applyPluginOverrides,
@@ -225,6 +226,21 @@ async function renderProjectLaunchApp(selectedSettings: SettingsSelectResult): P
   return result
 }
 
+async function renderProjectManageApp(selectedSettings: SettingsSelectResult): Promise<ProjectManageResult | undefined> {
+  const input = await buildProjectLaunchInput(selectedSettings)
+  let result: ProjectManageResult | undefined
+  const app = render(
+    h(ProjectManageApp, {
+      ...input,
+      onSubmit: (value: ProjectManageResult) => {
+        result = value
+      },
+    })
+  )
+  await app.waitUntilExit()
+  return result
+}
+
 function launchResultToSettings(result: ProjectLaunchResult): {
   enabledPlugins: Record<string, boolean>
   skillOverrides: ReturnType<typeof skillStatesToOverrides>
@@ -329,10 +345,20 @@ async function manageProjectInteractive(): Promise<void> {
   const selectedSettings = await renderSettingsSelectApp(settingsItems)
   if (!selectedSettings) return
 
-  const launchResult = await renderProjectLaunchApp(selectedSettings)
-  if (!launchResult) return
+  const result = await renderProjectManageApp(selectedSettings)
+  if (!result) return
 
-  const launchSettings = launchResultToSettings(launchResult)
+  if (result.type === 'rename') {
+    await launchPresetService.renamePreset(result.presetName, result.newName)
+    return
+  }
+
+  if (result.type === 'delete') {
+    await launchPresetService.deletePreset(result.presetName)
+    return
+  }
+
+  const launchSettings = launchResultToSettings(result)
   const settingsPath = await launchPresetService.writeTempSettings(finalizeSettings(selectedSettings.settings, launchSettings))
   const code = await spawnClaude(settingsPath, [])
   process.exitCode = code
