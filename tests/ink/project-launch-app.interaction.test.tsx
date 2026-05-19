@@ -20,6 +20,7 @@ const textInputProps: TextInputProps[] = []
 vi.mock('ink', () => ({
   Box: ({ children }: { children?: React.ReactNode }) => React.createElement('box', null, children),
   Text: ({ children }: { children?: React.ReactNode }) => React.createElement('text', null, children),
+  Newline: () => React.createElement('newline'),
   useApp: () => ({ exit: exitMock }),
   useInput: (handler: InputHandler) => {
     inputHandlers.push(handler)

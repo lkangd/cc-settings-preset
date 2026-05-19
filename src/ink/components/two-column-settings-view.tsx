@@ -19,19 +19,44 @@ export function TwoColumnSettingsView({ title, help, items, cursor }: Props) {
 
   return (
     <Box flexDirection="column">
-      <Text bold color="cyan">{title}</Text>
+      <Text bold color="cyan">
+        {title}
+      </Text>
       <Text dimColor>{help}</Text>
-      <Box marginTop={1} width={innerWidth}>
-        <Box flexDirection="column" width={listWidth} marginRight={1} borderStyle="round" borderColor="cyan" paddingX={1}>
+      <Box marginTop={0.5} width={innerWidth}>
+        <Box
+          flexDirection="column"
+          width={listWidth}
+          marginRight={0.5}
+          borderStyle="round"
+          borderColor="cyan"
+          paddingX={0.5}
+          paddingY={0.5}
+        >
           <Text bold>Settings({items.length})</Text>
           {items.map((item, index) => (
-            <Text key={`${item.name}:${item.sourcePath}`} wrap="truncate-end" {...(index === cursor ? { color: 'cyan' as const } : {})}>
-              {index === cursor ? '❯ ' : '  '}{item.name}{item.temporary ? ' (detected)' : ''}
+            <Text
+              key={`${item.name}:${item.sourcePath}`}
+              wrap="truncate-end"
+              {...(index === cursor ? { color: 'cyan' as const } : {})}
+            >
+              {index === cursor ? '❯ ' : '  '}
+              {item.name}
+              {item.temporary ? ' (detected)' : ''}
             </Text>
           ))}
         </Box>
-        <Box flexDirection="column" width={previewWidth} borderStyle="round" borderColor="gray" paddingX={1}>
-          <Text bold wrap="truncate-end">{selected?.sourcePath ?? 'No settings selected'}</Text>
+        <Box
+          flexDirection="column"
+          width={previewWidth}
+          borderStyle="round"
+          borderColor="gray"
+          paddingX={0.5}
+          paddingY={0.5}
+        >
+          <Text bold wrap="truncate-end">
+            {selected?.sourcePath ?? 'No settings selected'}
+          </Text>
           {selected ? <JsonTreeView value={selected.settings} /> : <Text dimColor>no settings found</Text>}
         </Box>
       </Box>

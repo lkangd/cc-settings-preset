@@ -79,7 +79,7 @@ export function printBanner() {
   const banner = figlet.textSync('C C S P', { font: 'ANSI Shadow' })
   const line = '─'.repeat(48)
   const styled = gradient(['#00d2ff', '#7b2ff7', '#ff0080'])(banner)
-  process.stderr.write(`\n${styled}\x1b[2m\n${line}\x1b[0m\n\n`)
+  process.stderr.write(`\n\n${styled}\x1b[2m\n${line}\x1b[0m\n\n`)
 }
 
 async function renderCreateApp(): Promise<CreateResult | undefined> {
