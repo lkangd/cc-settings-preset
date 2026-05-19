@@ -13,7 +13,10 @@ type Props = {
 
 export function SettingsSelectApp({ items, initialName, onSubmit }: Props) {
   const { exit } = useApp()
-  const [state, setState] = useState(() => createSettingsSelectFlowState({ items, initialName }))
+  const [state, setState] = useState(() => createSettingsSelectFlowState({
+    items,
+    ...(initialName ? { initialName } : {}),
+  }))
 
   useInput((input, key) => {
     if (input === 'q' || key.escape) {

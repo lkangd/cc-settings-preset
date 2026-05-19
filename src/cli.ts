@@ -13,14 +13,26 @@ import { createPathContext, resolveGlobalRoot } from './core/paths.js'
 import { parseSettings, type PresetMeta } from './core/schema.js'
 import { spawnClaude } from './core/spawn.js'
 import { CreateApp, type CreateResult } from './ink/create-app.js'
+import type { ProjectLaunchToggleState } from './flows/project-launch-flow.js'
 import { ManageApp, type ManageResult } from './ink/manage-app.js'
-import { RunApp, type RunResult } from './ink/run-app.js'
-import { pluginStatesToEnabledPlugins, resolvePluginStates, type PluginState } from './services/plugin-service.js'
+import { ProjectLaunchApp, type ProjectLaunchResult } from './ink/project-launch-app.js'
+import { SettingsSelectApp, type SettingsSelectResult } from './ink/settings-select-app.js'
+import {
+  applyPluginOverrides,
+  forceEnablePlugins,
+  pluginStatesToEnabledPlugins,
+  resolvePluginStates,
+  type PluginState
+} from './services/plugin-service.js'
+import { createLaunchPresetService } from './services/launch-preset-service.js'
+import { applyDeniedMcpServers, discoverMcpStates, mcpStatesToDeniedServers, type McpState } from './services/mcp-service.js'
 import { createPresetService } from './services/preset-service.js'
 import { createSettingsSourceService, type SettingsSource } from './services/settings-source-service.js'
+import { finalizeSettings } from './services/settings-finalizer-service.js'
 import {
   applySkillOverrides,
   discoverSkillStates,
+  forceEnableSkills,
   skillStatesToOverrides,
   type SkillState
 } from './services/skill-service.js'
@@ -32,6 +44,7 @@ const context = createPathContext()
 const globalRoot = resolveGlobalRoot(context.homeDir)
 const presetService = createPresetService(globalRoot)
 const settingsSourceService = createSettingsSourceService(context)
+const launchPresetService = createLaunchPresetService(context.cwd)
 
 export function createProgram(): Command {
   const program = new Command()
@@ -110,23 +123,110 @@ async function resolveStatesByPreset(
   return { pluginsByPreset, skillsByPreset }
 }
 
-async function renderRunApp(presets: PresetMeta[]): Promise<RunResult | undefined> {
-  const sources = await settingsSourceService.discoverSettingsSources()
-  const { pluginsByPreset, skillsByPreset } = await resolveStatesByPreset(presets, sources)
-
-  let result: RunResult | undefined
+async function renderSettingsSelectApp(
+  items: SettingsSelectResult[],
+  initialName?: string,
+): Promise<SettingsSelectResult | undefined> {
+  let result: SettingsSelectResult | undefined
   const app = render(
-    h(RunApp, {
-      presets,
-      pluginsByPreset,
-      skillsByPreset,
-      onSubmit: (value: RunResult) => {
+    h(SettingsSelectApp, {
+      items,
+      ...(initialName ? { initialName } : {}),
+      onSubmit: (value: SettingsSelectResult) => {
         result = value
-      }
+      },
     })
   )
   await app.waitUntilExit()
   return result
+}
+
+async function buildSettingsSelectItems(): Promise<SettingsSelectResult[]> {
+  const presets = (await presetService.listPresets()).filter(preset => preset.type === 'base')
+  if (presets.length > 0) {
+    const items: SettingsSelectResult[] = []
+    for (const preset of presets) {
+      items.push({
+        name: preset.name,
+        sourcePath: await presetService.getPresetPath(preset.name),
+        settings: await presetService.readPresetSettings(preset.name),
+      })
+    }
+    return items
+  }
+
+  const sources = await settingsSourceService.discoverSettingsSources()
+  return sources.map(source => ({
+    name: source.scope,
+    sourcePath: source.filePath,
+    settings: source.settings,
+    temporary: true,
+  }))
+}
+
+async function buildProjectLaunchInput(selectedSettings: SettingsSelectResult): Promise<{
+  presets: Awaited<ReturnType<typeof launchPresetService.listPresets>>
+  detected: ProjectLaunchToggleState
+  statesByPreset: Record<string, ProjectLaunchToggleState>
+  lastUsedName?: string
+}> {
+  const sources = await settingsSourceService.discoverSettingsSources()
+  const basePlugins = forceEnablePlugins(resolvePluginStates([
+    ...sources,
+    { scope: 'preset', filePath: selectedSettings.sourcePath, settings: selectedSettings.settings },
+  ]))
+  const baseSkills = forceEnableSkills(await discoverSkillStates({
+    homeDir: context.homeDir,
+    cwd: context.cwd,
+    enabledPlugins: pluginStatesToEnabledPlugins(basePlugins),
+  }))
+  const baseMcps = await discoverMcpStates({ homeDir: context.homeDir, cwd: context.cwd })
+  const launchPresets = await launchPresetService.listPresets()
+  const statesByPreset: Record<string, ProjectLaunchToggleState> = {}
+
+  for (const preset of launchPresets) {
+    const settings = await launchPresetService.readPresetSettings(preset.name)
+    statesByPreset[preset.name] = {
+      plugins: applyPluginOverrides(basePlugins, settings.enabledPlugins),
+      skills: applySkillOverrides(baseSkills, settings.skillOverrides),
+      mcps: applyDeniedMcpServers(baseMcps, settings.deniedMcpServers),
+    }
+  }
+
+  const lastUsedName = await launchPresetService.readLastUsed()
+  return {
+    presets: launchPresets,
+    detected: { plugins: basePlugins, skills: baseSkills, mcps: baseMcps },
+    statesByPreset,
+    ...(lastUsedName ? { lastUsedName } : {}),
+  }
+}
+
+async function renderProjectLaunchApp(selectedSettings: SettingsSelectResult): Promise<ProjectLaunchResult | undefined> {
+  const input = await buildProjectLaunchInput(selectedSettings)
+  let result: ProjectLaunchResult | undefined
+  const app = render(
+    h(ProjectLaunchApp, {
+      ...input,
+      onSubmit: (value: ProjectLaunchResult) => {
+        result = value
+      },
+    })
+  )
+  await app.waitUntilExit()
+  return result
+}
+
+function launchResultToSettings(result: ProjectLaunchResult): {
+  enabledPlugins: Record<string, boolean>
+  skillOverrides: ReturnType<typeof skillStatesToOverrides>
+  deniedMcpServers: ReturnType<typeof mcpStatesToDeniedServers>
+} {
+  return {
+    enabledPlugins: pluginStatesToEnabledPlugins(result.toggles.plugins),
+    skillOverrides: skillStatesToOverrides(result.toggles.skills),
+    deniedMcpServers: mcpStatesToDeniedServers(result.toggles.mcps),
+  }
 }
 
 type ManageInitialState = React.ComponentProps<typeof ManageApp>['initialState']
@@ -188,39 +288,31 @@ async function runInteractive(rawClaudeArgs: string[]): Promise<void> {
     process.stderr.write('\x1b[31mWarning: ccsp ignores passthrough --settings because it manages that flag.\x1b[0m\n')
   }
 
-  let presets = await presetService.listPresets()
-  if (presets.filter(preset => preset.type === 'base').length === 0) {
+  let settingsItems = await buildSettingsSelectItems()
+  if (settingsItems.length === 0) {
     const created = await createPresetInteractive()
     if (!created) return
-    presets = await presetService.listPresets()
+    settingsItems = await buildSettingsSelectItems()
   }
 
-  const selection = await renderRunApp(presets)
-  if (!selection) return
+  const selectedSettings = await renderSettingsSelectApp(settingsItems)
+  if (!selectedSettings) return
 
-  for (const [presetName, draft] of Object.entries(selection.draftsByPreset)) {
-    const preset = presets.find(candidate => candidate.name === presetName)
-    if (!preset || preset.type !== 'derived') continue
-    await presetService.writePresetSettingsByName(preset.name, {
-      enabledPlugins: pluginStatesToEnabledPlugins(draft.plugins),
-      skillOverrides: skillStatesToOverrides(draft.skills)
-    })
+  const launchResult = await renderProjectLaunchApp(selectedSettings)
+  if (!launchResult) return
+
+  const launchSettings = launchResultToSettings(launchResult)
+
+  if (launchResult.type === 'launch' && launchResult.saveAs) {
+    const saved = await launchPresetService.createPreset(launchResult.saveAs, launchSettings)
+    await launchPresetService.writeLastUsed(saved.name)
+  } else if (launchResult.type === 'launch' && launchResult.presetName) {
+    await launchPresetService.writeLastUsed(launchResult.presetName)
   }
 
-  if (selection.type === 'derive') {
-    const toggles = {
-      enabledPlugins: pluginStatesToEnabledPlugins(selection.plugins),
-      skillOverrides: skillStatesToOverrides(selection.skills)
-    }
-    const parentName = selection.preset.type === 'base' ? selection.preset.name : selection.preset.parentName
-    const existing = await presetService.findMatchingDerivedPreset(parentName, toggles)
-    const derived =
-      existing ?? (await presetService.createDerivedPreset(parentName, selection.derivedName ?? '', toggles))
-    await launchPreset(derived, sanitized.args)
-    return
-  }
-
-  await launchPreset(selection.preset, sanitized.args)
+  const settingsPath = await launchPresetService.writeTempSettings(finalizeSettings(selectedSettings.settings, launchSettings))
+  const code = await spawnClaude(settingsPath, sanitized.args)
+  process.exitCode = code
 }
 
 async function manageInteractive(): Promise<void> {

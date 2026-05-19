@@ -44,14 +44,24 @@ function sourceBadge(source: PluginState['source'] | SkillState['source'] | McpS
 
 export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedName, onSubmit }: ProjectLaunchAppProps) {
   const { exit } = useApp()
-  const [state, setState] = useState(() => createProjectLaunchFlowState({ presets, detected, statesByPreset, lastUsedName }))
+  const [state, setState] = useState(() => createProjectLaunchFlowState({
+    presets,
+    detected,
+    statesByPreset,
+    ...(lastUsedName ? { lastUsedName } : {}),
+  }))
   const [saveChoice, setSaveChoice] = useState<SaveChoice>('none')
   const [newName, setNewName] = useState('')
 
   function submitLaunch(saveAs?: string) {
     const item = getActiveProjectLaunchItem(state)
     const toggles = getActiveProjectLaunchState(state)
-    onSubmit({ type: 'launch', presetName: item?.type === 'preset' ? item.name : undefined, toggles, saveAs })
+    onSubmit({
+      type: 'launch',
+      toggles,
+      ...(item?.type === 'preset' ? { presetName: item.name } : {}),
+      ...(saveAs ? { saveAs } : {}),
+    })
     exit()
   }
 
