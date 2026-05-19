@@ -173,6 +173,16 @@ async function buildSettingsSelectItems(): Promise<SettingsSelectResult[]> {
   }))
 }
 
+async function buildProjectSettingsSelectItems(): Promise<SettingsSelectResult[]> {
+  const sources = await settingsSourceService.discoverSettingsSources()
+  return sources.map(source => ({
+    name: source.scope,
+    sourcePath: source.filePath,
+    settings: source.settings,
+    temporary: true,
+  }))
+}
+
 async function resolveInteractiveBaseSettings(): Promise<SettingsSelectResult | undefined> {
   const presetItems = await buildGlobalSettingsPresetItems()
   if (presetItems.length > 0) return renderSettingsSelectApp(presetItems)
@@ -354,7 +364,12 @@ async function manageInteractive(): Promise<void> {
 }
 
 async function manageProjectInteractive(): Promise<void> {
-  const settingsItems = await buildSettingsSelectItems()
+  const settingsItems = await buildProjectSettingsSelectItems()
+  if (settingsItems.length === 0) {
+    process.stderr.write('No project settings sources found for project preset management.\n')
+    return
+  }
+
   const selectedSettings = await renderSettingsSelectApp(settingsItems)
   if (!selectedSettings) return
 
