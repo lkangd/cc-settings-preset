@@ -12,7 +12,7 @@ type Props = {
 export function TwoColumnSettingsView({ title, help, items, cursor }: Props) {
   const { stdout } = useStdout()
   const fallbackColumns = 120
-  const innerWidth = Math.max(90, (stdout.columns ?? fallbackColumns) - 6)
+  const innerWidth = Math.max(90, (stdout.columns ?? fallbackColumns))
   const listWidth = Math.max(24, Math.floor(innerWidth / 3))
   const previewWidth = innerWidth - listWidth - 1
   const selected = items[cursor]

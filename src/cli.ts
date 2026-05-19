@@ -173,6 +173,18 @@ async function buildSettingsSelectItems(): Promise<SettingsSelectResult[]> {
   }))
 }
 
+async function resolveInteractiveBaseSettings(): Promise<SettingsSelectResult | undefined> {
+  const presetItems = await buildGlobalSettingsPresetItems()
+  if (presetItems.length > 0) return renderSettingsSelectApp(presetItems)
+
+  return {
+    name: 'temporary-empty-base',
+    sourcePath: '',
+    settings: {},
+    temporary: true,
+  }
+}
+
 async function buildProjectLaunchInput(selectedSettings: SettingsSelectResult): Promise<{
   presets: Awaited<ReturnType<typeof launchPresetService.listPresets>>
   detected: ProjectLaunchToggleState
@@ -293,14 +305,7 @@ async function runInteractive(rawClaudeArgs: string[]): Promise<void> {
     process.stderr.write('\x1b[31mWarning: ccsp ignores passthrough --settings because it manages that flag.\x1b[0m\n')
   }
 
-  let settingsItems = await buildSettingsSelectItems()
-  if (settingsItems.length === 0) {
-    const created = await createPresetInteractive()
-    if (!created) return
-    settingsItems = await buildSettingsSelectItems()
-  }
-
-  const selectedSettings = await renderSettingsSelectApp(settingsItems)
+  const selectedSettings = await resolveInteractiveBaseSettings()
   if (!selectedSettings) return
 
   const launchResult = await renderProjectLaunchApp(selectedSettings)

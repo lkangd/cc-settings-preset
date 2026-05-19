@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Box, Text, useApp, useInput, Newline } from 'ink'
+import { Box, Text, useApp, useInput } from 'ink'
 import type { LaunchPresetMeta } from '../core/schema.js'
 import {
   createProjectLaunchFlowState,
@@ -125,7 +125,6 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedNa
 
   return (
     <Box flexDirection="column">
-      <Newline />
       <Text bold color="cyan">
         Select project launch preset
       </Text>
