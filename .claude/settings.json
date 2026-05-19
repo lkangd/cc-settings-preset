@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "pnpm run typecheck && pnpm run build && pnpm run test",
+            "command": "bash -c 'set -o pipefail; run() { local out code; out=$(\"$@\" 2>&1); code=$?; if [ $code -ne 0 ]; then echo \"Stop hook: $* failed (exit $code)\" >&2; echo \"$out\" >&2; exit 2; fi; }; run pnpm run typecheck; run pnpm run build; run pnpm run test'",
             "timeout": 120,
             "statusMessage": "Running build & test..."
           }

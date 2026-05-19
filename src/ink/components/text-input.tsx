@@ -5,7 +5,7 @@ type Props = {
   value: string
   placeholder?: string
   onChange: (value: string) => void
-  onSubmit: () => void
+  onSubmit: () => void | Promise<void>
   onCancel: () => void
 }
 

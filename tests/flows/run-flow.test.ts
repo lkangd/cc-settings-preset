@@ -115,6 +115,41 @@ describe('run flow', () => {
     expect(backToA.skills[0]?.enabled).toBe(true)
   })
 
+  it('preserves each preset draft across sort changes and preset switches', () => {
+    const state = createRunFlowState({
+      presets: [
+        { type: 'base', name: 'a', fileName: 'a-settings.json', createdAt: '2026-05-17T00:00:00.000Z', updatedAt: '2026-05-17T00:00:00.000Z' },
+        { type: 'base', name: 'b', fileName: 'b-settings.json', createdAt: '2026-05-17T00:00:00.000Z', updatedAt: '2026-05-17T00:00:00.000Z' },
+      ],
+      pluginsByPreset: {
+        a: [
+          { name: 'zeta', enabled: true, source: 'user' },
+          { name: 'alpha', enabled: false, source: 'project' },
+        ],
+        b: [
+          { name: 'zeta', enabled: false, source: 'project' },
+          { name: 'alpha', enabled: true, source: 'user' },
+        ],
+      },
+      skillsByPreset: {
+        a: [{ name: 'personal', enabled: true, source: 'user', toggleable: true }],
+        b: [{ name: 'personal', enabled: false, source: 'user', toggleable: true }],
+      },
+    })
+
+    const focusPlugins = reduceRunFlow(state, { type: 'focus-right' })
+    const editedA = reduceRunFlow(focusPlugins, { type: 'toggle-current' })
+    const sortedByName = reduceRunFlow(editedA, { type: 'toggle-sort-mode' })
+    const backToSettings = reduceRunFlow(sortedByName, { type: 'focus-left' })
+    const movedToB = reduceRunFlow(backToSettings, { type: 'down' })
+    const returnedToA = reduceRunFlow(movedToB, { type: 'up' })
+
+    expect(sortedByName.sortMode).toBe('name')
+    expect(returnedToA.plugins.find(plugin => plugin.name === 'zeta')?.enabled).toBe(false)
+    expect(returnedToA.draftsByPreset.a?.plugins.find(plugin => plugin.name === 'zeta')?.enabled).toBe(false)
+    expect(movedToB.plugins.find(plugin => plugin.name === 'zeta')?.enabled).toBe(false)
+  })
+
   it('only shows the derived hint for a base preset with an active draft', () => {
     const state = createRunFlowState({
       presets: [

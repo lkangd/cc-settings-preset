@@ -129,23 +129,41 @@ async function renderRunApp(presets: PresetMeta[]): Promise<RunResult | undefine
   return result
 }
 
-async function renderManageApp(presets: PresetMeta[]): Promise<ManageResult | undefined> {
+type ManageInitialState = React.ComponentProps<typeof ManageApp>['initialState']
+
+async function renderManageApp(
+  presets: PresetMeta[],
+  initialState?: ManageInitialState,
+): Promise<ManageResult[]> {
   const sources = await settingsSourceService.discoverSettingsSources()
   const { pluginsByPreset, skillsByPreset } = await resolveStatesByPreset(presets, sources)
 
-  let result: ManageResult | undefined
+  const results: ManageResult[] = []
   const app = render(
     h(ManageApp, {
       presets,
       pluginsByPreset,
       skillsByPreset,
+      ...(initialState ? { initialState } : {}),
       onSubmit: (value: ManageResult) => {
-        result = value
+        results.push(value)
+      },
+      onRenameSubmit: async (preset: PresetMeta, newName: string) => {
+        try {
+          await presetService.renamePreset(preset.name, newName)
+          return null
+        } catch (error) {
+          if (error instanceof Error && error.message.startsWith('Preset already exists: ')) {
+            return error.message
+          }
+
+          throw error
+        }
       }
     })
   )
   await app.waitUntilExit()
-  return result
+  return results
 }
 
 async function createPresetInteractive(): Promise<PresetMeta | undefined> {
@@ -208,23 +226,41 @@ async function runInteractive(rawClaudeArgs: string[]): Promise<void> {
 async function manageInteractive(): Promise<void> {
   while (true) {
     const presets = await presetService.listPresets()
-    const selection = await renderManageApp(presets)
-    if (!selection || selection.type === 'exit') return
+    const selections = await renderManageApp(presets)
+    if (selections.length === 0) return
 
-    if (selection.type === 'launch') {
-      await launchPreset(selection.preset, [])
-      return
+    let shouldRerender = false
+
+    for (const selection of selections) {
+      if (selection.type === 'exit') return
+
+      if (selection.type === 'save') {
+        await presetService.writePresetSettingsByName(selection.preset.name, {
+          enabledPlugins: pluginStatesToEnabledPlugins(selection.plugins),
+          skillOverrides: skillStatesToOverrides(selection.skills)
+        })
+        shouldRerender = true
+        continue
+      }
+
+      if (selection.type === 'launch') {
+        await launchPreset(selection.preset, [])
+        return
+      }
+
+      if (selection.type === 'refresh') {
+        shouldRerender = true
+        break
+      }
+
+      if (selection.type === 'delete') {
+        await presetService.deletePreset(selection.preset.name)
+        shouldRerender = true
+        break
+      }
     }
 
-    if (selection.type === 'rename') {
-      await presetService.renamePreset(selection.preset.name, selection.newName)
-      continue
-    }
-
-    if (selection.type === 'delete') {
-      await presetService.deletePreset(selection.preset.name)
-      continue
-    }
+    if (!shouldRerender) return
   }
 }
 
