@@ -55,3 +55,43 @@ export function resolveProjectCommandsDir(projectDir: string): string {
 export function resolveClaudePluginCacheDir(homeDir: string): string {
   return join(homeDir, '.claude', 'plugins', 'cache')
 }
+
+export function resolveProjectCcspRoot(cwd: string): string {
+  return join(cwd, '.claude', '.ccsp')
+}
+
+export function resolveProjectLaunchPresetDir(projectRoot: string): string {
+  return join(resolveProjectCcspRoot(projectRoot), 'launch-presets')
+}
+
+export function resolveProjectLaunchPresetIndexPath(projectRoot: string): string {
+  return join(resolveProjectLaunchPresetDir(projectRoot), 'index.json')
+}
+
+export function resolveProjectLaunchPresetPath(projectRoot: string, fileName: string): string {
+  return join(resolveProjectLaunchPresetDir(projectRoot), fileName)
+}
+
+export function resolveProjectLastUsedPath(projectRoot: string): string {
+  return join(resolveProjectCcspRoot(projectRoot), 'last-used.json')
+}
+
+export function resolveProjectTempSettingsDir(projectRoot: string): string {
+  return join(resolveProjectCcspRoot(projectRoot), 'tmp')
+}
+
+export function resolveProjectTempSettingsPath(projectRoot: string, fileName: string): string {
+  return join(resolveProjectTempSettingsDir(projectRoot), fileName)
+}
+
+export function resolveProjectMcpPath(projectRoot: string): string {
+  return join(projectRoot, '.mcp.json')
+}
+
+export function resolveUserClaudeJsonPath(homeDir: string): string {
+  return join(homeDir, '.claude.json')
+}
+
+export function resolveGlobalLastSettingsPath(globalRoot: string): string {
+  return join(globalRoot, 'last-settings.json')
+}

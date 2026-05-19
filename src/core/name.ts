@@ -24,6 +24,14 @@ export function buildDerivedFileName(parentName: string, derivedName: string): s
   return `${normalizePresetName(parentName)}-${normalizePresetName(derivedName)}-settings.json`
 }
 
+export function buildLaunchPresetFileName(name: string): string {
+  return `${normalizePresetName(name)}-launch.json`
+}
+
+export function buildTempSettingsFileName(date = new Date()): string {
+  return `${formatTimestampForName(date)}-settings.json`
+}
+
 export function parseSettingsFileName(fileName: string): { name: string } | undefined {
   if (!fileName.endsWith('-settings.json')) return undefined
   const name = fileName.slice(0, -'-settings.json'.length)

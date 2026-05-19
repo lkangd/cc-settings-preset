@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { buildDerivedFileName, buildSettingsFileName, normalizePresetName, parseSettingsFileName } from '../../src/core/name.js'
+import {
+  buildDerivedFileName,
+  buildLaunchPresetFileName,
+  buildSettingsFileName,
+  buildTempSettingsFileName,
+  normalizePresetName,
+  parseSettingsFileName,
+} from '../../src/core/name.js'
 
 describe('normalizePresetName', () => {
   it('normalizes names into safe lowercase file segments', () => {
@@ -23,5 +30,16 @@ describe('file names', () => {
     expect(parseSettingsFileName('base-settings.json')).toEqual({ name: 'base' })
     expect(parseSettingsFileName('base-work-settings.json')).toEqual({ name: 'base-work' })
     expect(parseSettingsFileName('notes.json')).toBeUndefined()
+  })
+})
+
+describe('project launch preset file names', () => {
+  it('builds normalized launch preset file names', () => {
+    expect(buildLaunchPresetFileName('Web Dev')).toBe('web-dev-launch.json')
+  })
+
+  it('builds temp settings file names with a stable prefix', () => {
+    const date = new Date('2026-05-19T08:07:06.000Z')
+    expect(buildTempSettingsFileName(date)).toMatch(/^2026-05-19-\d{2}-\d{2}-\d{2}-settings\.json$/)
   })
 })
