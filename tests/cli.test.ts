@@ -19,6 +19,7 @@ const writePresetSettingsByNameMock = vi.fn()
 const createProjectLaunchPresetMock = vi.fn()
 const writeLastUsedLaunchPresetMock = vi.fn()
 const writeTempSettingsMock = vi.fn().mockResolvedValue('/tmp/project/.claude/.ccsp/tmp/temp-settings.json')
+const discoverSettingsSourcesMock = vi.fn().mockResolvedValue([])
 const discoverMcpStatesMock = vi.fn().mockResolvedValue([])
 const spawnClaudeMock = vi.fn().mockResolvedValue(0)
 
@@ -51,7 +52,7 @@ vi.mock('../src/services/preset-service.js', () => ({
 
 vi.mock('../src/services/settings-source-service.js', () => ({
   createSettingsSourceService: () => ({
-    discoverSettingsSources: vi.fn().mockResolvedValue([]),
+    discoverSettingsSources: discoverSettingsSourcesMock,
   }),
 }))
 
@@ -118,6 +119,8 @@ describe('run command', () => {
     writeLastUsedLaunchPresetMock.mockReset()
     writeTempSettingsMock.mockReset()
     writeTempSettingsMock.mockResolvedValue('/tmp/project/.claude/.ccsp/tmp/temp-settings.json')
+    discoverSettingsSourcesMock.mockReset()
+    discoverSettingsSourcesMock.mockResolvedValue([])
     discoverMcpStatesMock.mockReset()
     discoverMcpStatesMock.mockResolvedValue([])
     spawnClaudeMock.mockReset()
@@ -233,6 +236,10 @@ describe('manage command', () => {
     deletePresetMock.mockReset()
     writePresetSettingsByNameMock.mockReset()
     renamePresetMock.mockReset()
+    writeTempSettingsMock.mockReset()
+    writeTempSettingsMock.mockResolvedValue('/tmp/project/.claude/.ccsp/tmp/temp-settings.json')
+    discoverSettingsSourcesMock.mockReset()
+    discoverSettingsSourcesMock.mockResolvedValue([])
     spawnClaudeMock.mockReset()
     spawnClaudeMock.mockResolvedValue(0)
   })
@@ -318,6 +325,63 @@ describe('manage command', () => {
     await main(['node', 'cli', 'manage'])
 
     expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/.ccsp/settings/base.json', [])
+  })
+
+  it('uses discovered project settings sources instead of global presets in project manage mode', async () => {
+    const basePreset = {
+      type: 'base' as const,
+      name: 'base',
+      fileName: 'base.json',
+      createdAt: '2026-05-17T00:00:00.000Z',
+      updatedAt: '2026-05-17T00:00:00.000Z',
+    }
+
+    listPresetsMock.mockResolvedValueOnce([basePreset])
+    discoverSettingsSourcesMock.mockResolvedValueOnce([
+      {
+        scope: 'project',
+        filePath: '/tmp/project/.claude/settings.json',
+        settings: { permissions: { allow: ['Read(*)'] } },
+      },
+    ])
+
+    renderMock
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          name: 'project',
+          sourcePath: '/tmp/project/.claude/settings.json',
+          settings: { permissions: { allow: ['Read(*)'] } },
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          type: 'launch',
+          toggles: { plugins: [], skills: [], mcps: [] },
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli', 'manage', '--project'])
+
+    expect(discoverSettingsSourcesMock).toHaveBeenCalled()
+    expect(listPresetsMock).not.toHaveBeenCalled()
+    expect(renderMock).toHaveBeenCalledTimes(2)
+    expect(writeTempSettingsMock).toHaveBeenCalledWith({ permissions: { allow: ['Read(*)'] } })
+    expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
+  })
+
+  it('prints a message and exits when project manage mode finds no project settings sources', async () => {
+    const stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli', 'manage', '--project'])
+
+    expect(renderMock).not.toHaveBeenCalled()
+    expect(stderrWriteSpy).toHaveBeenCalledWith('No project settings sources found for project preset management.\n')
+
+    stderrWriteSpy.mockRestore()
   })
 
   it('does not accumulate rename prompts after repeated rename conflicts in a real tty', async () => {
