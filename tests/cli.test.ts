@@ -327,47 +327,34 @@ describe('manage command', () => {
     expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/.ccsp/settings/base.json', [])
   })
 
-  it('uses discovered project settings sources instead of global presets in project manage mode', async () => {
-    const basePreset = {
-      type: 'base' as const,
-      name: 'base',
-      fileName: 'base.json',
-      createdAt: '2026-05-17T00:00:00.000Z',
-      updatedAt: '2026-05-17T00:00:00.000Z',
-    }
-
-    listPresetsMock.mockResolvedValueOnce([basePreset])
+  it('enters project preset management directly without a settings selection screen in project manage mode', async () => {
     discoverSettingsSourcesMock.mockResolvedValueOnce([
       {
         scope: 'project',
         filePath: '/tmp/project/.claude/settings.json',
         settings: { permissions: { allow: ['Read(*)'] } },
       },
+      {
+        scope: 'user',
+        filePath: '/tmp/home/.claude/settings.json',
+        settings: { permissions: { allow: ['Write(*)'] } },
+      },
     ])
 
-    renderMock
-      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
-        element.props.onSubmit({
-          name: 'project',
-          sourcePath: '/tmp/project/.claude/settings.json',
-          settings: { permissions: { allow: ['Read(*)'] } },
-        })
-        return { waitUntilExit: async () => undefined }
+    renderMock.mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+      element.props.onSubmit({
+        type: 'launch',
+        toggles: { plugins: [], skills: [], mcps: [] },
       })
-      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
-        element.props.onSubmit({
-          type: 'launch',
-          toggles: { plugins: [], skills: [], mcps: [] },
-        })
-        return { waitUntilExit: async () => undefined }
-      })
+      return { waitUntilExit: async () => undefined }
+    })
 
     const { main } = await import('../src/cli.js')
     await main(['node', 'cli', 'manage', '--project'])
 
     expect(discoverSettingsSourcesMock).toHaveBeenCalled()
     expect(listPresetsMock).not.toHaveBeenCalled()
-    expect(renderMock).toHaveBeenCalledTimes(2)
+    expect(renderMock).toHaveBeenCalledTimes(1)
     expect(writeTempSettingsMock).toHaveBeenCalledWith({ permissions: { allow: ['Read(*)'] } })
     expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
   })

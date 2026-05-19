@@ -173,14 +173,16 @@ async function buildSettingsSelectItems(): Promise<SettingsSelectResult[]> {
   }))
 }
 
-async function buildProjectSettingsSelectItems(): Promise<SettingsSelectResult[]> {
-  const sources = await settingsSourceService.discoverSettingsSources()
-  return sources.map(source => ({
+async function resolveProjectManageBaseSettings(): Promise<SettingsSelectResult | undefined> {
+  const [source] = await settingsSourceService.discoverSettingsSources()
+  if (!source) return undefined
+
+  return {
     name: source.scope,
     sourcePath: source.filePath,
     settings: source.settings,
     temporary: true,
-  }))
+  }
 }
 
 async function resolveInteractiveBaseSettings(): Promise<SettingsSelectResult | undefined> {
@@ -364,14 +366,11 @@ async function manageInteractive(): Promise<void> {
 }
 
 async function manageProjectInteractive(): Promise<void> {
-  const settingsItems = await buildProjectSettingsSelectItems()
-  if (settingsItems.length === 0) {
+  const selectedSettings = await resolveProjectManageBaseSettings()
+  if (!selectedSettings) {
     process.stderr.write('No project settings sources found for project preset management.\n')
     return
   }
-
-  const selectedSettings = await renderSettingsSelectApp(settingsItems)
-  if (!selectedSettings) return
 
   const result = await renderProjectManageApp(selectedSettings)
   if (!result) return
