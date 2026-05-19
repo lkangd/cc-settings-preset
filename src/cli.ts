@@ -61,8 +61,13 @@ export function createProgram(): Command {
   program
     .command('manage')
     .description('Manage settings presets')
-    .action(async () => {
+    .option('-p, --project', 'Manage project launch presets')
+    .action(async (options: { project?: boolean }) => {
       printBanner()
+      if (options.project) {
+        await manageProjectInteractive()
+        return
+      }
       await manageInteractive()
     })
 
@@ -141,19 +146,22 @@ async function renderSettingsSelectApp(
   return result
 }
 
-async function buildSettingsSelectItems(): Promise<SettingsSelectResult[]> {
+async function buildGlobalSettingsPresetItems(): Promise<SettingsSelectResult[]> {
   const presets = (await presetService.listPresets()).filter(preset => preset.type === 'base')
-  if (presets.length > 0) {
-    const items: SettingsSelectResult[] = []
-    for (const preset of presets) {
-      items.push({
-        name: preset.name,
-        sourcePath: await presetService.getPresetPath(preset.name),
-        settings: await presetService.readPresetSettings(preset.name),
-      })
-    }
-    return items
+  const items: SettingsSelectResult[] = []
+  for (const preset of presets) {
+    items.push({
+      name: preset.name,
+      sourcePath: await presetService.getPresetPath(preset.name),
+      settings: await presetService.readPresetSettings(preset.name),
+    })
   }
+  return items
+}
+
+async function buildSettingsSelectItems(): Promise<SettingsSelectResult[]> {
+  const presetItems = await buildGlobalSettingsPresetItems()
+  if (presetItems.length > 0) return presetItems
 
   const sources = await settingsSourceService.discoverSettingsSources()
   return sources.map(source => ({
@@ -229,41 +237,18 @@ function launchResultToSettings(result: ProjectLaunchResult): {
   }
 }
 
-type ManageInitialState = React.ComponentProps<typeof ManageApp>['initialState']
-
-async function renderManageApp(
-  presets: PresetMeta[],
-  initialState?: ManageInitialState,
-): Promise<ManageResult[]> {
-  const sources = await settingsSourceService.discoverSettingsSources()
-  const { pluginsByPreset, skillsByPreset } = await resolveStatesByPreset(presets, sources)
-
-  const results: ManageResult[] = []
+async function renderManageApp(items: SettingsSelectResult[]): Promise<ManageResult | undefined> {
+  let result: ManageResult | undefined
   const app = render(
     h(ManageApp, {
-      presets,
-      pluginsByPreset,
-      skillsByPreset,
-      ...(initialState ? { initialState } : {}),
+      items,
       onSubmit: (value: ManageResult) => {
-        results.push(value)
+        result = value
       },
-      onRenameSubmit: async (preset: PresetMeta, newName: string) => {
-        try {
-          await presetService.renamePreset(preset.name, newName)
-          return null
-        } catch (error) {
-          if (error instanceof Error && error.message.startsWith('Preset already exists: ')) {
-            return error.message
-          }
-
-          throw error
-        }
-      }
     })
   )
   await app.waitUntilExit()
-  return results
+  return result
 }
 
 async function createPresetInteractive(): Promise<PresetMeta | undefined> {
@@ -317,43 +302,40 @@ async function runInteractive(rawClaudeArgs: string[]): Promise<void> {
 
 async function manageInteractive(): Promise<void> {
   while (true) {
-    const presets = await presetService.listPresets()
-    const selections = await renderManageApp(presets)
-    if (selections.length === 0) return
+    const items = await buildGlobalSettingsPresetItems()
+    const selection = await renderManageApp(items)
+    if (!selection || selection.type === 'exit') return
 
-    let shouldRerender = false
-
-    for (const selection of selections) {
-      if (selection.type === 'exit') return
-
-      if (selection.type === 'save') {
-        await presetService.writePresetSettingsByName(selection.preset.name, {
-          enabledPlugins: pluginStatesToEnabledPlugins(selection.plugins),
-          skillOverrides: skillStatesToOverrides(selection.skills)
-        })
-        shouldRerender = true
-        continue
-      }
-
-      if (selection.type === 'launch') {
-        await launchPreset(selection.preset, [])
-        return
-      }
-
-      if (selection.type === 'refresh') {
-        shouldRerender = true
-        break
-      }
-
-      if (selection.type === 'delete') {
-        await presetService.deletePreset(selection.preset.name)
-        shouldRerender = true
-        break
-      }
+    if (selection.type === 'launch') {
+      const code = await spawnClaude(selection.item.sourcePath, [])
+      process.exitCode = code
+      return
     }
 
-    if (!shouldRerender) return
+    if (selection.type === 'rename') {
+      await presetService.renamePreset(selection.item.name, selection.newName)
+      continue
+    }
+
+    if (selection.type === 'delete') {
+      await presetService.deletePreset(selection.item.name)
+      continue
+    }
   }
+}
+
+async function manageProjectInteractive(): Promise<void> {
+  const settingsItems = await buildSettingsSelectItems()
+  const selectedSettings = await renderSettingsSelectApp(settingsItems)
+  if (!selectedSettings) return
+
+  const launchResult = await renderProjectLaunchApp(selectedSettings)
+  if (!launchResult) return
+
+  const launchSettings = launchResultToSettings(launchResult)
+  const settingsPath = await launchPresetService.writeTempSettings(finalizeSettings(selectedSettings.settings, launchSettings))
+  const code = await spawnClaude(settingsPath, [])
+  process.exitCode = code
 }
 
 export async function main(argv = process.argv): Promise<void> {
