@@ -61,6 +61,17 @@ export function resolvePluginStates(sources: PluginSettingsSource[]): PluginStat
   return sortPluginStates(Array.from(resolved.values()))
 }
 
+export function forceEnablePlugins(states: PluginState[]): PluginState[] {
+  return sortPluginStates(states.map(state => ({ ...state, enabled: true })))
+}
+
+export function applyPluginOverrides(states: PluginState[], overrides: Record<string, boolean> = {}): PluginState[] {
+  return sortPluginStates(states.map(state => {
+    if (!(state.name in overrides)) return state
+    return { ...state, enabled: overrides[state.name] }
+  }))
+}
+
 export function pluginStatesToEnabledPlugins(states: PluginState[]): Record<string, boolean> {
   const enabledPlugins: Record<string, boolean> = {}
   for (const state of states) enabledPlugins[state.name] = state.enabled

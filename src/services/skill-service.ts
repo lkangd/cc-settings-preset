@@ -159,6 +159,10 @@ export function applySkillOverrides(
   }))
 }
 
+export function forceEnableSkills(states: SkillState[]): SkillState[] {
+  return sortSkillStates(states.map(skill => ({ ...skill, enabled: true })))
+}
+
 export async function discoverSkillStates(input: SkillDiscoveryInput): Promise<SkillState[]> {
   const projectSkills = await discoverProjectSkills(input.cwd)
   const commandSkills = await discoverCommandSkills(resolveProjectCommandsDir(input.cwd))
