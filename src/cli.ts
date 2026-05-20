@@ -326,15 +326,11 @@ async function createPresetInteractive(): Promise<PresetMeta | undefined> {
   return presetService.createBasePreset(selection.name, settings)
 }
 
-async function runInteractive(rawClaudeArgs: string[]): Promise<void> {
-  printBanner()
+async function launchWithSelectedSettings(selectedSettings: SettingsSelectResult, rawClaudeArgs: string[]): Promise<void> {
   const sanitized = sanitizeClaudeArgs(rawClaudeArgs)
   if (sanitized.removedSettings) {
     process.stderr.write('\x1b[31mWarning: ccsp ignores passthrough --settings because it manages that flag.\x1b[0m\n')
   }
-
-  const selectedSettings = await resolveInteractiveBaseSettings()
-  if (!selectedSettings) return
 
   const launchResult = await renderProjectLaunchApp(selectedSettings)
   if (!launchResult) return
@@ -353,6 +349,14 @@ async function runInteractive(rawClaudeArgs: string[]): Promise<void> {
   process.exitCode = code
 }
 
+async function runInteractive(rawClaudeArgs: string[]): Promise<void> {
+  printBanner()
+  const selectedSettings = await resolveInteractiveBaseSettings()
+  if (!selectedSettings) return
+
+  await launchWithSelectedSettings(selectedSettings, rawClaudeArgs)
+}
+
 async function manageInteractive(): Promise<void> {
   while (true) {
     const items = await buildGlobalSettingsPresetItems()
@@ -360,8 +364,7 @@ async function manageInteractive(): Promise<void> {
     if (!selection || selection.type === 'exit') return
 
     if (selection.type === 'launch') {
-      const code = await spawnClaude(selection.item.sourcePath, [])
-      process.exitCode = code
+      await launchWithSelectedSettings(selection.item, [])
       return
     }
 

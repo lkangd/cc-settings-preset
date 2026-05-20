@@ -428,7 +428,7 @@ describe('manage command', () => {
     expect(renderMock).toHaveBeenCalledTimes(2)
   })
 
-  it('launches the selected settings file from manage mode', async () => {
+  it('launches the selected settings file from manage mode through project launch selection', async () => {
     const basePreset = {
       type: 'base' as const,
       name: 'base',
@@ -439,15 +439,25 @@ describe('manage command', () => {
 
     listPresetsMock.mockResolvedValueOnce([basePreset])
 
-    renderMock.mockImplementationOnce((element: ManageAppElement) => {
-      element.props.onSubmit({ type: 'launch', item: { name: 'base', sourcePath: '/tmp/.ccsp/settings/base.json', settings: {} } })
-      return { waitUntilExit: async () => undefined }
-    })
+    renderMock
+      .mockImplementationOnce((element: ManageAppElement) => {
+        element.props.onSubmit({ type: 'launch', item: { name: 'base', sourcePath: '/tmp/.ccsp/settings/base.json', settings: {} } })
+        return { waitUntilExit: async () => undefined }
+      })
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          type: 'launch',
+          toggles: { plugins: [], skills: [], mcps: [] },
+        })
+        return { waitUntilExit: async () => undefined }
+      })
 
     const { main } = await import('../src/cli.js')
     await main(['node', 'cli', 'manage'])
 
-    expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/.ccsp/settings/base.json', [])
+    expect(renderMock).toHaveBeenCalledTimes(2)
+    expect(writeTempSettingsMock).toHaveBeenCalledWith({})
+    expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
   })
 
   it('enters project preset management directly without a settings selection screen in project manage mode', async () => {
