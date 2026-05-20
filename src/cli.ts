@@ -95,7 +95,7 @@ export function printBanner() {
     .split('\n')
     .map(line => centerLine(`${cyan}${line}${reset}`, contentWidth))
     .join('\n')
-  const subtitle = centerLine(`${dim}${cyan}CCSettingsPreset${reset}`, contentWidth)
+  const subtitle = centerLine(`${dim}${cyan}CC-Settings-Preset${reset}`, contentWidth)
   const divider = centerLine(`\x1b[2m${'─'.repeat(contentWidth)}${reset}`, contentWidth)
   process.stderr.write(`\n\n${headline}\n${subtitle}\n${divider}\n\n`)
 }

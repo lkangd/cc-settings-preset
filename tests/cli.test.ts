@@ -129,7 +129,7 @@ describe('cli argument behavior', () => {
     expect(manage?.options.map(option => option.flags)).toContain('-p, --project')
   })
 
-  it('prints a centered CCSP banner with a centered CCSettingsPreset subtitle', async () => {
+  it('prints a centered CCSP banner with a centered CC-Settings-Preset subtitle', async () => {
     const stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
     const originalColumns = process.stderr.columns
     Object.defineProperty(process.stderr, 'columns', { value: 120, configurable: true })
@@ -148,7 +148,7 @@ describe('cli argument behavior', () => {
 
     const normalized = normalizeTerminalOutput(output)
     expect(normalized).toContain('BIG')
-    expect(normalized).toContain('CCSettingsPreset')
+    expect(normalized).toContain('CC-Settings-Preset')
     expect(figletTextSync).toHaveBeenCalledWith('C C S P', { font: 'ANSI Shadow' })
 
     Object.defineProperty(process.stderr, 'columns', { value: originalColumns, configurable: true })
