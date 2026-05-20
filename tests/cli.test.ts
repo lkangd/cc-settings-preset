@@ -103,6 +103,30 @@ describe('cli argument behavior', () => {
     const manage = createProgram().commands.find(command => command.name() === 'manage')
     expect(manage?.options.map(option => option.flags)).toContain('-p, --project')
   })
+
+  it('prints a cyan single-line CCSettingsPreset banner', async () => {
+    const stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+
+    const { printBanner } = await import('../src/cli.js')
+    printBanner()
+
+    expect(stderrWriteSpy).toHaveBeenCalledTimes(1)
+
+    const output = stderrWriteSpy.mock.calls[0]?.[0]
+    expect(typeof output).toBe('string')
+
+    if (typeof output !== 'string') {
+      throw new Error('Expected printBanner to write a string to stderr')
+    }
+
+    expect(output).toContain('\x1b[36m')
+    expect(output).toContain('\x1b[2mettings\x1b[0m')
+    expect(output).toContain('\x1b[2mreset\x1b[0m')
+    expect(output).not.toContain('ANSI Shadow')
+    expect(normalizeTerminalOutput(output)).toContain('C C Settings Preset')
+
+    stderrWriteSpy.mockRestore()
+  })
 })
 
 describe('run command', () => {

@@ -3,8 +3,6 @@ import { fileURLToPath } from 'node:url'
 import React from 'react'
 import { Command } from 'commander'
 import { render } from 'ink'
-import figlet from 'figlet'
-import gradient from 'gradient-string'
 
 import { sanitizeClaudeArgs } from './core/args.js'
 import { CliError } from './core/errors.js'
@@ -75,11 +73,19 @@ export function createProgram(): Command {
   return program
 }
 
+function formatBannerWordmark(): string {
+  const cyan = '\x1b[36m'
+  const dim = '\x1b[2m'
+  const reset = '\x1b[0m'
+  const spacing = '    '
+
+  return `${cyan}C${spacing}C${spacing}S${dim}ettings${reset}${cyan}${spacing}P${dim}reset${reset}`
+}
+
 export function printBanner() {
-  const banner = figlet.textSync('C C S P', { font: 'ANSI Shadow' })
   const line = '─'.repeat(48)
-  const styled = gradient(['#00d2ff', '#7b2ff7', '#ff0080'])(banner)
-  process.stderr.write(`\n\n${styled}\x1b[2m\n${line}\x1b[0m\n\n`)
+  const wordmark = formatBannerWordmark()
+  process.stderr.write(`\n\n${wordmark}\x1b[2m\n${line}\x1b[0m\n\n`)
 }
 
 async function renderCreateApp(): Promise<CreateResult | undefined> {
