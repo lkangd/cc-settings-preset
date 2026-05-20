@@ -97,6 +97,22 @@ vi.mock('../src/services/global-last-settings-service.js', () => ({
   }),
 }))
 
+const figletTextSync = vi.fn((text: string, options?: { font?: string }) => {
+  if (text === 'C C S P') {
+    return options?.font === 'ANSI Shadow'
+      ? 'BIG\nBIG\nBIG'
+      : text
+  }
+
+  return text
+})
+
+vi.mock('figlet', () => ({
+  default: {
+    textSync: figletTextSync,
+  },
+}))
+
 vi.mock('../src/services/mcp-service.js', async () => {
   const actual = await vi.importActual<typeof import('../src/services/mcp-service.js')>('../src/services/mcp-service.js')
   return { ...actual, discoverMcpStates: discoverMcpStatesMock }
@@ -113,8 +129,10 @@ describe('cli argument behavior', () => {
     expect(manage?.options.map(option => option.flags)).toContain('-p, --project')
   })
 
-  it('prints a cyan single-line CCSettingsPreset banner', async () => {
+  it('prints a centered CCSP banner with a centered CCSettingsPreset subtitle', async () => {
     const stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+    const originalColumns = process.stderr.columns
+    Object.defineProperty(process.stderr, 'columns', { value: 120, configurable: true })
 
     const { printBanner } = await import('../src/cli.js')
     printBanner()
@@ -128,12 +146,12 @@ describe('cli argument behavior', () => {
       throw new Error('Expected printBanner to write a string to stderr')
     }
 
-    expect(output).toContain('\x1b[36m')
-    expect(output).toContain('\x1b[2mettings\x1b[0m')
-    expect(output).toContain('\x1b[2mreset\x1b[0m')
-    expect(output).not.toContain('ANSI Shadow')
-    expect(normalizeTerminalOutput(output)).toContain('C C Settings Preset')
+    const normalized = normalizeTerminalOutput(output)
+    expect(normalized).toContain('BIG')
+    expect(normalized).toContain('CCSettingsPreset')
+    expect(figletTextSync).toHaveBeenCalledWith('C C S P', { font: 'ANSI Shadow' })
 
+    Object.defineProperty(process.stderr, 'columns', { value: originalColumns, configurable: true })
     stderrWriteSpy.mockRestore()
   })
 })
