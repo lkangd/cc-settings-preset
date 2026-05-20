@@ -4,7 +4,6 @@ import React from 'react'
 import { Command } from 'commander'
 import { render } from 'ink'
 import figlet from 'figlet'
-import gradient from 'gradient-string'
 
 import { sanitizeClaudeArgs } from './core/args.js'
 import { CliError } from './core/errors.js'
@@ -75,11 +74,28 @@ export function createProgram(): Command {
   return program
 }
 
+function stripAnsi(value: string): string {
+  return value.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')
+}
+
+function centerLine(line: string, width: number): string {
+  const pad = Math.max(0, Math.floor((width - stripAnsi(line).length) / 2))
+  return `${' '.repeat(pad)}${line}`
+}
+
 export function printBanner() {
-  const banner = figlet.textSync('C C S P', { font: 'ANSI Shadow' })
-  const line = '─'.repeat(48)
-  const styled = gradient(['#00d2ff', '#7b2ff7', '#ff0080'])(banner)
-  process.stderr.write(`\n\n${styled}\x1b[2m\n${line}\x1b[0m\n\n`)
+  const cyan = '\x1b[36m'
+  const dim = '\x1b[2m'
+  const reset = '\x1b[0m'
+  const columns = process.stderr.columns ?? 80
+  const contentWidth = Math.max(48, Math.min(88, columns - 4))
+  const headline = figlet.textSync('C C S P', { font: 'ANSI Shadow' })
+    .split('\n')
+    .map(line => centerLine(`${cyan}${line}${reset}`, contentWidth))
+    .join('\n')
+  const subtitle = centerLine(`${dim}${cyan}CCSettingsPreset${reset}`, contentWidth)
+  const divider = centerLine(`\x1b[2m${'─'.repeat(contentWidth)}${reset}`, contentWidth)
+  process.stderr.write(`\n\n${headline}\n${subtitle}\n${divider}\n\n`)
 }
 
 async function renderCreateApp(): Promise<CreateResult | undefined> {

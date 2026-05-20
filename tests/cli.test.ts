@@ -88,6 +88,22 @@ vi.mock('../src/services/launch-preset-service.js', () => ({
   }),
 }))
 
+const figletTextSync = vi.fn((text: string, options?: { font?: string }) => {
+  if (text === 'C C S P') {
+    return options?.font === 'ANSI Shadow'
+      ? 'BIG\nBIG\nBIG'
+      : text
+  }
+
+  return text
+})
+
+vi.mock('figlet', () => ({
+  default: {
+    textSync: figletTextSync,
+  },
+}))
+
 vi.mock('../src/services/mcp-service.js', async () => {
   const actual = await vi.importActual<typeof import('../src/services/mcp-service.js')>('../src/services/mcp-service.js')
   return { ...actual, discoverMcpStates: discoverMcpStatesMock }
@@ -102,6 +118,32 @@ describe('cli argument behavior', () => {
     const { createProgram } = await import('../src/cli.js')
     const manage = createProgram().commands.find(command => command.name() === 'manage')
     expect(manage?.options.map(option => option.flags)).toContain('-p, --project')
+  })
+
+  it('prints a centered CCSP banner with a centered CCSettingsPreset subtitle', async () => {
+    const stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+    const originalColumns = process.stderr.columns
+    Object.defineProperty(process.stderr, 'columns', { value: 120, configurable: true })
+
+    const { printBanner } = await import('../src/cli.js')
+    printBanner()
+
+    expect(stderrWriteSpy).toHaveBeenCalledTimes(1)
+
+    const output = stderrWriteSpy.mock.calls[0]?.[0]
+    expect(typeof output).toBe('string')
+
+    if (typeof output !== 'string') {
+      throw new Error('Expected printBanner to write a string to stderr')
+    }
+
+    const normalized = normalizeTerminalOutput(output)
+    expect(normalized).toContain('BIG')
+    expect(normalized).toContain('CCSettingsPreset')
+    expect(figletTextSync).toHaveBeenCalledWith('C C S P', { font: 'ANSI Shadow' })
+
+    Object.defineProperty(process.stderr, 'columns', { value: originalColumns, configurable: true })
+    stderrWriteSpy.mockRestore()
   })
 })
 
