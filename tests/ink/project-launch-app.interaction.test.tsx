@@ -25,6 +25,7 @@ vi.mock('ink', () => ({
   useInput: (handler: InputHandler) => {
     inputHandlers.push(handler)
   },
+  useStdout: () => ({ stdout: { columns: 120 } }),
 }))
 
 vi.mock('../../src/ink/components/text-input.js', () => ({

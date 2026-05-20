@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Box, Text, useApp, useInput } from 'ink'
+import { Box, Text, useApp, useInput, useStdout } from 'ink'
 import {
   createProjectLaunchFlowState,
   getActiveProjectLaunchItem,
@@ -38,6 +38,14 @@ type Props = Omit<ProjectLaunchAppProps, 'onSubmit'> & {
 
 export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedName, onSubmit }: Props) {
   const { exit } = useApp()
+  const { stdout } = useStdout()
+  const fallbackColumns = 120
+  const innerWidth = Math.max(90, stdout.columns ?? fallbackColumns)
+  const gapWidth = 3
+  const contentWidth = innerWidth - gapWidth
+  const presetWidth = Math.max(22, Math.floor(contentWidth * 0.22))
+  const detailWidth = Math.max(24, Math.floor((contentWidth - presetWidth) / 3))
+  const mcpWidth = contentWidth - presetWidth - detailWidth - detailWidth
   const [state, setState] = useState(() => createProjectLaunchFlowState({
     presets,
     detected,
@@ -126,8 +134,8 @@ export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedNa
     <Box flexDirection="column">
       <Text bold color="cyan">Manage project launch presets</Text>
       <Text dimColor>←/→ switch column · p plugins · s skills · m mcps · t sort · space toggle · enter launch · r rename · d delete · q quit</Text>
-      <Box marginTop={1}>
-        <Box flexDirection="column" width={22} marginRight={1} borderStyle="round" borderColor={state.focus === 'presets' ? 'cyan' : 'gray'} paddingX={1}>
+      <Box marginTop={1} width={innerWidth}>
+        <Box flexDirection="column" width={presetWidth} borderStyle="round" borderColor={state.focus === 'presets' ? 'cyan' : 'gray'} paddingX={0.5} paddingY={0.5}>
           <Text bold>Presets({state.presetItems.length})</Text>
           {state.presetItems.map((item, index) => (
             <Text key={item.name} wrap="truncate-end" {...(index === state.presetCursor ? { color: 'cyan' as const } : {})}>
@@ -135,18 +143,21 @@ export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedNa
             </Text>
           ))}
         </Box>
-        <ToggleColumn title={`Plugins(${enabledCount(state.plugins)}/${state.plugins.length})`} focused={state.focus === 'plugins'} items={state.plugins} cursor={state.pluginCursor} />
-        <ToggleColumn title={`Skills(${enabledCount(state.skills)}/${state.skills.length})`} focused={state.focus === 'skills'} items={state.skills} cursor={state.skillCursor} />
-        <ToggleColumn title={`MCPs(${enabledCount(state.mcps)}/${state.mcps.length})`} focused={state.focus === 'mcps'} items={state.mcps} cursor={state.mcpCursor} />
+        <Box width={1} />
+        <ToggleColumn title={`Plugins(${enabledCount(state.plugins)}/${state.plugins.length})`} focused={state.focus === 'plugins'} items={state.plugins} cursor={state.pluginCursor} width={detailWidth} />
+        <Box width={1} />
+        <ToggleColumn title={`Skills(${enabledCount(state.skills)}/${state.skills.length})`} focused={state.focus === 'skills'} items={state.skills} cursor={state.skillCursor} width={detailWidth} />
+        <Box width={1} />
+        <ToggleColumn title={`MCPs(${enabledCount(state.mcps)}/${state.mcps.length})`} focused={state.focus === 'mcps'} items={state.mcps} cursor={state.mcpCursor} width={mcpWidth} />
       </Box>
       {message ? <Text color="yellow">{message}</Text> : null}
     </Box>
   )
 }
 
-function ToggleColumn({ title, focused, items, cursor }: { title: string; focused: boolean; items: Array<{ name: string; enabled: boolean; source: PluginState['source'] | SkillState['source'] | McpState['source']; toggleable?: boolean }>; cursor: number }) {
+function ToggleColumn({ title, focused, items, cursor, width }: { title: string; focused: boolean; items: Array<{ name: string; enabled: boolean; source: PluginState['source'] | SkillState['source'] | McpState['source']; toggleable?: boolean }>; cursor: number; width: number }) {
   return (
-    <Box flexDirection="column" width={28} marginRight={1} borderStyle="round" borderColor={focused ? 'cyan' : 'gray'} paddingX={1}>
+    <Box flexDirection="column" width={width} borderStyle="round" borderColor={focused ? 'cyan' : 'gray'} paddingX={0.5} paddingY={0.5}>
       <Text bold>{title}</Text>
       {items.map((item, index) => (
         <Text key={item.name} wrap="truncate-end" {...(focused && index === cursor ? { color: 'cyan' as const } : {})}>

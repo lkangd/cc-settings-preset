@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Box, Text, useApp, useInput } from 'ink'
+import { Box, Text, useApp, useInput, useStdout } from 'ink'
 import type { LaunchPresetMeta } from '../core/schema.js'
 import {
   createProjectLaunchFlowState,
@@ -44,6 +44,14 @@ function sourceBadge(source: PluginState['source'] | SkillState['source'] | McpS
 
 export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedName, onSubmit }: ProjectLaunchAppProps) {
   const { exit } = useApp()
+  const { stdout } = useStdout()
+  const fallbackColumns = 120
+  const innerWidth = Math.max(90, stdout.columns ?? fallbackColumns)
+  const gapWidth = 3
+  const contentWidth = innerWidth - gapWidth
+  const presetWidth = Math.max(22, Math.floor(contentWidth * 0.22))
+  const detailWidth = Math.max(24, Math.floor((contentWidth - presetWidth) / 3))
+  const mcpWidth = contentWidth - presetWidth - detailWidth - detailWidth
   const [state, setState] = useState(() =>
     createProjectLaunchFlowState({
       presets,
@@ -131,11 +139,10 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedNa
       <Text dimColor>
         ←/→ switch column · p plugins · s skills · m mcps · t sort · space toggle · enter launch · q quit
       </Text>
-      <Box marginTop={0.5}>
+      <Box marginTop={0.5} width={innerWidth}>
         <Box
           flexDirection="column"
-          width={22}
-          marginRight={0.5}
+          width={presetWidth}
           borderStyle="round"
           borderColor={state.focus === 'presets' ? 'cyan' : 'gray'}
           paddingX={0.5}
@@ -153,23 +160,29 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedNa
             </Text>
           ))}
         </Box>
+        <Box width={1} />
         <ToggleColumn
           title={`Plugins(${enabledCount(state.plugins)}/${state.plugins.length})`}
           focused={state.focus === 'plugins'}
           items={state.plugins}
           cursor={state.pluginCursor}
+          width={detailWidth}
         />
+        <Box width={1} />
         <ToggleColumn
           title={`Skills(${enabledCount(state.skills)}/${state.skills.length})`}
           focused={state.focus === 'skills'}
           items={state.skills}
           cursor={state.skillCursor}
+          width={detailWidth}
         />
+        <Box width={1} />
         <ToggleColumn
           title={`MCPs(${enabledCount(state.mcps)}/${state.mcps.length})`}
           focused={state.focus === 'mcps'}
           items={state.mcps}
           cursor={state.mcpCursor}
+          width={mcpWidth}
         />
       </Box>
     </Box>
@@ -180,7 +193,8 @@ function ToggleColumn({
   title,
   focused,
   items,
-  cursor
+  cursor,
+  width
 }: {
   title: string
   focused: boolean
@@ -191,12 +205,12 @@ function ToggleColumn({
     toggleable?: boolean
   }>
   cursor: number
+  width: number
 }) {
   return (
     <Box
       flexDirection="column"
-      width={28}
-      marginRight={0.5}
+      width={width}
       borderStyle="round"
       borderColor={focused ? 'cyan' : 'gray'}
       paddingX={0.5}
