@@ -14,6 +14,34 @@ const launchPreset = {
   updatedAt: '2026-05-20T00:00:00.000Z',
 }
 
+function unwrapRenderedElement(element: unknown): unknown {
+  if (!React.isValidElement(element)) {
+    return element
+  }
+
+  const props = element.props as Record<string, unknown>
+  if ('onSubmit' in props) {
+    return element
+  }
+
+  const child = props.children
+  if (Array.isArray(child)) {
+    for (const item of child) {
+      const unwrapped = unwrapRenderedElement(item)
+      if (React.isValidElement(unwrapped) && 'onSubmit' in (unwrapped.props as Record<string, unknown>)) {
+        return unwrapped
+      }
+    }
+    return element
+  }
+
+  if (React.isValidElement(child)) {
+    return unwrapRenderedElement(child)
+  }
+
+  return element
+}
+
 describe('manage launch flow', () => {
   afterEach(() => {
     vi.restoreAllMocks()
@@ -102,8 +130,9 @@ describe('manage launch flow', () => {
       spawnClaude,
     }))
     vi.doMock('ink', () => ({
+      Text: ({ children }: { children?: React.ReactNode }) => children,
       render: (element: React.ReactElement) => {
-        const typedElement = element as React.ReactElement<{
+        const typedElement = unwrapRenderedElement(element) as React.ReactElement<{
           onSubmit: (value: unknown) => void
         }>
         const typeName = typeof typedElement.type === 'string' ? typedElement.type : (typedElement.type as { name?: string }).name ?? 'unknown'

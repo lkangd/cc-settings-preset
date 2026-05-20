@@ -54,4 +54,22 @@ describe('ProjectLaunchApp', () => {
 
     expect((topBorderLine(output).match(/╮ ╭/g) ?? []).length).toBe(3)
   })
+
+  it('truncates long launch labels instead of wrapping them', () => {
+    const output = withStdoutColumns(90, () => renderToString(
+      <ProjectLaunchApp
+        presets={[]}
+        detected={{
+          plugins: [{ name: 'plugin-name-that-is-far-too-long-for-the-column', enabled: true, source: 'user' }],
+          skills: [{ name: 'skill-name-that-is-far-too-long-for-the-column', enabled: true, source: 'user', toggleable: true }],
+          mcps: [{ name: 'mcp-server-name-that-is-far-too-long-for-the-column', enabled: true, source: 'project', config: {} }],
+        }}
+        statesByPreset={{}}
+        onSubmit={vi.fn()}
+      />,
+      { columns: 90 },
+    ))
+
+    expect(output).toContain('…')
+  })
 })

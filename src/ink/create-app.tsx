@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Box, Text, useApp, useInput } from 'ink'
+import { Box, useApp, useInput } from 'ink'
 
 import { createCreateFlowState, type CreateSource } from '../flows/create-flow.js'
 import { TextInput } from './components/text-input.js'
+import { TruncateText } from './components/truncate-text.js'
 
 export type CreateResult = {
   sourcePath: string
@@ -78,17 +79,17 @@ export function CreateApp({ sources, onSubmit }: Props) {
 
   return (
     <Box flexDirection="column">
-      <Text bold color="cyan">Create first-level settings preset</Text>
-      <Text dimColor>↑/k ↓/j navigate · enter select · q cancel</Text>
+      <TruncateText bold color="cyan">Create first-level settings preset</TruncateText>
+      <TruncateText dimColor>↑/k ↓/j navigate · enter select · q cancel</TruncateText>
       <Box flexDirection="column" marginTop={1}>
         {state.sources.map((source, index) => (
-          <Text key={source.filePath} {...(index === state.cursor ? { color: 'cyan' as const } : {})}>
-            {index === state.cursor ? '❯ ' : '  '}{source.label} <Text dimColor>{source.filePath}</Text>
-          </Text>
+          <TruncateText key={source.filePath} {...(index === state.cursor ? { color: 'cyan' as const } : {})}>
+            {index === state.cursor ? '❯ ' : '  '}{source.label} {source.filePath}
+          </TruncateText>
         ))}
-        <Text {...(state.cursor === state.sources.length ? { color: 'cyan' as const } : {})}>
+        <TruncateText {...(state.cursor === state.sources.length ? { color: 'cyan' as const } : {})}>
           {state.cursor === state.sources.length ? '❯ ' : '  '}Manual path
-        </Text>
+        </TruncateText>
       </Box>
     </Box>
   )

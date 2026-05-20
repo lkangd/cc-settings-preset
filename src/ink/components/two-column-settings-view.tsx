@@ -1,6 +1,8 @@
-import { Box, Text, useStdout } from 'ink'
+import { Box, useStdout } from 'ink'
 import type { SettingsSelectItem } from '../../flows/settings-select-flow.js'
 import { JsonTreeView } from './json-tree-view.js'
+import { useInkResizeVersion } from './resize-context.js'
+import { TruncateText } from './truncate-text.js'
 
 type Props = {
   title: string
@@ -10,19 +12,18 @@ type Props = {
 }
 
 export function TwoColumnSettingsView({ title, help, items, cursor }: Props) {
+  useInkResizeVersion()
   const { stdout } = useStdout()
   const fallbackColumns = 120
-  const innerWidth = Math.max(90, (stdout.columns ?? fallbackColumns))
-  const listWidth = Math.max(24, Math.floor(innerWidth / 3))
-  const previewWidth = innerWidth - listWidth - 1
+  const innerWidth = stdout.columns ?? fallbackColumns
+  const listWidth = Math.max(20, Math.floor(innerWidth / 3))
+  const previewWidth = Math.max(20, innerWidth - listWidth - 1)
   const selected = items[cursor]
 
   return (
     <Box flexDirection="column">
-      <Text bold color="cyan">
-        {title}
-      </Text>
-      <Text dimColor>{help}</Text>
+      <TruncateText bold color="cyan">{title}</TruncateText>
+      <TruncateText dimColor>{help}</TruncateText>
       <Box marginTop={0.5} width={innerWidth}>
         <Box
           flexDirection="column"
@@ -33,17 +34,16 @@ export function TwoColumnSettingsView({ title, help, items, cursor }: Props) {
           paddingX={0.5}
           paddingY={0.5}
         >
-          <Text bold>Settings({items.length})</Text>
+          <TruncateText bold>Settings({items.length})</TruncateText>
           {items.map((item, index) => (
-            <Text
+            <TruncateText
               key={`${item.name}:${item.sourcePath}`}
-              wrap="truncate-end"
               {...(index === cursor ? { color: 'cyan' as const } : {})}
             >
               {index === cursor ? '❯ ' : '  '}
               {item.name}
               {item.temporary ? ' (detected)' : ''}
-            </Text>
+            </TruncateText>
           ))}
         </Box>
         <Box
@@ -54,10 +54,8 @@ export function TwoColumnSettingsView({ title, help, items, cursor }: Props) {
           paddingX={0.5}
           paddingY={0.5}
         >
-          <Text bold wrap="truncate-end">
-            {selected?.sourcePath ?? 'No settings selected'}
-          </Text>
-          {selected ? <JsonTreeView value={selected.settings} /> : <Text dimColor>no settings found</Text>}
+          <TruncateText bold>{selected?.sourcePath ?? 'No settings selected'}</TruncateText>
+          {selected ? <JsonTreeView value={selected.settings} /> : <TruncateText dimColor>no settings found</TruncateText>}
         </Box>
       </Box>
     </Box>

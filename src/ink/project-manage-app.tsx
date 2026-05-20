@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Box, Text, useApp, useInput, useStdout } from 'ink'
+import { TruncateText } from './components/truncate-text.js'
 import {
   createProjectLaunchFlowState,
   getActiveProjectLaunchItem,
@@ -9,6 +10,7 @@ import {
 import type { McpState } from '../services/mcp-service.js'
 import type { PluginState } from '../services/plugin-service.js'
 import type { SkillState } from '../services/skill-service.js'
+import { useInkResizeVersion } from './components/resize-context.js'
 import { TextInput } from './components/text-input.js'
 import type { ProjectLaunchAppProps, ProjectLaunchResult } from './project-launch-app.js'
 
@@ -37,10 +39,11 @@ type Props = Omit<ProjectLaunchAppProps, 'onSubmit'> & {
 }
 
 export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedName, onSubmit }: Props) {
+  useInkResizeVersion()
   const { exit } = useApp()
   const { stdout } = useStdout()
   const fallbackColumns = 120
-  const innerWidth = Math.max(90, stdout.columns ?? fallbackColumns)
+  const innerWidth = stdout.columns ?? fallbackColumns
   const gapWidth = 3
   const contentWidth = innerWidth - gapWidth
   const presetWidth = Math.max(22, Math.floor(contentWidth * 0.22))
@@ -116,8 +119,8 @@ export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedNa
   if (mode === 'delete') {
     return (
       <Box flexDirection="column">
-        <Text color="red">Delete preset {activeItem?.name ?? 'preset'}?</Text>
-        <Text dimColor>press y to confirm · esc cancel</Text>
+        <TruncateText color="red">Delete preset {activeItem?.name ?? 'preset'}?</TruncateText>
+        <TruncateText dimColor>press y to confirm · esc cancel</TruncateText>
         <ConfirmDelete
           onCancel={() => setMode('browse')}
           onConfirm={() => {
@@ -132,15 +135,15 @@ export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedNa
 
   return (
     <Box flexDirection="column">
-      <Text bold color="cyan">Manage project launch presets</Text>
-      <Text dimColor>←/→ switch column · p plugins · s skills · m mcps · t sort · space toggle · enter launch · r rename · d delete · q quit</Text>
+      <TruncateText bold color="cyan">Manage project launch presets</TruncateText>
+      <TruncateText dimColor>←/→ switch column · p plugins · s skills · m mcps · t sort · space toggle · enter launch · r rename · d delete · q quit</TruncateText>
       <Box marginTop={1} width={innerWidth}>
         <Box flexDirection="column" width={presetWidth} borderStyle="round" borderColor={state.focus === 'presets' ? 'cyan' : 'gray'} paddingX={0.5} paddingY={0.5}>
-          <Text bold>Presets({state.presetItems.length})</Text>
+          <TruncateText bold>Presets({state.presetItems.length})</TruncateText>
           {state.presetItems.map((item, index) => (
-            <Text key={item.name} wrap="truncate-end" {...(index === state.presetCursor ? { color: 'cyan' as const } : {})}>
+            <TruncateText key={item.name} {...(index === state.presetCursor ? { color: 'cyan' as const } : {})}>
               {state.focus === 'presets' && index === state.presetCursor ? '❯ ' : '  '}{item.name}
-            </Text>
+            </TruncateText>
           ))}
         </Box>
         <Box width={1} />
@@ -150,7 +153,7 @@ export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedNa
         <Box width={1} />
         <ToggleColumn title={`MCPs(${enabledCount(state.mcps)}/${state.mcps.length})`} focused={state.focus === 'mcps'} items={state.mcps} cursor={state.mcpCursor} width={mcpWidth} />
       </Box>
-      {message ? <Text color="yellow">{message}</Text> : null}
+      {message ? <TruncateText color="yellow">{message}</TruncateText> : null}
     </Box>
   )
 }
@@ -158,13 +161,13 @@ export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedNa
 function ToggleColumn({ title, focused, items, cursor, width }: { title: string; focused: boolean; items: Array<{ name: string; enabled: boolean; source: PluginState['source'] | SkillState['source'] | McpState['source']; toggleable?: boolean }>; cursor: number; width: number }) {
   return (
     <Box flexDirection="column" width={width} borderStyle="round" borderColor={focused ? 'cyan' : 'gray'} paddingX={0.5} paddingY={0.5}>
-      <Text bold>{title}</Text>
+      <TruncateText bold>{title}</TruncateText>
       {items.map((item, index) => (
-        <Text key={item.name} wrap="truncate-end" {...(focused && index === cursor ? { color: 'cyan' as const } : {})}>
+        <TruncateText key={item.name} {...(focused && index === cursor ? { color: 'cyan' as const } : {})}>
           {focused && index === cursor ? '❯ ' : '  '}<Text color={item.enabled ? 'green' : 'red'}>{item.enabled ? 'ON ' : 'OFF'}</Text> {sourceBadge(item.source)} {item.name}{item.toggleable === false ? ' (plugin)' : ''}
-        </Text>
+        </TruncateText>
       ))}
-      {items.length === 0 ? <Text dimColor>none found</Text> : null}
+      {items.length === 0 ? <TruncateText dimColor>none found</TruncateText> : null}
     </Box>
   )
 }

@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events'
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -27,8 +28,37 @@ const spawnClaudeMock = vi.fn().mockResolvedValue(0)
 
 type ManageAppElement = React.ReactElement<{ onSubmit: (result: ManageResult) => void; initialState?: { renamePresetName?: string; renameValue?: string; renameError?: string } }>
 
+function unwrapRenderedElement(element: unknown): unknown {
+  if (!React.isValidElement(element)) {
+    return element
+  }
+
+  const props = element.props as Record<string, unknown>
+  if ('onSubmit' in props) {
+    return element
+  }
+
+  const child = props.children
+  if (Array.isArray(child)) {
+    for (const item of child) {
+      const unwrapped = unwrapRenderedElement(item)
+      if (React.isValidElement(unwrapped) && 'onSubmit' in (unwrapped.props as Record<string, unknown>)) {
+        return unwrapped
+      }
+    }
+    return element
+  }
+
+  if (React.isValidElement(child)) {
+    return unwrapRenderedElement(child)
+  }
+
+  return element
+}
+
 vi.mock('ink', () => ({
-  render: renderMock,
+  Text: ({ children }: { children?: React.ReactNode }) => children,
+  render: (element: unknown) => renderMock(unwrapRenderedElement(element)),
 }))
 
 vi.mock('../src/core/paths.js', async () => {
@@ -118,6 +148,10 @@ vi.mock('../src/services/mcp-service.js', async () => {
   return { ...actual, discoverMcpStates: discoverMcpStatesMock }
 })
 
+function stripAnsi(value: string): string {
+  return value.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')
+}
+
 describe('cli argument behavior', () => {
   it('keeps claude passthrough args while stripping reserved settings', () => {
     expect(sanitizeClaudeArgs(['--resume', 'abc', '--settings=bad.json']).args).toEqual(['--resume', 'abc'])
@@ -129,30 +163,128 @@ describe('cli argument behavior', () => {
     expect(manage?.options.map(option => option.flags)).toContain('-p, --project')
   })
 
-  it('prints a centered CCSP banner with a centered CC-Settings-Preset subtitle', async () => {
+  it('selects a banner candidate that fits within the terminal width', async () => {
+    const { buildBannerLines } = await import('../src/cli.js')
+
+    const wide = buildBannerLines(120)
+    const narrow = buildBannerLines(40)
+
+    expect(Math.max(...wide.map(line => stripAnsi(line).length))).toBeLessThanOrEqual(120)
+    expect(Math.max(...narrow.map(line => stripAnsi(line).length))).toBeLessThanOrEqual(40)
+    expect(wide.join('\n')).not.toEqual(narrow.join('\n'))
+  })
+
+  it('centers the selected banner lines against the full terminal width', async () => {
     const stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
     const originalColumns = process.stderr.columns
-    Object.defineProperty(process.stderr, 'columns', { value: 120, configurable: true })
+    Object.defineProperty(process.stderr, 'columns', { value: 80, configurable: true })
 
     const { printBanner } = await import('../src/cli.js')
     printBanner()
 
     expect(stderrWriteSpy).toHaveBeenCalledTimes(1)
 
-    const output = stderrWriteSpy.mock.calls[0]?.[0]
-    expect(typeof output).toBe('string')
+    const output = String(stderrWriteSpy.mock.calls[0]?.[0] ?? '')
+    const visibleLines = output
+      .split('\n')
+      .map(line => stripAnsi(line))
+      .filter(line => line.trim().length > 0)
 
-    if (typeof output !== 'string') {
-      throw new Error('Expected printBanner to write a string to stderr')
-    }
-
-    const normalized = normalizeTerminalOutput(output)
-    expect(normalized).toContain('BIG')
-    expect(normalized).toContain('CC-Settings-Preset')
-    expect(figletTextSync).toHaveBeenCalledWith('C C S P', { font: 'ANSI Shadow' })
+    const firstBannerLine = visibleLines[0] ?? ''
+    expect(firstBannerLine.startsWith(' ')).toBe(true)
+    expect(firstBannerLine.length).toBeLessThanOrEqual(80)
+    expect(normalizeTerminalOutput(output)).toContain('CC-Settings-Preset')
 
     Object.defineProperty(process.stderr, 'columns', { value: originalColumns, configurable: true })
     stderrWriteSpy.mockRestore()
+  })
+
+  it('clears terminal history before rerendering on resize', async () => {
+    const write = vi.fn()
+    const stdout = Object.assign(new EventEmitter(), {
+      write,
+    }) as unknown as Pick<NodeJS.WriteStream, 'on' | 'off' | 'write'> & EventEmitter
+    const app = {
+      clear: vi.fn(),
+      rerender: vi.fn(),
+      waitUntilExit: vi.fn().mockResolvedValue(undefined),
+    }
+    const createNode = vi.fn<() => React.ReactElement>()
+      .mockReturnValue(React.createElement('box', { id: 'resized' }))
+
+    const { waitForInkAppExit } = await import('../src/cli.js')
+    const wait = waitForInkAppExit(app, createNode, stdout)
+
+    stdout.emit('resize')
+
+    expect(write).toHaveBeenCalledWith('\x1b[3J\x1b[H\x1b[2J')
+    expect(app.clear).toHaveBeenCalledTimes(1)
+    expect(createNode).toHaveBeenCalledTimes(1)
+    expect(app.rerender).toHaveBeenCalledWith(
+      expect.objectContaining({
+        props: expect.objectContaining({
+          children: expect.objectContaining({
+            props: expect.objectContaining({
+              children: expect.objectContaining({
+                props: expect.objectContaining({
+                  children: expect.arrayContaining([
+                    expect.anything(),
+                    expect.objectContaining({
+                      props: expect.objectContaining({ id: 'resized' })
+                    })
+                  ])
+                })
+              })
+            })
+          }),
+          value: 1,
+        })
+      })
+    )
+    const writeOrder = write.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY
+    const clearOrder = app.clear.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY
+    const rerenderOrder = app.rerender.mock.invocationCallOrder[0] ?? Number.NEGATIVE_INFINITY
+    expect(writeOrder).toBeLessThan(clearOrder)
+    expect(clearOrder).toBeLessThan(rerenderOrder)
+
+    await wait
+    expect(stdout.listenerCount('resize')).toBe(0)
+  })
+
+  it('forces a clear and rerender on ctrl+l', async () => {
+    const write = vi.fn()
+    const stdout = Object.assign(new EventEmitter(), {
+      write,
+    }) as unknown as Pick<NodeJS.WriteStream, 'on' | 'off' | 'write'> & EventEmitter
+    const app = {
+      clear: vi.fn(),
+      rerender: vi.fn(),
+      waitUntilExit: vi.fn().mockResolvedValue(undefined),
+    }
+    const createNode = vi.fn<() => React.ReactElement>()
+      .mockReturnValue(React.createElement('box', { id: 'refresh' }))
+
+    const { createGlobalShortcutHandler } = await import('../src/cli.js')
+    const handler = createGlobalShortcutHandler(app, createNode, stdout)
+
+    handler('l', { ctrl: true })
+
+    expect(write).toHaveBeenCalledWith('\x1b[3J\x1b[H\x1b[2J')
+    expect(app.clear).toHaveBeenCalledTimes(1)
+    expect(app.rerender).toHaveBeenCalledTimes(1)
+    expect(app.rerender).toHaveBeenCalledWith(
+      expect.objectContaining({
+        props: expect.objectContaining({
+          children: expect.objectContaining({
+            props: expect.objectContaining({
+              children: expect.objectContaining({
+                props: expect.objectContaining({ children: expect.any(Array) })
+              })
+            })
+          })
+        })
+      })
+    )
   })
 })
 

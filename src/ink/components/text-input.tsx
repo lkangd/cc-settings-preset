@@ -1,4 +1,5 @@
 import { Box, Text, useInput } from 'ink'
+import { TruncateText } from './truncate-text.js'
 
 type Props = {
   label: string
@@ -33,12 +34,9 @@ export function TextInput({ label, value, placeholder, onChange, onSubmit, onCan
 
   return (
     <Box flexDirection="column">
-      <Text bold>{label}</Text>
-      <Text>
-        {value || <Text dimColor>{placeholder ?? ''}</Text>}
-        <Text color="cyan">▌</Text>
-      </Text>
-      <Text dimColor>enter confirm · esc cancel</Text>
+      <TruncateText bold>{label}</TruncateText>
+      <TruncateText dimColor={!value}>{value || placeholder || ''}<Text color="cyan">▌</Text></TruncateText>
+      <TruncateText dimColor>enter confirm · esc cancel</TruncateText>
     </Box>
   )
 }

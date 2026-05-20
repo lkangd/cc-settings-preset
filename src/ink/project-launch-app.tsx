@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Box, Text, useApp, useInput, useStdout } from 'ink'
+import { TruncateText } from './components/truncate-text.js'
 import type { LaunchPresetMeta } from '../core/schema.js'
 import {
   createProjectLaunchFlowState,
@@ -11,6 +12,7 @@ import {
 import type { McpState } from '../services/mcp-service.js'
 import type { PluginState } from '../services/plugin-service.js'
 import type { SkillState } from '../services/skill-service.js'
+import { useInkResizeVersion } from './components/resize-context.js'
 import { TextInput } from './components/text-input.js'
 
 type SaveChoice = 'none' | 'confirm-save' | 'name-new'
@@ -43,10 +45,11 @@ function sourceBadge(source: PluginState['source'] | SkillState['source'] | McpS
 }
 
 export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedName, onSubmit }: ProjectLaunchAppProps) {
+  useInkResizeVersion()
   const { exit } = useApp()
   const { stdout } = useStdout()
   const fallbackColumns = 120
-  const innerWidth = Math.max(90, stdout.columns ?? fallbackColumns)
+  const innerWidth = stdout.columns ?? fallbackColumns
   const gapWidth = 3
   const contentWidth = innerWidth - gapWidth
   const presetWidth = Math.max(22, Math.floor(contentWidth * 0.22))
@@ -105,8 +108,8 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedNa
   if (saveChoice === 'confirm-save') {
     return (
       <Box flexDirection="column">
-        <Text color="yellow">Save changes as a new project launch preset?</Text>
-        <Text dimColor>press Y to save · n for retained temp settings · esc cancel</Text>
+        <TruncateText color="yellow">Save changes as a new project launch preset?</TruncateText>
+        <TruncateText dimColor>press Y to save · n for retained temp settings · esc cancel</TruncateText>
         <ConfirmSaveChoice
           onSave={() => setSaveChoice('name-new')}
           onTemp={() => {
@@ -133,12 +136,8 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedNa
 
   return (
     <Box flexDirection="column">
-      <Text bold color="cyan">
-        Select project launch preset
-      </Text>
-      <Text dimColor>
-        ←/→ switch column · p plugins · s skills · m mcps · t sort · space toggle · enter launch · q quit
-      </Text>
+      <TruncateText bold color="cyan">Select project launch preset</TruncateText>
+      <TruncateText dimColor>←/→ switch column · p plugins · s skills · m mcps · t sort · space toggle · enter launch · q quit</TruncateText>
       <Box marginTop={0.5} width={innerWidth}>
         <Box
           flexDirection="column"
@@ -148,16 +147,15 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedNa
           paddingX={0.5}
           paddingY={0.5}
         >
-          <Text bold>Presets({state.presetItems.length})</Text>
+          <TruncateText bold>Presets({state.presetItems.length})</TruncateText>
           {state.presetItems.map((item, index) => (
-            <Text
+            <TruncateText
               key={item.name}
-              wrap="truncate-end"
               {...(index === state.presetCursor ? { color: 'cyan' as const } : {})}
             >
               {state.focus === 'presets' && index === state.presetCursor ? '❯ ' : '  '}
               {item.name}
-            </Text>
+            </TruncateText>
           ))}
         </Box>
         <Box width={1} />
@@ -216,16 +214,16 @@ function ToggleColumn({
       paddingX={0.5}
       paddingY={0.5}
     >
-      <Text bold>{title}</Text>
+      <TruncateText bold>{title}</TruncateText>
       {items.map((item, index) => (
-        <Text key={item.name} wrap="truncate-end" {...(focused && index === cursor ? { color: 'cyan' as const } : {})}>
+        <TruncateText key={item.name} {...(focused && index === cursor ? { color: 'cyan' as const } : {})}>
           {focused && index === cursor ? '❯ ' : '  '}
           <Text color={item.enabled ? 'green' : 'red'}>{item.enabled ? 'ON ' : 'OFF'}</Text> {sourceBadge(item.source)}{' '}
           {item.name}
           {item.toggleable === false ? ' (plugin)' : ''}
-        </Text>
+        </TruncateText>
       ))}
-      {items.length === 0 ? <Text dimColor>none found</Text> : null}
+      {items.length === 0 ? <TruncateText dimColor>none found</TruncateText> : null}
     </Box>
   )
 }

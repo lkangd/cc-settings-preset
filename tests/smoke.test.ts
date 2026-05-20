@@ -15,7 +15,7 @@ describe('CLI scaffold', () => {
 
     printBanner()
 
-    expect(write).toHaveBeenCalled()
-    expect(String(write.mock.calls[0]?.[0] ?? '')).toContain('─'.repeat(48))
+    expect(write).toHaveBeenCalledTimes(1)
+    expect(String(write.mock.calls[0]?.[0] ?? '')).toContain('CC-Settings-Preset')
   })
 })
