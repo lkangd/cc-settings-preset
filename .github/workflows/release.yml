@@ -1,0 +1,83 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Publish to npm
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Calculate SHA256
+        id: sha256
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PACKAGE_NAME="@lkangd/cc-settings-preset"
+          TARBALL_NAME="cc-settings-preset-${VERSION}.tgz"
+          NPM_URL="https://registry.npmjs.org/${PACKAGE_NAME}/-/${TARBALL_NAME}"
+
+          MAX_RETRIES=20
+          RETRY_INTERVAL=30
+
+          for i in $(seq 1 $MAX_RETRIES); do
+            HTTP_STATUS=$(curl -sL -o "${TARBALL_NAME}" -w "%{http_code}" "$NPM_URL")
+            FILE_SIZE=$(stat -c%s "${TARBALL_NAME}" 2>/dev/null || echo 0)
+
+            if [ "$HTTP_STATUS" = "200" ] && [ "$FILE_SIZE" -gt 0 ]; then
+              echo "Tarball downloaded successfully (attempt $i, size: ${FILE_SIZE} bytes)"
+              break
+            fi
+
+            echo "Attempt $i/$MAX_RETRIES failed (HTTP $HTTP_STATUS, size: ${FILE_SIZE} bytes). Retrying in ${RETRY_INTERVAL}s..."
+            rm -f "${TARBALL_NAME}"
+            sleep $RETRY_INTERVAL
+          done
+
+          if [ ! -f "${TARBALL_NAME}" ] || [ "$(stat -c%s "${TARBALL_NAME}" 2>/dev/null || echo 0)" -eq 0 ]; then
+            echo "Error: Failed to download tarball after $MAX_RETRIES attempts"
+            exit 1
+          fi
+
+          SHA256=$(shasum -a 256 "${TARBALL_NAME}" | awk '{print $1}')
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "sha256=${SHA256}" >> "$GITHUB_OUTPUT"
+          echo "url=${NPM_URL}" >> "$GITHUB_OUTPUT"
+
+      - name: Update homebrew-tap formula
+        run: |
+          git clone https://x-access-token:${{ secrets.HOMEBREW_TAP_TOKEN }}@github.com/lkangd/homebrew-tap.git /tmp/homebrew-tap
+
+          FORMULA="/tmp/homebrew-tap/Formula/cc-settings-preset.rb"
+          VERSION="${{ steps.sha256.outputs.version }}"
+          SHA256="${{ steps.sha256.outputs.sha256 }}"
+          URL="${{ steps.sha256.outputs.url }}"
+
+          sed -i "s|url \".*\"|url \"${URL}\"|" "$FORMULA"
+          sed -i "s|sha256 \".*\"|sha256 \"${SHA256}\"|" "$FORMULA"
+
+          cd /tmp/homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/cc-settings-preset.rb
+          git commit -m "chore: update cc-settings-preset to ${VERSION}"
+          git push
