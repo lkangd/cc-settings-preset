@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Box, Text, useApp, useInput } from 'ink'
 import { createSettingsSelectFlowState, reduceSettingsSelectFlow, type SettingsSelectItem } from '../flows/settings-select-flow.js'
+import { revealInFinder } from '../services/reveal-service.js'
 import { TextInput } from './components/text-input.js'
 import { TwoColumnSettingsView } from './components/two-column-settings-view.js'
 
@@ -44,6 +45,7 @@ export function ManageApp({ items, onSubmit, onRenameSubmit }: Props) {
       setMode('rename')
     }
     if (input === 'd') setMode('delete')
+    if (input === 'o') revealInFinder(active?.sourcePath ?? '')
   })
 
   if (mode === 'rename') {
@@ -98,7 +100,7 @@ export function ManageApp({ items, onSubmit, onRenameSubmit }: Props) {
   return (
     <TwoColumnSettingsView
       title="Manage settings presets"
-      help="↑/k ↓/j navigate · enter/l launch · r rename · d delete · q quit"
+      help="↑/k ↓/j navigate · enter/l launch · o open folder · r rename · d delete · q quit"
       items={state.items}
       cursor={state.cursor}
     />
