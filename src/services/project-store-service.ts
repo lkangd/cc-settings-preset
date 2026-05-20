@@ -1,6 +1,5 @@
 import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
-import { pathExists } from '../core/json.js'
 import {
   resolveProjectCcspRoot,
   resolveProjectLaunchPresetDir,
@@ -13,18 +12,8 @@ export type ProjectCcspStore = {
   tempSettingsDir: string
 }
 
-const ignoreEntry = '.claude/.ccsp/'
-
-async function ensureGitignoreEntry(cwd: string): Promise<void> {
-  const gitignorePath = join(cwd, '.gitignore')
-  if (!(await pathExists(gitignorePath))) return
-
-  const content = await fs.readFile(gitignorePath, 'utf8')
-  const lines = content.split(/\r?\n/).filter(line => line.length > 0)
-  if (lines.includes(ignoreEntry)) return
-
-  const suffix = content.endsWith('\n') || content.length === 0 ? '' : '\n'
-  await fs.writeFile(gitignorePath, `${content}${suffix}${ignoreEntry}\n`, 'utf8')
+async function ensureStoreGitignore(rootDir: string): Promise<void> {
+  await fs.writeFile(join(rootDir, '.gitignore'), '*\n', 'utf8')
 }
 
 export async function ensureProjectCcspStore(cwd: string): Promise<ProjectCcspStore> {
@@ -34,7 +23,7 @@ export async function ensureProjectCcspStore(cwd: string): Promise<ProjectCcspSt
 
   await fs.mkdir(launchPresetDir, { recursive: true })
   await fs.mkdir(tempSettingsDir, { recursive: true })
-  await ensureGitignoreEntry(cwd)
+  await ensureStoreGitignore(rootDir)
 
   return { rootDir, launchPresetDir, tempSettingsDir }
 }
