@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   createEmptyLaunchPresetIndex,
   indexSchema,
+  lastSettingsSchema,
   parseLaunchPresetSettings,
   parseSettings,
   settingsSchema,
@@ -66,6 +67,24 @@ describe('launch preset schema', () => {
 
   it('creates an empty launch preset index', () => {
     expect(createEmptyLaunchPresetIndex()).toEqual({ version: 1, presets: {} })
+  })
+})
+
+describe('lastSettingsSchema', () => {
+  it('parses a project-path keyed last-used preset map', () => {
+    expect(
+      lastSettingsSchema.parse({
+        '/Users/liangkangda/Fe-project/code/cc-settings-preset': {
+          presetName: 'work',
+          updatedAt: '2026-05-20T08:00:00.000Z',
+        },
+      }),
+    ).toEqual({
+      '/Users/liangkangda/Fe-project/code/cc-settings-preset': {
+        presetName: 'work',
+        updatedAt: '2026-05-20T08:00:00.000Z',
+      },
+    })
   })
 })
 

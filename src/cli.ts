@@ -25,6 +25,7 @@ import {
   resolvePluginStates,
   type PluginState
 } from './services/plugin-service.js'
+import { createGlobalLastSettingsService } from './services/global-last-settings-service.js'
 import { createLaunchPresetService } from './services/launch-preset-service.js'
 import { applyDeniedMcpServers, discoverMcpStates, mcpStatesToDeniedServers, type McpState } from './services/mcp-service.js'
 import { createPresetService } from './services/preset-service.js'
@@ -45,6 +46,7 @@ const context = createPathContext()
 const globalRoot = resolveGlobalRoot(context.homeDir)
 const presetService = createPresetService(globalRoot)
 const settingsSourceService = createSettingsSourceService(context)
+const globalLastSettingsService = createGlobalLastSettingsService(context.homeDir)
 const launchPresetService = createLaunchPresetService(context.cwd)
 
 export function createProgram(): Command {
@@ -187,7 +189,15 @@ async function resolveProjectManageBaseSettings(): Promise<SettingsSelectResult 
 
 async function resolveInteractiveBaseSettings(): Promise<SettingsSelectResult | undefined> {
   const presetItems = await buildGlobalSettingsPresetItems()
-  if (presetItems.length > 0) return renderSettingsSelectApp(presetItems)
+  if (presetItems.length > 0) {
+    const rememberedName = await globalLastSettingsService.readLastUsed(context.cwd)
+    const initialName = rememberedName && presetItems.some(preset => preset.name === rememberedName)
+      ? rememberedName
+      : undefined
+    const selected = await renderSettingsSelectApp(presetItems, initialName)
+    if (selected) await globalLastSettingsService.writeLastUsed(context.cwd, selected.name)
+    return selected
+  }
 
   return {
     name: 'temporary-empty-base',

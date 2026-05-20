@@ -18,6 +18,8 @@ const renamePresetMock = vi.fn()
 const writePresetSettingsByNameMock = vi.fn()
 const createProjectLaunchPresetMock = vi.fn()
 const writeLastUsedLaunchPresetMock = vi.fn()
+const readLastUsedGlobalSettingsMock = vi.fn()
+const writeLastUsedGlobalSettingsMock = vi.fn()
 const writeTempSettingsMock = vi.fn().mockResolvedValue('/tmp/project/.claude/.ccsp/tmp/temp-settings.json')
 const discoverSettingsSourcesMock = vi.fn().mockResolvedValue([])
 const discoverMcpStatesMock = vi.fn().mockResolvedValue([])
@@ -88,6 +90,13 @@ vi.mock('../src/services/launch-preset-service.js', () => ({
   }),
 }))
 
+vi.mock('../src/services/global-last-settings-service.js', () => ({
+  createGlobalLastSettingsService: () => ({
+    readLastUsed: readLastUsedGlobalSettingsMock,
+    writeLastUsed: writeLastUsedGlobalSettingsMock,
+  }),
+}))
+
 vi.mock('../src/services/mcp-service.js', async () => {
   const actual = await vi.importActual<typeof import('../src/services/mcp-service.js')>('../src/services/mcp-service.js')
   return { ...actual, discoverMcpStates: discoverMcpStatesMock }
@@ -117,6 +126,9 @@ describe('run command', () => {
     createProjectLaunchPresetMock.mockReset()
     createProjectLaunchPresetMock.mockResolvedValue({ name: 'web', fileName: 'web-launch.json', createdAt: '2026-05-19T00:00:00.000Z', updatedAt: '2026-05-19T00:00:00.000Z' })
     writeLastUsedLaunchPresetMock.mockReset()
+    readLastUsedGlobalSettingsMock.mockReset()
+    readLastUsedGlobalSettingsMock.mockResolvedValue(undefined)
+    writeLastUsedGlobalSettingsMock.mockReset()
     writeTempSettingsMock.mockReset()
     writeTempSettingsMock.mockResolvedValue('/tmp/project/.claude/.ccsp/tmp/temp-settings.json')
     discoverSettingsSourcesMock.mockReset()
@@ -174,6 +186,93 @@ describe('run command', () => {
       deniedMcpServers: [{ serverName: 'github' }],
     })
     expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
+  })
+
+  it('reopens the last used global preset and remembers the new selection', async () => {
+    const basePreset = {
+      type: 'base' as const,
+      name: 'work',
+      fileName: 'work-settings.json',
+      createdAt: '2026-05-17T00:00:00.000Z',
+      updatedAt: '2026-05-17T00:00:00.000Z',
+    }
+    const otherPreset = {
+      type: 'base' as const,
+      name: 'base',
+      fileName: 'base-settings.json',
+      createdAt: '2026-05-17T00:00:00.000Z',
+      updatedAt: '2026-05-17T00:00:00.000Z',
+    }
+    listPresetsMock.mockResolvedValue([basePreset, otherPreset])
+    readLastUsedGlobalSettingsMock.mockResolvedValue('work')
+
+    renderMock
+      .mockImplementationOnce((element: React.ReactElement<{ initialName?: string; onSubmit: (result: unknown) => void }>) => {
+        expect(element.props.initialName).toBe('work')
+        element.props.onSubmit({
+          name: 'base',
+          sourcePath: '/tmp/.ccsp/settings/base-settings.json',
+          settings: {},
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          type: 'launch',
+          presetName: 'base',
+          toggles: {
+            plugins: [],
+            skills: [],
+            mcps: [],
+          },
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli'])
+
+    expect(writeLastUsedGlobalSettingsMock).toHaveBeenCalledWith('/tmp/project', 'base')
+  })
+
+  it('ignores a remembered preset that no longer exists', async () => {
+    const basePreset = {
+      type: 'base' as const,
+      name: 'base',
+      fileName: 'base-settings.json',
+      createdAt: '2026-05-17T00:00:00.000Z',
+      updatedAt: '2026-05-17T00:00:00.000Z',
+    }
+    listPresetsMock.mockResolvedValue([basePreset])
+    readLastUsedGlobalSettingsMock.mockResolvedValue('stale')
+
+    renderMock
+      .mockImplementationOnce((element: React.ReactElement<{ initialName?: string; onSubmit: (result: unknown) => void }>) => {
+        expect(element.props.initialName).toBeUndefined()
+        element.props.onSubmit({
+          name: 'base',
+          sourcePath: '/tmp/.ccsp/settings/base-settings.json',
+          settings: {},
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          type: 'launch',
+          presetName: 'base',
+          toggles: {
+            plugins: [],
+            skills: [],
+            mcps: [],
+          },
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli'])
+
+    expect(writeLastUsedGlobalSettingsMock).toHaveBeenCalledWith('/tmp/project', 'base')
   })
 
   it('launches temporary settings without saving a project launch preset', async () => {

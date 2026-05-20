@@ -46,6 +46,11 @@ const launchPresetMetaSchema = z.object({
   updatedAt: timestampSchema,
 })
 
+const lastUsedBasePresetSchema = z.object({
+  presetName: z.string().min(1),
+  updatedAt: timestampSchema,
+})
+
 const presetMetaSchema = z.discriminatedUnion('type', [basePresetMetaSchema, derivedPresetMetaSchema])
 
 export const indexSchema = z.object({
@@ -63,6 +68,8 @@ export const lastUsedLaunchPresetSchema = z.object({
   updatedAt: timestampSchema,
 })
 
+export const lastSettingsSchema = z.record(z.string(), lastUsedBasePresetSchema)
+
 export type McpPolicyEntry = z.infer<typeof mcpPolicyEntrySchema>
 export type Settings = z.infer<typeof settingsSchema>
 export type LaunchPresetSettings = z.infer<typeof launchPresetSettingsSchema>
@@ -74,6 +81,8 @@ export type PresetIndex = z.infer<typeof indexSchema>
 export type LaunchPresetMeta = z.infer<typeof launchPresetMetaSchema>
 export type LaunchPresetIndex = z.infer<typeof launchPresetIndexSchema>
 export type LastUsedLaunchPreset = z.infer<typeof lastUsedLaunchPresetSchema>
+export type LastUsedBasePreset = z.infer<typeof lastUsedBasePresetSchema>
+export type LastSettings = z.infer<typeof lastSettingsSchema>
 
 export function parseSettings(value: unknown): Settings {
   return settingsSchema.parse(value)
