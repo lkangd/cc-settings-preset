@@ -1,0 +1,75 @@
+# Changelog
+
+## 1.0.0 (2026-05-21)
+
+### Features
+* add CLI banner and preserve plugin ownership on preset overrides
+* add core settings primitives
+* add create and run terminal flows
+* add interactive text editing, Ctrl+L refresh, back navigation, and preset case preservation
+* add open folder keybinding in preset manager
+* add preset management ui
+* add project launch preset schemas
+* add project launch preset service
+* add project launch selection flow
+* add settings selection UI
+* add shared terminal components
+* add sort mode, column navigation and source badges to TUI
+* apply launch toggle overrides
+* discover claude skills
+* discover project MCP server states
+* display derived presets as tree under base preset
+* enhance plugin and skill management with new resolution logic
+* enhance project launch flow with toggle item management and sorting
+* finalize settings from launch toggles
+* group derived presets under parent and preserve prefix on rename
+* implement pruning of old temporary settings files in launch preset service
+* initialize project launch preset storage
+* launch claude with selected settings
+* loop manage flow with async rename and add TTY test helpers
+* loop manage UI after rename and delete operations
+* make banner and ink layout terminal-adaptive
+* manage project launch presets
+* model preset management flow
+* model preset run flow
+* remember last used global preset
+* resolve settings sources and plugins
+* route manage launch through project launch selection and colorize JSON tree
+* run two-stage project launch flow
+* show banner on all subcommands and polish derived preset display
+* split settings and project manage modes
+* store and sync settings presets
+* update cli banner wordmark
+
+### Bug Fixes
+* add spacing before preset selection UI
+* center ccsp banner with subtitle
+* discover skills from symlinked directories
+* ensure case preservation in launch preset creation and renaming
+* enter project manage directly
+* improve error handling in spawnClaude function
+* keep manage rename prompt open on conflicts
+* keep preset drafts isolated in run mode
+* only show derived-preset hint for base presets with active drafts
+* reject empty preset name and accept Enter in save confirmation
+* resolve preset-specific plugin and skill states
+* skip global presets in project manage
+* streamline preset management save and rename flows
+* use hyphenated CC-Settings-Preset in banner subtitle
+
+### Code Refactoring
+* skip settings select when no presets exist
+* use dynamic column widths based on terminal size
+* write store-local gitignore instead of modifying project gitignore
+
+### Documentation
+* add ccsp design spec
+* describe two-stage launch presets
+
+### Other Changes
+* merge: resolve worktree preset management conflicts
+* merge: resolve centered banner subtitle layout
+* merge branch 'worktree-cli-logo-wordmark'
+* merge: integrate project manage preset filtering
+* merge branch 'worktree-ccsp-implementation'
+* first commit
