@@ -1,8 +1,10 @@
-import { mkdtemp, readFile } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
+import { resolveProjectTempSettingsDir, resolveProjectTempSettingsPath } from '../../src/core/paths.js'
 import { createLaunchPresetService } from '../../src/services/launch-preset-service.js'
+import { ensureProjectCcspStore } from '../../src/services/project-store-service.js'
 
 describe('launch preset service', () => {
   it('creates, lists, reads, renames, and deletes project launch presets', async () => {
@@ -86,5 +88,27 @@ describe('launch preset service', () => {
 
     expect(filePath).toContain('.claude/.ccsp/tmp/')
     expect(JSON.parse(await readFile(filePath, 'utf8'))).toEqual({ enabledPlugins: { alpha: true } })
+  })
+
+  it('prunes oldest temp settings when more than 20 files exist', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ccsp-project-'))
+    const service = createLaunchPresetService(cwd)
+    await ensureProjectCcspStore(cwd)
+
+    for (let index = 0; index < 20; index += 1) {
+      const fileName = `2026-05-01-00-00-${String(index).padStart(2, '0')}-settings.json`
+      await writeFile(resolveProjectTempSettingsPath(cwd, fileName), '{}')
+    }
+
+    await service.writeTempSettings({}, new Date('2026-05-02T12:00:00.000Z'))
+
+    const tempDir = resolveProjectTempSettingsDir(cwd)
+    const remaining = (await readdir(tempDir))
+      .filter(fileName => fileName.endsWith('-settings.json'))
+      .sort()
+
+    expect(remaining).toHaveLength(20)
+    expect(remaining[0]).toBe('2026-05-01-00-00-01-settings.json')
+    expect(remaining.at(-1)).toMatch(/^2026-05-02-\d{2}-\d{2}-\d{2}-settings\.json$/)
   })
 })

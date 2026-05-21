@@ -2,11 +2,18 @@ import { promises as fs } from 'node:fs'
 import { basename } from 'node:path'
 import { CliError } from '../core/errors.js'
 import { pathExists, readJsonFile, writeJsonFile } from '../core/json.js'
-import { buildLaunchPresetFileName, buildTempSettingsFileName, normalizePresetName, resolvePresetIndexKey } from '../core/name.js'
+import {
+  buildLaunchPresetFileName,
+  buildTempSettingsFileName,
+  normalizePresetName,
+  parseSettingsFileName,
+  resolvePresetIndexKey,
+} from '../core/name.js'
 import {
   resolveProjectLastUsedPath,
   resolveProjectLaunchPresetIndexPath,
   resolveProjectLaunchPresetPath,
+  resolveProjectTempSettingsDir,
   resolveProjectTempSettingsPath,
 } from '../core/paths.js'
 import {
@@ -21,6 +28,8 @@ import {
   type Settings,
 } from '../core/schema.js'
 import { ensureProjectCcspStore } from './project-store-service.js'
+
+const MAX_TEMP_SETTINGS_FILES = 20
 
 function nowIso(): string {
   return new Date().toISOString()
@@ -57,6 +66,31 @@ export function createLaunchPresetService(cwd: string) {
     if (!name) throw new CliError(`Launch preset not found: ${nameInput}`)
     await ensureProjectCcspStore(cwd)
     await writeJsonFile(lastUsedPath, { presetName: name, updatedAt: nowIso() })
+  }
+
+  async function pruneOldTempSettings(): Promise<void> {
+    const tempDir = resolveProjectTempSettingsDir(cwd)
+    let entries: string[]
+    try {
+      entries = await fs.readdir(tempDir)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+      throw error
+    }
+
+    const settingsFiles = entries.filter(entry => parseSettingsFileName(entry)).sort()
+    const excess = settingsFiles.length - MAX_TEMP_SETTINGS_FILES
+    if (excess <= 0) return
+
+    await Promise.all(
+      settingsFiles.slice(0, excess).map(async fileName => {
+        try {
+          await fs.unlink(resolveProjectTempSettingsPath(cwd, fileName))
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+        }
+      }),
+    )
   }
 
   const service = {
@@ -170,6 +204,7 @@ export function createLaunchPresetService(cwd: string) {
       const fileName = buildTempSettingsFileName(date)
       const filePath = resolveProjectTempSettingsPath(cwd, fileName)
       await writeJsonFile(filePath, settings)
+      await pruneOldTempSettings()
       return filePath
     },
 
