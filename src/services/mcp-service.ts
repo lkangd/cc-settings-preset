@@ -122,7 +122,10 @@ export function resolveDeniedMcpServers(sources: Array<{ settings: Settings }>):
 
 export function applyDeniedMcpServers(states: McpState[], denied: McpPolicyEntry[] = []): McpState[] {
   const deniedNames = new Set(denied.flatMap(entry => 'serverName' in entry ? [entry.serverName] : []))
-  return sortMcpStates(states.map(state => ({ ...state, enabled: !deniedNames.has(state.name) })))
+  if (deniedNames.size === 0) return sortMcpStates(states)
+  return sortMcpStates(states.map(state => (
+    deniedNames.has(state.name) ? { ...state, enabled: false } : state
+  )))
 }
 
 export function mcpStatesToDeniedServers(states: McpState[]): McpPolicyEntry[] {

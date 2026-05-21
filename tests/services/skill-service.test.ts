@@ -65,6 +65,18 @@ describe('discoverSkillStates', () => {
     expect(resolved.find(skill => skill.name === 'demo-plugin:plugin-skill')?.enabled).toBe(true)
   })
 
+  it('preserves baseline skill state when launch preset has no override entry', () => {
+    const baseline = [
+      { name: 'context7-mcp', enabled: false, source: 'user' as const, toggleable: true },
+      { name: 'find-skills', enabled: true, source: 'project' as const, toggleable: true },
+    ]
+
+    expect(applySkillOverrides(baseline, { 'find-skills': 'off' })).toEqual([
+      { name: 'context7-mcp', enabled: false, source: 'user', toggleable: true },
+      { name: 'find-skills', enabled: false, source: 'project', toggleable: true },
+    ])
+  })
+
   it('discovers user skills exposed as symlinks to directories', async () => {
     const root = await mkdtemp(join(tmpdir(), 'ccsp-symlink-skills-'))
     const home = join(root, 'home')

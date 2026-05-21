@@ -3,15 +3,14 @@ import { Box, Text, useApp, useInput, useStdout } from 'ink'
 import { TruncateText } from './components/truncate-text.js'
 import type { LaunchPresetMeta } from '../core/schema.js'
 import {
+  annotateToggleItems,
   createProjectLaunchFlowState,
   getActiveProjectLaunchItem,
   getActiveProjectLaunchState,
   reduceProjectLaunchFlow,
   type ProjectLaunchToggleState
 } from '../flows/project-launch-flow.js'
-import type { McpState } from '../services/mcp-service.js'
-import type { PluginState } from '../services/plugin-service.js'
-import type { SkillState } from '../services/skill-service.js'
+import { ToggleColumn } from './components/toggle-column.js'
 import { useInkResizeVersion } from './components/resize-context.js'
 import { TextInput } from './components/text-input.js'
 import { normalizePresetName } from '../core/name.js'
@@ -34,17 +33,6 @@ export type ProjectLaunchAppProps = {
 
 function enabledCount(items: Array<{ enabled: boolean }>): number {
   return items.filter(item => item.enabled).length
-}
-
-function sourceBadge(source: PluginState['source'] | SkillState['source'] | McpState['source']): string {
-  if (source === 'project-local') return '[L]'
-  if (source === 'project') return '[P]'
-  if (source === 'user') return '[U]'
-  if (source === 'command') return '[C]'
-  if (source === 'plugin') return '[PL]'
-  if (source === 'local') return '[L]'
-  if (source === 'connector') return '[CN]'
-  return '[D]'
 }
 
 export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedName, onSubmit, onCreateSubmit }: ProjectLaunchAppProps) {
@@ -178,6 +166,11 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedNa
     )
   }
 
+  const detectedBaseline = state.statesByPreset.Detected ?? detected
+  const pluginItems = annotateToggleItems(detectedBaseline, 'plugins', state.plugins)
+  const skillItems = annotateToggleItems(detectedBaseline, 'skills', state.skills)
+  const mcpItems = annotateToggleItems(detectedBaseline, 'mcps', state.mcps)
+
   return (
     <Box flexDirection="column">
       <TruncateText bold color="cyan">Select project launch preset</TruncateText>
@@ -206,7 +199,7 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedNa
         <ToggleColumn
           title={`Plugins(${enabledCount(state.plugins)}/${state.plugins.length})`}
           focused={state.focus === 'plugins'}
-          items={state.plugins}
+          items={pluginItems}
           cursor={state.pluginCursor}
           width={detailWidth}
         />
@@ -214,7 +207,7 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedNa
         <ToggleColumn
           title={`Skills(${enabledCount(state.skills)}/${state.skills.length})`}
           focused={state.focus === 'skills'}
-          items={state.skills}
+          items={skillItems}
           cursor={state.skillCursor}
           width={detailWidth}
         />
@@ -222,52 +215,12 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedNa
         <ToggleColumn
           title={`MCPs(${enabledCount(state.mcps)}/${state.mcps.length})`}
           focused={state.focus === 'mcps'}
-          items={state.mcps}
+          items={mcpItems}
           cursor={state.mcpCursor}
           width={mcpWidth}
         />
       </Box>
-    </Box>
-  )
-}
-
-function ToggleColumn({
-  title,
-  focused,
-  items,
-  cursor,
-  width
-}: {
-  title: string
-  focused: boolean
-  items: Array<{
-    name: string
-    enabled: boolean
-    source: PluginState['source'] | SkillState['source'] | McpState['source']
-    toggleable?: boolean
-  }>
-  cursor: number
-  width: number
-}) {
-  return (
-    <Box
-      flexDirection="column"
-      width={width}
-      borderStyle="round"
-      borderColor={focused ? 'cyan' : 'gray'}
-      paddingX={0.5}
-      paddingY={0.5}
-    >
-      <TruncateText bold>{title}</TruncateText>
-      {items.map((item, index) => (
-        <TruncateText key={item.name} {...(focused && index === cursor ? { color: 'cyan' as const } : {})}>
-          {focused && index === cursor ? '❯ ' : '  '}
-          <Text color={item.enabled ? 'green' : 'red'}>{item.enabled ? 'ON ' : 'OFF'}</Text> {sourceBadge(item.source)}{' '}
-          {item.name}
-          {item.toggleable === false ? ' (plugin)' : ''}
-        </TruncateText>
-      ))}
-      {items.length === 0 ? <TruncateText dimColor>none found</TruncateText> : null}
+      {state.toggleMessage ? <TruncateText color="yellow">{state.toggleMessage}</TruncateText> : null}
     </Box>
   )
 }

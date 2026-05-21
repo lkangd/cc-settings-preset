@@ -200,6 +200,7 @@ export function applySkillOverrides(
 ): SkillState[] {
   return sortSkillStates(states.map(skill => {
     if (skill.source === 'plugin') return skill
+    if (!(skill.name in overrides)) return skill
     return { ...skill, enabled: overrides[skill.name] !== 'off' }
   }))
 }

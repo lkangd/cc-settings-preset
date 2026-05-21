@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Box, Text, useApp, useInput, useStdout } from 'ink'
 import {
+  annotateToggleItems,
   createProjectLaunchFlowState,
   focusProjectLaunchPreset,
   getActiveProjectLaunchItem,
@@ -8,10 +9,8 @@ import {
   reduceProjectLaunchFlow,
   type ProjectLaunchFlowState,
 } from '../flows/project-launch-flow.js'
-import type { McpState } from '../services/mcp-service.js'
-import type { PluginState } from '../services/plugin-service.js'
-import type { SkillState } from '../services/skill-service.js'
 import { TextInput } from './components/text-input.js'
+import { ToggleColumn } from './components/toggle-column.js'
 import type { ProjectLaunchAppProps, ProjectLaunchResult } from './project-launch-app.js'
 import type { ProjectLaunchToggleState } from '../flows/project-launch-flow.js'
 import { buildLaunchPresetFileName, normalizePresetName } from '../core/name.js'
@@ -26,17 +25,6 @@ export type ProjectManageResult =
 
 function enabledCount(items: Array<{ enabled: boolean }>): number {
   return items.filter(item => item.enabled).length
-}
-
-function sourceBadge(source: PluginState['source'] | SkillState['source'] | McpState['source']): string {
-  if (source === 'project-local') return '[L]'
-  if (source === 'project') return '[P]'
-  if (source === 'user') return '[U]'
-  if (source === 'command') return '[C]'
-  if (source === 'plugin') return '[PL]'
-  if (source === 'local') return '[L]'
-  if (source === 'connector') return '[CN]'
-  return '[D]'
 }
 
 function syncProjectPresetRename(state: ProjectLaunchFlowState, fromName: string, toName: string): ProjectLaunchFlowState {
@@ -200,6 +188,10 @@ export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedNa
   })
 
   const activeItem = getActiveProjectLaunchItem(state)
+  const detectedBaseline = state.statesByPreset.Detected ?? detected
+  const pluginItems = annotateToggleItems(detectedBaseline, 'plugins', state.plugins)
+  const skillItems = annotateToggleItems(detectedBaseline, 'skills', state.skills)
+  const mcpItems = annotateToggleItems(detectedBaseline, 'mcps', state.mcps)
 
   if (saveMode === 'name-new') {
     return (
@@ -302,27 +294,13 @@ export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedNa
           ))}
         </Box>
         <Box width={1} />
-        <ToggleColumn title={`Plugins(${enabledCount(state.plugins)}/${state.plugins.length})`} focused={state.focus === 'plugins'} items={state.plugins} cursor={state.pluginCursor} width={detailWidth} />
+        <ToggleColumn title={`Plugins(${enabledCount(state.plugins)}/${state.plugins.length})`} focused={state.focus === 'plugins'} items={pluginItems} cursor={state.pluginCursor} width={detailWidth} />
         <Box width={1} />
-        <ToggleColumn title={`Skills(${enabledCount(state.skills)}/${state.skills.length})`} focused={state.focus === 'skills'} items={state.skills} cursor={state.skillCursor} width={detailWidth} />
+        <ToggleColumn title={`Skills(${enabledCount(state.skills)}/${state.skills.length})`} focused={state.focus === 'skills'} items={skillItems} cursor={state.skillCursor} width={detailWidth} />
         <Box width={1} />
-        <ToggleColumn title={`MCPs(${enabledCount(state.mcps)}/${state.mcps.length})`} focused={state.focus === 'mcps'} items={state.mcps} cursor={state.mcpCursor} width={mcpWidth} />
+        <ToggleColumn title={`MCPs(${enabledCount(state.mcps)}/${state.mcps.length})`} focused={state.focus === 'mcps'} items={mcpItems} cursor={state.mcpCursor} width={mcpWidth} />
       </Box>
-      {message ? <Text color={message.color}>{message.text}</Text> : null}
-    </Box>
-  )
-}
-
-function ToggleColumn({ title, focused, items, cursor, width }: { title: string; focused: boolean; items: Array<{ name: string; enabled: boolean; source: PluginState['source'] | SkillState['source'] | McpState['source']; toggleable?: boolean }>; cursor: number; width: number }) {
-  return (
-    <Box flexDirection="column" width={width} borderStyle="round" borderColor={focused ? 'cyan' : 'gray'} paddingX={0.5} paddingY={0.5}>
-      <Text bold>{title}</Text>
-      {items.map((item, index) => (
-        <Text key={item.name} wrap="truncate-end" {...(focused && index === cursor ? { color: 'cyan' as const } : {})}>
-          {focused && index === cursor ? '❯ ' : '  '}<Text color={item.enabled ? 'green' : 'red'}>{item.enabled ? 'ON ' : 'OFF'}</Text> {sourceBadge(item.source)} {item.name}{item.toggleable === false ? ' (plugin)' : ''}
-        </Text>
-      ))}
-      {items.length === 0 ? <Text dimColor>none found</Text> : null}
+      {state.toggleMessage ? <Text color="yellow">{state.toggleMessage}</Text> : message ? <Text color={message.color}>{message.text}</Text> : null}
     </Box>
   )
 }

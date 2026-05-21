@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
-import { discoverMcpStates, mcpStatesToDeniedServers, resolveDeniedMcpServers } from '../../src/services/mcp-service.js'
+import { applyDeniedMcpServers, discoverMcpStates, mcpStatesToDeniedServers, resolveDeniedMcpServers } from '../../src/services/mcp-service.js'
 
 describe('discoverMcpStates', () => {
   it('discovers local, project, user, and plugin MCP servers with precedence', async () => {
@@ -60,6 +60,19 @@ describe('discoverMcpStates', () => {
     ])).toEqual([
       { serverName: 'github' },
       { serverName: 'chrome-devtools' },
+    ])
+  })
+
+  it('only disables listed servers and preserves baseline when denied list is empty', () => {
+    const baseline = [
+      { name: 'chrome-devtools', enabled: false, source: 'user' as const, config: {} },
+      { name: 'github', enabled: true, source: 'project' as const, config: {} },
+    ]
+
+    expect(applyDeniedMcpServers(baseline, [])).toEqual(baseline)
+    expect(applyDeniedMcpServers(baseline, [{ serverName: 'github' }])).toEqual([
+      { name: 'chrome-devtools', enabled: false, source: 'user', config: {} },
+      { name: 'github', enabled: false, source: 'project', config: {} },
     ])
   })
 
