@@ -10,6 +10,8 @@ import type { ManageResult } from '../src/ink/manage-app.js'
 import { sanitizeClaudeArgs } from '../src/core/args.js'
 import { runInTty } from './helpers/tty.js'
 
+const createBasePresetMock = vi.fn()
+const readJsonFileMock = vi.fn().mockResolvedValue({})
 const renderMock = vi.fn()
 const clearMock = vi.fn()
 const instanceCleanupMock = vi.fn()
@@ -27,6 +29,7 @@ const discoverMcpStatesMock = vi.fn().mockResolvedValue([])
 const spawnClaudeMock = vi.fn().mockResolvedValue(0)
 
 type ManageAppElement = React.ReactElement<{ onSubmit: (result: ManageResult) => void; initialState?: { renamePresetName?: string; renameValue?: string; renameError?: string } }>
+type CreateAppElement = React.ReactElement<{ onSubmit: (result: { sourcePath: string; name: string }) => void }>
 
 function unwrapRenderedElement(element: unknown): unknown {
   if (!React.isValidElement(element)) {
@@ -56,6 +59,10 @@ function unwrapRenderedElement(element: unknown): unknown {
   return element
 }
 
+vi.mock('../src/core/json.js', () => ({
+  readJsonFile: readJsonFileMock,
+}))
+
 vi.mock('ink', () => ({
   Text: ({ children }: { children?: React.ReactNode }) => children,
   render: (element: unknown) => renderMock(unwrapRenderedElement(element)),
@@ -78,7 +85,7 @@ vi.mock('../src/services/preset-service.js', () => ({
     getPresetPath: vi.fn((name: string) => Promise.resolve(`/tmp/.ccsp/settings/${name}.json`)),
     readPresetSettings: vi.fn().mockResolvedValue({}),
     writePresetSettingsByName: writePresetSettingsByNameMock,
-    createBasePreset: vi.fn(),
+    createBasePreset: createBasePresetMock,
   }),
 }))
 
@@ -475,6 +482,42 @@ describe('run command', () => {
     expect(createProjectLaunchPresetMock).not.toHaveBeenCalled()
     expect(writeTempSettingsMock).toHaveBeenCalledWith({})
   })
+
+  it('clears the screen and reopens global settings when backing out of project launch', async () => {
+    const stdoutWrite = vi.spyOn(process.stdout, 'write').mockReturnValue(true)
+    const basePreset = {
+      type: 'base' as const,
+      name: 'base',
+      fileName: 'base-settings.json',
+      createdAt: '2026-05-17T00:00:00.000Z',
+      updatedAt: '2026-05-17T00:00:00.000Z',
+    }
+    listPresetsMock.mockResolvedValue([basePreset])
+
+    renderMock
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          name: 'base',
+          sourcePath: '/tmp/.ccsp/settings/base-settings.json',
+          settings: {},
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({ type: 'back' })
+        return { waitUntilExit: async () => undefined }
+      })
+      .mockImplementationOnce(() => ({ waitUntilExit: async () => undefined }))
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli'])
+
+    expect(stdoutWrite).toHaveBeenCalledWith('\x1b[3J\x1b[H\x1b[2J')
+    expect(renderMock).toHaveBeenCalledTimes(3)
+    expect(spawnClaudeMock).not.toHaveBeenCalled()
+
+    stdoutWrite.mockRestore()
+  })
 })
 
 function normalizeTerminalOutput(value: string): string {
@@ -509,6 +552,9 @@ describe('manage command', () => {
     deletePresetMock.mockReset()
     writePresetSettingsByNameMock.mockReset()
     renamePresetMock.mockReset()
+    createBasePresetMock.mockReset()
+    readJsonFileMock.mockReset()
+    readJsonFileMock.mockResolvedValue({})
     writeTempSettingsMock.mockReset()
     writeTempSettingsMock.mockResolvedValue('/tmp/project/.claude/.ccsp/tmp/temp-settings.json')
     discoverSettingsSourcesMock.mockReset()
@@ -578,6 +624,53 @@ describe('manage command', () => {
     expect(renderMock).toHaveBeenCalledTimes(2)
   })
 
+  it('creates a settings preset from manage mode and reopens the manage list', async () => {
+    const basePreset = {
+      type: 'base' as const,
+      name: 'base',
+      fileName: 'base.json',
+      createdAt: '2026-05-17T00:00:00.000Z',
+      updatedAt: '2026-05-17T00:00:00.000Z',
+    }
+    const workPreset = {
+      type: 'base' as const,
+      name: 'work',
+      fileName: 'work.json',
+      createdAt: '2026-05-17T00:00:00.000Z',
+      updatedAt: '2026-05-17T00:00:00.000Z',
+    }
+
+    discoverSettingsSourcesMock.mockResolvedValueOnce([
+      { scope: 'user', filePath: '/tmp/user/settings.json', settings: {} },
+    ])
+    listPresetsMock
+      .mockResolvedValueOnce([basePreset])
+      .mockResolvedValueOnce([basePreset, workPreset])
+    createBasePresetMock.mockResolvedValueOnce(workPreset)
+
+    renderMock
+      .mockImplementationOnce((element: ManageAppElement) => {
+        element.props.onSubmit({ type: 'create' })
+        return { waitUntilExit: async () => undefined }
+      })
+      .mockImplementationOnce((element: CreateAppElement) => {
+        element.props.onSubmit({ sourcePath: '/tmp/user/settings.json', name: 'work' })
+        return { waitUntilExit: async () => undefined }
+      })
+      .mockImplementationOnce((element: ManageAppElement) => {
+        element.props.onSubmit({ type: 'exit' })
+        return { waitUntilExit: async () => undefined }
+      })
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli', 'manage'])
+
+    expect(readJsonFileMock).toHaveBeenCalledWith('/tmp/user/settings.json')
+    expect(createBasePresetMock).toHaveBeenCalledWith('work', {})
+    expect(renderMock).toHaveBeenCalledTimes(3)
+    expect(listPresetsMock).toHaveBeenCalledTimes(2)
+  })
+
   it('launches the selected settings file from manage mode through project launch selection', async () => {
     const basePreset = {
       type: 'base' as const,
@@ -607,6 +700,32 @@ describe('manage command', () => {
 
     expect(renderMock).toHaveBeenCalledTimes(2)
     expect(writeTempSettingsMock).toHaveBeenCalledWith({})
+    expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
+  })
+
+  it('launches Claude from project manage mode without reopening the manage screen', async () => {
+    discoverSettingsSourcesMock.mockResolvedValueOnce([
+      {
+        scope: 'project',
+        filePath: '/tmp/project/.claude/settings.json',
+        settings: { permissions: { allow: ['Read(*)'] } },
+      },
+    ])
+
+    renderMock.mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+      element.props.onSubmit({
+        type: 'launch',
+        presetName: 'web',
+        toggles: { plugins: [], skills: [], mcps: [] },
+      })
+      return { waitUntilExit: async () => undefined }
+    })
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli', 'manage', '--project'])
+
+    expect(renderMock).toHaveBeenCalledTimes(1)
+    expect(writeTempSettingsMock).toHaveBeenCalled()
     expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
   })
 
@@ -700,7 +819,6 @@ describe('manage command', () => {
     })
 
     expect(result.rawOutput.length).toBeGreaterThan(0)
-    expect(result.normalizedOutput).toContain('Rename test-dddd to')
-    expect(result.normalizedOutput).toContain('test-dddd▌')
+    expect(result.normalizedOutput).toContain('Rename test-dddd to test-dddd')
   }, 15000)
 })

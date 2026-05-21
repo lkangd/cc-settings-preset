@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { Box, useApp, useInput } from 'ink'
 
-import { createCreateFlowState, type CreateSource } from '../flows/create-flow.js'
+import { normalizeInputPath } from '../core/paths.js'
+import { derivePresetNameFromSettingsPath } from '../core/name.js'
+import { createCreateFlowState, transitionCreateFlowToName, type CreateSource } from '../flows/create-flow.js'
 import { TextInput } from './components/text-input.js'
 import { TruncateText } from './components/truncate-text.js'
 
@@ -40,7 +42,7 @@ export function CreateApp({ sources, onSubmit }: Props) {
     if (key.return) {
       const source = state.sources[state.cursor]
       if (source) {
-        setState(current => ({ ...current, mode: 'name', selectedPath: source.filePath }))
+        setState(current => transitionCreateFlowToName(current, source.filePath))
         return
       }
       setState(current => ({ ...current, mode: 'manual-path' }))
@@ -55,22 +57,26 @@ export function CreateApp({ sources, onSubmit }: Props) {
         placeholder="/path/to/settings.json"
         onChange={value => setState(current => ({ ...current, manualPath: value }))}
         onCancel={() => setState(current => ({ ...current, mode: 'select-source' }))}
-        onSubmit={() => setState(current => ({ ...current, mode: 'name', selectedPath: current.manualPath }))}
+        onSubmit={() => setState(current => transitionCreateFlowToName(
+          current,
+          normalizeInputPath(current.manualPath),
+        ))}
       />
     )
   }
 
-  if (state.mode === 'name') {
+  if (state.mode === 'name' && state.selectedPath) {
+    const defaultName = derivePresetNameFromSettingsPath(state.selectedPath)
+    const resolvedName = state.name.trim() || defaultName
     return (
       <TextInput
         label="Preset name"
         value={state.name}
-        placeholder="base"
+        placeholder={defaultName}
         onChange={value => setState(current => ({ ...current, name: value }))}
         onCancel={() => setState(current => ({ ...current, mode: 'select-source' }))}
         onSubmit={() => {
-          if (!state.selectedPath) return
-          onSubmit({ sourcePath: state.selectedPath, name: state.name })
+          onSubmit({ sourcePath: state.selectedPath!, name: resolvedName })
           exit()
         }}
       />

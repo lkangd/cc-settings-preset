@@ -1,9 +1,8 @@
 import { promises as fs } from 'node:fs'
-import { basename } from 'node:path'
 
 import { CliError } from '../core/errors.js'
 import { pathExists, readJsonFile, writeJsonFile } from '../core/json.js'
-import { buildSettingsFileName, normalizePresetName } from '../core/name.js'
+import { buildSettingsFileName, derivePresetNameFromSettingsPath, normalizePresetName, resolvePresetIndexKey } from '../core/name.js'
 import { resolveIndexPath, resolvePresetPath } from '../core/paths.js'
 import {
   createEmptyIndex,
@@ -91,11 +90,12 @@ export function createPresetService(globalRoot: string) {
     },
 
     async writeBasePreset(nameInput: string, settingsInput: unknown): Promise<BasePresetMeta> {
-      const name = normalizePresetName(nameInput)
       const settings = parseSettings(settingsInput)
       const index = await readIndex()
+      const name = resolvePresetIndexKey(index.presets, nameInput)
+      if (!name) throw new CliError(`Base preset not found: ${nameInput}`)
       const existing = index.presets[name]
-      if (!existing || existing.type !== 'base') throw new CliError(`Base preset not found: ${name}`)
+      if (!existing || existing.type !== 'base') throw new CliError(`Base preset not found: ${nameInput}`)
 
       const updated: BasePresetMeta = { ...existing, updatedAt: nowIso() }
       index.presets[name] = updated
@@ -105,11 +105,12 @@ export function createPresetService(globalRoot: string) {
     },
 
     async writePresetSettingsByName(nameInput: string, settingsInput: unknown): Promise<PresetMeta> {
-      const name = normalizePresetName(nameInput)
       const settings = parseSettings(settingsInput)
       const index = await readIndex()
+      const name = resolvePresetIndexKey(index.presets, nameInput)
+      if (!name) throw new CliError(`Preset not found: ${nameInput}`)
       const existing = index.presets[name]
-      if (!existing) throw new CliError(`Preset not found: ${name}`)
+      if (!existing) throw new CliError(`Preset not found: ${nameInput}`)
 
       const updated: PresetMeta = { ...existing, updatedAt: nowIso() }
       index.presets[name] = updated
@@ -120,20 +121,21 @@ export function createPresetService(globalRoot: string) {
 
 
     async renamePreset(nameInput: string, newNameInput: string): Promise<PresetMeta> {
-      const name = normalizePresetName(nameInput)
-      const requestedName = normalizePresetName(newNameInput)
+      const requestedName = normalizePresetName(newNameInput, { preserveCase: true })
       const index = await readIndex()
+      const name = resolvePresetIndexKey(index.presets, nameInput)
+      if (!name) throw new CliError(`Preset not found: ${nameInput}`)
       const meta = index.presets[name]
-      if (!meta) throw new CliError(`Preset not found: ${name}`)
+      if (!meta) throw new CliError(`Preset not found: ${nameInput}`)
 
-      if (meta.type !== 'base') throw new CliError(`Base preset not found: ${name}`)
+      if (meta.type !== 'base') throw new CliError(`Base preset not found: ${nameInput}`)
       const newName = requestedName
       if (newName === name) {
         return { ...meta, updatedAt: nowIso() }
       }
       if (index.presets[newName]) throw new CliError(`Preset already exists: ${newName}`)
 
-      const updated: PresetMeta = { ...meta, name: newName, fileName: buildSettingsFileName(newName), updatedAt: nowIso() }
+      const updated: PresetMeta = { ...meta, name: newName, fileName: buildSettingsFileName(newName, { preserveCase: true }), updatedAt: nowIso() }
 
       await fs.rename(getPresetPath(meta), resolvePresetPath(globalRoot, updated.fileName))
       delete index.presets[name]
@@ -144,8 +146,9 @@ export function createPresetService(globalRoot: string) {
     },
 
     async deletePreset(nameInput: string): Promise<void> {
-      const name = normalizePresetName(nameInput)
       const index = await readIndex()
+      const name = resolvePresetIndexKey(index.presets, nameInput)
+      if (!name) return
       const meta = index.presets[name]
       if (!meta) return
 
@@ -160,7 +163,7 @@ export function createPresetService(globalRoot: string) {
 
     async importExistingSettingsFile(filePath: string, nameInput?: string): Promise<BasePresetMeta> {
       const settings = parseSettings(await readJsonFile(filePath))
-      const baseName = nameInput ?? basename(filePath).replace(/-?settings\.json$/, '')
+      const baseName = nameInput ?? derivePresetNameFromSettingsPath(filePath)
       return service.createBasePreset(baseName, settings)
     },
   }

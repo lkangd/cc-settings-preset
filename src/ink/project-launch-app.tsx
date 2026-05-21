@@ -20,6 +20,7 @@ type SaveChoice = 'none' | 'confirm-save' | 'name-new'
 export type ProjectLaunchResult =
   | { type: 'launch'; presetName?: string; toggles: ProjectLaunchToggleState; saveAs?: string }
   | { type: 'temp-launch'; toggles: ProjectLaunchToggleState }
+  | { type: 'back' }
 
 export type ProjectLaunchAppProps = {
   presets: LaunchPresetMeta[]
@@ -27,6 +28,7 @@ export type ProjectLaunchAppProps = {
   statesByPreset: Record<string, ProjectLaunchToggleState>
   lastUsedName?: string
   onSubmit: (result: ProjectLaunchResult) => void
+  onCreateSubmit?: (saveAs: string, toggles: ProjectLaunchToggleState) => Promise<string | null>
 }
 
 function enabledCount(items: Array<{ enabled: boolean }>): number {
@@ -44,7 +46,7 @@ function sourceBadge(source: PluginState['source'] | SkillState['source'] | McpS
   return '[D]'
 }
 
-export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedName, onSubmit }: ProjectLaunchAppProps) {
+export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedName, onSubmit, onCreateSubmit }: ProjectLaunchAppProps) {
   useInkResizeVersion()
   const { exit } = useApp()
   const { stdout } = useStdout()
@@ -65,6 +67,7 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedNa
   )
   const [saveChoice, setSaveChoice] = useState<SaveChoice>('none')
   const [newName, setNewName] = useState('')
+  const [createError, setCreateError] = useState<string | null>(null)
 
   function submitLaunch(saveAs?: string) {
     const normalizedSaveAs = saveAs?.trim()
@@ -88,12 +91,20 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedNa
       return
     }
     if (key.leftArrow || input === 'h') setState(current => reduceProjectLaunchFlow(current, { type: 'focus-left' }))
-    if (key.rightArrow || input === 'l') setState(current => reduceProjectLaunchFlow(current, { type: 'focus-right' }))
+    if (key.rightArrow || (input === 'l' && !key.ctrl && !key.meta)) setState(current => reduceProjectLaunchFlow(current, { type: 'focus-right' }))
     if (key.upArrow || input === 'k') setState(current => reduceProjectLaunchFlow(current, { type: 'up' }))
     if (key.downArrow || input === 'j') setState(current => reduceProjectLaunchFlow(current, { type: 'down' }))
     if (input === 'p') setState(current => reduceProjectLaunchFlow(current, { type: 'focus-plugins' }))
     if (input === 's') setState(current => reduceProjectLaunchFlow(current, { type: 'focus-skills' }))
     if (input === 'm') setState(current => reduceProjectLaunchFlow(current, { type: 'focus-mcps' }))
+    if (key.escape) {
+      if (state.focus === 'presets') {
+        onSubmit({ type: 'back' })
+        exit()
+        return
+      }
+      setState(current => reduceProjectLaunchFlow(current, { type: 'focus-presets' }))
+    }
     if (input === 't') setState(current => reduceProjectLaunchFlow(current, { type: 'toggle-sort-mode' }))
     if (input === ' ') setState(current => reduceProjectLaunchFlow(current, { type: 'toggle-current' }))
     if (key.return) {
@@ -124,20 +135,47 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedNa
 
   if (saveChoice === 'name-new') {
     return (
-      <TextInput
-        label="Project launch preset name"
-        value={newName}
-        onChange={setNewName}
-        onCancel={() => setSaveChoice('confirm-save')}
-        onSubmit={() => submitLaunch(newName)}
-      />
+      <Box flexDirection="column">
+        {createError ? <TruncateText color="red">{createError}</TruncateText> : null}
+        <TextInput
+          label="Project launch preset name"
+          value={newName}
+          onChange={value => {
+            setCreateError(null)
+            setNewName(value)
+          }}
+          onCancel={() => {
+            setCreateError(null)
+            setSaveChoice('confirm-save')
+          }}
+          onSubmit={async () => {
+            const saveAs = newName.trim()
+            if (!saveAs) return
+            if (onCreateSubmit) {
+              const error = await onCreateSubmit(saveAs, getActiveProjectLaunchState(state))
+              if (error) {
+                setCreateError(error)
+                return
+              }
+              onSubmit({
+                type: 'launch',
+                presetName: saveAs,
+                toggles: getActiveProjectLaunchState(state),
+              })
+              exit()
+              return
+            }
+            submitLaunch(newName)
+          }}
+        />
+      </Box>
     )
   }
 
   return (
     <Box flexDirection="column">
       <TruncateText bold color="cyan">Select project launch preset</TruncateText>
-      <TruncateText dimColor>←/→ switch column · p plugins · s skills · m mcps · t sort · space toggle · enter launch · q quit</TruncateText>
+      <TruncateText dimColor>←/→ switch column · p plugins · s skills · m mcps · t sort · space toggle · enter launch · esc presets/back · q quit</TruncateText>
       <Box marginTop={0.5} width={innerWidth}>
         <Box
           flexDirection="column"

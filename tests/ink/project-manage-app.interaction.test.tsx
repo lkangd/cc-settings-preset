@@ -3,7 +3,7 @@ import TestRenderer, { act } from 'react-test-renderer'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ProjectManageApp } from '../../src/ink/project-manage-app.js'
 
-type InputHandler = (input: string, key: { return?: boolean; escape?: boolean; leftArrow?: boolean; rightArrow?: boolean; upArrow?: boolean; downArrow?: boolean }) => void
+type InputHandler = (input: string, key: { return?: boolean; escape?: boolean; leftArrow?: boolean; rightArrow?: boolean; upArrow?: boolean; downArrow?: boolean; ctrl?: boolean; meta?: boolean }) => void
 
 type TextInputProps = {
   label: string
@@ -138,6 +138,8 @@ describe('ProjectManageApp interactions', () => {
 
     expect(flattenJson(output!.toJSON())).toContain('Presets( 2 )')
     expect(flattenJson(output!.toJSON())).toContain('fresh')
+    expect(flattenJson(output!.toJSON())).toMatch(/❯\s+fresh/)
+    expect(flattenJson(output!.toJSON())).not.toMatch(/❯\s+Detected/)
   })
 
   it('keeps create errors in the input when the new preset name conflicts', async () => {
@@ -265,6 +267,33 @@ describe('ProjectManageApp interactions', () => {
     expect(flattenJson(output!.toJSON())).toContain('Detected')
   })
 
+  it('returns focus to presets when esc is pressed in browse mode', () => {
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <ProjectManageApp
+          presets={[]}
+          detected={{ plugins: [{ name: 'alpha', enabled: true, source: 'user' }], skills: [], mcps: [] }}
+          statesByPreset={{}}
+          onSubmit={vi.fn()}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('p', {})
+    })
+
+    expect(flattenJson(output!.toJSON())).not.toMatch(/❯\s+Detected/)
+
+    act(() => {
+      latestInputHandler()?.('', { escape: true })
+    })
+
+    expect(flattenJson(output!.toJSON())).toMatch(/❯\s+Detected/)
+  })
+
   it('returns focus to presets when esc leaves rename mode', () => {
     let output: TestRenderer.ReactTestRenderer
 
@@ -358,5 +387,28 @@ describe('ProjectManageApp interactions', () => {
       presetName: 'web',
       toggles: { plugins: [{ name: 'alpha', enabled: false, source: 'user' }], skills: [], mcps: [] },
     })
+  })
+
+  it('does not launch on ctrl+l so the global refresh shortcut can handle it', () => {
+    const onSubmit = vi.fn()
+
+    act(() => {
+      TestRenderer.create(
+        <ProjectManageApp
+          presets={[{ name: 'web', fileName: 'web-launch.json', createdAt: '2026-05-19T00:00:00.000Z', updatedAt: '2026-05-19T00:00:00.000Z' }]}
+          detected={{ plugins: [], skills: [], mcps: [] }}
+          statesByPreset={{ web: { plugins: [], skills: [], mcps: [] } }}
+          lastUsedName="web"
+          onSubmit={onSubmit}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('l', { ctrl: true })
+    })
+
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(exitMock).not.toHaveBeenCalled()
   })
 })

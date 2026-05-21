@@ -7,7 +7,7 @@ describe('CLI scaffold', () => {
   })
 
   test('exposes the package CLI name', () => {
-    expect(createProgram().name()).toBe('cc-settings-preset')
+    expect(createProgram().name()).toBe('ccsp/cc-settings-preset')
   })
 
   test('prints the banner to stderr', () => {

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Box, Text, useApp, useInput, useStdout } from 'ink'
 import {
   createProjectLaunchFlowState,
+  focusProjectLaunchPreset,
   getActiveProjectLaunchItem,
   getActiveProjectLaunchState,
   reduceProjectLaunchFlow,
@@ -13,6 +14,7 @@ import type { SkillState } from '../services/skill-service.js'
 import { TextInput } from './components/text-input.js'
 import type { ProjectLaunchAppProps, ProjectLaunchResult } from './project-launch-app.js'
 import type { ProjectLaunchToggleState } from '../flows/project-launch-flow.js'
+import { buildLaunchPresetFileName, normalizePresetName } from '../core/name.js'
 
 export type ProjectManageResult =
   | ProjectLaunchResult
@@ -49,18 +51,19 @@ function syncProjectPresetRename(state: ProjectLaunchFlowState, fromName: string
   }
 }
 
-function syncProjectPresetCreate(state: ProjectLaunchFlowState, name: string): ProjectLaunchFlowState {
+function syncProjectPresetCreate(state: ProjectLaunchFlowState, rawName: string): ProjectLaunchFlowState {
+  const name = normalizePresetName(rawName, { preserveCase: true })
   const createdState = (state.draftsByPreset.Detected ?? state.statesByPreset.Detected) as ProjectLaunchToggleState
   const draftsByPreset = Object.fromEntries(
     Object.entries(state.draftsByPreset).filter(([presetName]) => presetName !== 'Detected')
   ) as Record<string, ProjectLaunchToggleState>
 
-  return {
+  return focusProjectLaunchPreset({
     ...state,
-    presetItems: [...state.presetItems, { type: 'preset', name, preset: { name, fileName: `${name}-launch.json`, createdAt: '', updatedAt: '' } }],
+    presetItems: [...state.presetItems, { type: 'preset', name, preset: { name, fileName: buildLaunchPresetFileName(name, { preserveCase: true }), createdAt: '', updatedAt: '' } }],
     statesByPreset: { ...state.statesByPreset, [name]: createdState },
     draftsByPreset,
-  }
+  }, name)
 }
 
 type SaveMode = 'none' | 'name-new'
@@ -107,6 +110,7 @@ export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedNa
     if (input === 'p') setState(current => reduceProjectLaunchFlow(current, { type: 'focus-plugins' }))
     if (input === 's') setState(current => reduceProjectLaunchFlow(current, { type: 'focus-skills' }))
     if (input === 'm') setState(current => reduceProjectLaunchFlow(current, { type: 'focus-mcps' }))
+    if (key.escape) setState(current => reduceProjectLaunchFlow(current, { type: 'focus-presets' }))
     if (input === 't') setState(current => reduceProjectLaunchFlow(current, { type: 'toggle-sort-mode' }))
     if (input === ' ') {
       const item = getActiveProjectLaunchItem(state)
@@ -135,7 +139,7 @@ export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedNa
       setMode('delete')
       return
     }
-    if (input === 'l') {
+    if (input === 'l' && !key.ctrl && !key.meta) {
       const item = getActiveProjectLaunchItem(state)
       const toggles = getActiveProjectLaunchState(state)
       if (state.dirty) {
@@ -287,7 +291,7 @@ export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedNa
   return (
     <Box flexDirection="column">
       <Text bold color="cyan">Manage project launch presets</Text>
-      <Text dimColor>←/→ switch column · p plugins · s skills · m mcps · t sort · space toggle · enter save · r rename · d delete · q quit</Text>
+      <Text dimColor>←/→ switch column · p plugins · s skills · m mcps · t sort · space toggle · enter save · r rename · d delete · l launch · esc presets · q quit</Text>
       <Box marginTop={1} width={innerWidth}>
         <Box flexDirection="column" width={presetWidth} borderStyle="round" borderColor={state.focus === 'presets' ? 'cyan' : 'gray'} paddingX={0.5} paddingY={0.5}>
           <Text bold>Presets({state.presetItems.length})</Text>

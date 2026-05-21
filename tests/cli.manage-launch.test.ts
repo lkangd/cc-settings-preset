@@ -126,6 +126,7 @@ describe('manage launch flow', () => {
       spawnClaude,
     }))
     vi.doMock('ink', () => ({
+      Text: ({ children }: { children?: React.ReactNode }) => children,
       render: (element: React.ReactElement) => {
         const typedElement = unwrapRenderedElement(element) as React.ReactElement<{
           onSubmit: (value: unknown) => void
@@ -254,6 +255,7 @@ describe('manage launch flow', () => {
     vi.doMock('ink', () => {
       let projectManageRenderCount = 0
       return {
+        Text: ({ children }: { children?: React.ReactNode }) => children,
         render: (element: React.ReactElement) => {
           const typedElement = unwrapRenderedElement(element) as React.ReactElement<{
             onSubmit: (value: unknown) => void
@@ -301,4 +303,4 @@ describe('manage launch flow', () => {
       deniedMcpServers: [],
     })
   })
-}
+})

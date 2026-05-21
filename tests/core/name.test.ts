@@ -4,8 +4,10 @@ import {
   buildLaunchPresetFileName,
   buildSettingsFileName,
   buildTempSettingsFileName,
+  derivePresetNameFromSettingsPath,
   normalizePresetName,
   parseSettingsFileName,
+  resolvePresetIndexKey,
 } from '../../src/core/name.js'
 
 describe('normalizePresetName', () => {
@@ -15,8 +17,27 @@ describe('normalizePresetName', () => {
     expect(normalizePresetName('../evil')).toBe('..-evil')
   })
 
+  it('preserves case when requested', () => {
+    expect(normalizePresetName(' Api Work ', { preserveCase: true })).toBe('Api-Work')
+    expect(normalizePresetName('GPT-5.4', { preserveCase: true })).toBe('GPT-5.4')
+  })
+
+  it('resolves preset index keys case-insensitively', () => {
+    const presets = { 'Api-Work': {} }
+    expect(resolvePresetIndexKey(presets, 'api-work')).toBe('Api-Work')
+    expect(resolvePresetIndexKey(presets, 'Api Work')).toBe('Api-Work')
+  })
+
   it('uses timestamp fallback when the input has no safe characters', () => {
     expect(normalizePresetName('中文')).toMatch(/^\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}$/)
+  })
+})
+
+describe('derivePresetNameFromSettingsPath', () => {
+  it('derives preset names from settings file paths', () => {
+    expect(derivePresetNameFromSettingsPath('/home/.claude/settings.json')).toBe('settings')
+    expect(derivePresetNameFromSettingsPath('/repo/.claude/settings.local.json')).toBe('settings.local')
+    expect(derivePresetNameFromSettingsPath('/tmp/base-settings.json')).toBe('base')
   })
 })
 

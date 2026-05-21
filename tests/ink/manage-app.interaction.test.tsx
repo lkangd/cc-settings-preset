@@ -3,7 +3,7 @@ import TestRenderer, { act } from 'react-test-renderer'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ManageApp } from '../../src/ink/manage-app.js'
 
-type InputHandler = (input: string, key: { return?: boolean; upArrow?: boolean; downArrow?: boolean; escape?: boolean }) => void
+type InputHandler = (input: string, key: { return?: boolean; upArrow?: boolean; downArrow?: boolean; escape?: boolean; ctrl?: boolean; meta?: boolean }) => void
 
 type TextInputProps = {
   label: string
@@ -99,6 +99,26 @@ describe('ManageApp interactions', () => {
     expect(exitMock).toHaveBeenCalledOnce()
   })
 
+  it('does not launch on ctrl+l so the global refresh shortcut can handle it', () => {
+    const onSubmit = vi.fn()
+
+    act(() => {
+      TestRenderer.create(
+        <ManageApp
+          items={[{ name: 'base', sourcePath: '/tmp/base.json', settings: {} }]}
+          onSubmit={onSubmit}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('l', { ctrl: true })
+    })
+
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(exitMock).not.toHaveBeenCalled()
+  })
+
   it('prefills the current preset name when entering rename mode', () => {
     act(() => {
       TestRenderer.create(
@@ -115,6 +135,26 @@ describe('ManageApp interactions', () => {
     })
 
     expect(textInputProps.at(-1)?.value).toBe('base')
+  })
+
+  it('starts create flow on c', () => {
+    const onSubmit = vi.fn()
+
+    act(() => {
+      TestRenderer.create(
+        <ManageApp
+          items={[{ name: 'base', sourcePath: '/tmp/base.json', settings: {} }]}
+          onSubmit={onSubmit}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('c', {})
+    })
+
+    expect(onSubmit).toHaveBeenCalledWith({ type: 'create' })
+    expect(exitMock).toHaveBeenCalledOnce()
   })
 
   it('keeps the app open after a successful rename and updates the visible item', async () => {

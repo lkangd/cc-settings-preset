@@ -199,3 +199,9 @@ export function getActiveProjectLaunchState(state: ProjectLaunchFlowState): Proj
 export function getActiveProjectLaunchItem(state: ProjectLaunchFlowState): ProjectLaunchPresetItem | undefined {
   return activeItem(state)
 }
+
+export function focusProjectLaunchPreset(state: ProjectLaunchFlowState, presetName: string): ProjectLaunchFlowState {
+  const presetCursor = state.presetItems.findIndex(item => item.name === presetName)
+  if (presetCursor < 0) return state
+  return syncActive({ ...state, focus: 'presets', presetCursor, dirty: false })
+}

@@ -1,3 +1,5 @@
+import { basename } from 'node:path'
+
 function formatTimestampForName(date = new Date()): string {
   const pad = (value: number) => String(value).padStart(2, '0')
   const day = [date.getFullYear(), pad(date.getMonth() + 1), pad(date.getDate())].join('-')
@@ -5,27 +7,59 @@ function formatTimestampForName(date = new Date()): string {
   return `${day}-${time}`
 }
 
-export function normalizePresetName(input: string, fallbackDate = new Date()): string {
-  const normalized = input
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9.]+/g, '-')
+export function derivePresetNameFromSettingsPath(filePath: string): string {
+  const fileName = basename(filePath)
+  const fromSettingsSuffix = fileName.replace(/-?settings\.json$/, '')
+  if (fromSettingsSuffix && fromSettingsSuffix !== fileName) return fromSettingsSuffix
+  if (fileName.endsWith('.json')) return fileName.slice(0, -'.json'.length)
+  return fileName
+}
+
+type NormalizePresetNameOptions = {
+  fallbackDate?: Date
+  preserveCase?: boolean
+}
+
+export function normalizePresetName(input: string, options: NormalizePresetNameOptions = {}): string {
+  const { fallbackDate = new Date(), preserveCase = false } = options
+  let normalized = input.trim()
+  if (!preserveCase) {
+    normalized = normalized.toLowerCase()
+  }
+
+  const invalidChars = preserveCase ? /[^a-zA-Z0-9.]+/g : /[^a-z0-9.]+/g
+  normalized = normalized
+    .replace(invalidChars, '-')
     .replace(/^-+|-+$/g, '')
     .replace(/-{2,}/g, '-')
 
   return normalized || formatTimestampForName(fallbackDate)
 }
 
-export function buildSettingsFileName(name: string): string {
-  return `${normalizePresetName(name)}-settings.json`
+export function resolvePresetIndexKey(
+  presets: Record<string, unknown>,
+  nameInput: string,
+): string | undefined {
+  const lowercaseKey = normalizePresetName(nameInput)
+  if (presets[lowercaseKey]) return lowercaseKey
+
+  const preserveCaseKey = normalizePresetName(nameInput, { preserveCase: true })
+  if (presets[preserveCaseKey]) return preserveCaseKey
+
+  const target = preserveCaseKey.toLowerCase()
+  return Object.keys(presets).find(key => key.toLowerCase() === target)
+}
+
+export function buildSettingsFileName(name: string, options?: Pick<NormalizePresetNameOptions, 'preserveCase'>): string {
+  return `${normalizePresetName(name, options)}-settings.json`
 }
 
 export function buildDerivedFileName(parentName: string, derivedName: string): string {
   return `${normalizePresetName(parentName)}-${normalizePresetName(derivedName)}-settings.json`
 }
 
-export function buildLaunchPresetFileName(name: string): string {
-  return `${normalizePresetName(name)}-launch.json`
+export function buildLaunchPresetFileName(name: string, options?: Pick<NormalizePresetNameOptions, 'preserveCase'>): string {
+  return `${normalizePresetName(name, options)}-launch.json`
 }
 
 export function buildTempSettingsFileName(date = new Date()): string {

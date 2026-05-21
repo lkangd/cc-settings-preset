@@ -5,6 +5,17 @@ export type PathContext = {
   cwd: string
 }
 
+export function normalizeInputPath(input: string): string {
+  let value = input.trim()
+  if (
+    (value.startsWith("'") && value.endsWith("'")) ||
+    (value.startsWith('"') && value.endsWith('"'))
+  ) {
+    value = value.slice(1, -1).trim()
+  }
+  return value
+}
+
 export function createPathContext(input?: Partial<PathContext>): PathContext {
   return {
     homeDir: input?.homeDir ?? process.env.HOME ?? process.cwd(),

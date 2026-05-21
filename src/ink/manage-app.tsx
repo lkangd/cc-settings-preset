@@ -9,6 +9,7 @@ export type ManageResult =
   | { type: 'launch'; item: SettingsSelectItem }
   | { type: 'rename'; item: SettingsSelectItem; newName: string }
   | { type: 'delete'; item: SettingsSelectItem }
+  | { type: 'create' }
   | { type: 'refresh' }
   | { type: 'exit' }
 
@@ -36,7 +37,7 @@ export function ManageApp({ items, onSubmit, onRenameSubmit }: Props) {
     }
     if (key.upArrow || input === 'k') setState(current => reduceSettingsSelectFlow(current, { type: 'up' }))
     if (key.downArrow || input === 'j') setState(current => reduceSettingsSelectFlow(current, { type: 'down' }))
-    if (input === 'l') {
+    if (input === 'l' && !key.ctrl && !key.meta) {
       if (!active) return
       onSubmit({ type: 'launch', item: active })
       exit()
@@ -47,6 +48,10 @@ export function ManageApp({ items, onSubmit, onRenameSubmit }: Props) {
       setMode('rename')
     }
     if (input === 'd') setMode('delete')
+    if (input === 'c') {
+      onSubmit({ type: 'create' })
+      exit()
+    }
     if (input === 'o') revealInFinder(active?.sourcePath ?? '')
   })
 
@@ -107,7 +112,7 @@ export function ManageApp({ items, onSubmit, onRenameSubmit }: Props) {
     <Box flexDirection="column">
       <TwoColumnSettingsView
         title="Manage settings presets"
-        help="↑/k ↓/j navigate · l launch · o open folder · r rename · d delete · q quit"
+        help="↑/k ↓/j navigate · l launch · c create · o open folder · r rename · d delete · q quit"
         items={state.items}
         cursor={state.cursor}
       />

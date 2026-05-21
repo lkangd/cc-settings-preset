@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs'
 import { basename } from 'node:path'
 import { CliError } from '../core/errors.js'
 import { pathExists, readJsonFile, writeJsonFile } from '../core/json.js'
-import { buildLaunchPresetFileName, buildTempSettingsFileName, normalizePresetName } from '../core/name.js'
+import { buildLaunchPresetFileName, buildTempSettingsFileName, normalizePresetName, resolvePresetIndexKey } from '../core/name.js'
 import {
   resolveProjectLastUsedPath,
   resolveProjectLaunchPresetIndexPath,
@@ -52,7 +52,9 @@ export function createLaunchPresetService(cwd: string) {
   }
 
   async function writeLastUsed(nameInput: string): Promise<void> {
-    const name = normalizePresetName(nameInput)
+    const index = await readIndex()
+    const name = resolvePresetIndexKey(index.presets, nameInput)
+    if (!name) throw new CliError(`Launch preset not found: ${nameInput}`)
     await ensureProjectCcspStore(cwd)
     await writeJsonFile(lastUsedPath, { presetName: name, updatedAt: nowIso() })
   }
@@ -64,10 +66,11 @@ export function createLaunchPresetService(cwd: string) {
     },
 
     async readPresetSettings(nameInput: string): Promise<LaunchPresetSettings> {
-      const name = normalizePresetName(nameInput)
       const index = await readIndex()
+      const name = resolvePresetIndexKey(index.presets, nameInput)
+      if (!name) throw new CliError(`Launch preset not found: ${nameInput}`)
       const meta = index.presets[name]
-      if (!meta) throw new CliError(`Launch preset not found: ${name}`)
+      if (!meta) throw new CliError(`Launch preset not found: ${nameInput}`)
       return parseLaunchPresetSettings(await readJsonFile(getPresetPath(meta)))
     },
 
@@ -93,11 +96,12 @@ export function createLaunchPresetService(cwd: string) {
     },
 
     async writePresetSettings(nameInput: string, settingsInput: unknown): Promise<LaunchPresetMeta> {
-      const name = normalizePresetName(nameInput)
-      const settings = parseLaunchPresetSettings(settingsInput)
       const index = await readIndex()
+      const name = resolvePresetIndexKey(index.presets, nameInput)
+      if (!name) throw new CliError(`Launch preset not found: ${nameInput}`)
+      const settings = parseLaunchPresetSettings(settingsInput)
       const existing = index.presets[name]
-      if (!existing) throw new CliError(`Launch preset not found: ${name}`)
+      if (!existing) throw new CliError(`Launch preset not found: ${nameInput}`)
 
       const updated = { ...existing, updatedAt: nowIso() }
       await ensureProjectCcspStore(cwd)
@@ -108,11 +112,12 @@ export function createLaunchPresetService(cwd: string) {
     },
 
     async renamePreset(nameInput: string, newNameInput: string): Promise<LaunchPresetMeta> {
-      const name = normalizePresetName(nameInput)
-      const newName = normalizePresetName(newNameInput)
+      const newName = normalizePresetName(newNameInput, { preserveCase: true })
       const index = await readIndex()
+      const name = resolvePresetIndexKey(index.presets, nameInput)
+      if (!name) throw new CliError(`Launch preset not found: ${nameInput}`)
       const existing = index.presets[name]
-      if (!existing) throw new CliError(`Launch preset not found: ${name}`)
+      if (!existing) throw new CliError(`Launch preset not found: ${nameInput}`)
       if (newName === name) {
         return { ...existing, updatedAt: nowIso() }
       }
@@ -121,7 +126,7 @@ export function createLaunchPresetService(cwd: string) {
       const updated = {
         ...existing,
         name: newName,
-        fileName: buildLaunchPresetFileName(newName),
+        fileName: buildLaunchPresetFileName(newName, { preserveCase: true }),
         updatedAt: nowIso(),
       }
 
@@ -138,8 +143,9 @@ export function createLaunchPresetService(cwd: string) {
     },
 
     async deletePreset(nameInput: string): Promise<void> {
-      const name = normalizePresetName(nameInput)
       const index = await readIndex()
+      const name = resolvePresetIndexKey(index.presets, nameInput)
+      if (!name) return
       const existing = index.presets[name]
       if (!existing) return
 

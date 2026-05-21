@@ -2,7 +2,7 @@
 import { fileURLToPath } from 'node:url'
 import React from 'react'
 import { Command } from 'commander'
-import { render } from 'ink'
+import { render, Text, type Instance } from 'ink'
 import figlet from 'figlet'
 
 import { sanitizeClaudeArgs } from './core/args.js'
@@ -12,6 +12,8 @@ import { createPathContext, resolveGlobalRoot } from './core/paths.js'
 import { parseSettings, type PresetMeta } from './core/schema.js'
 import { spawnClaude } from './core/spawn.js'
 import { CreateApp, type CreateResult } from './ink/create-app.js'
+import { GlobalShortcutHandler } from './ink/components/global-shortcut-handler.js'
+import { InkResizeProvider } from './ink/components/resize-context.js'
 import type { ProjectLaunchToggleState } from './flows/project-launch-flow.js'
 import { ManageApp, type ManageResult } from './ink/manage-app.js'
 import { ProjectLaunchApp, type ProjectLaunchResult } from './ink/project-launch-app.js'
@@ -50,7 +52,7 @@ const launchPresetService = createLaunchPresetService(context.cwd)
 
 export function createProgram(): Command {
   const program = new Command()
-  program.name('cc-settings-preset').description('Select Claude Code runtime settings presets').version(VERSION)
+  program.name('ccsp/cc-settings-preset').description('Select Claude Code runtime settings presets').version(VERSION)
 
   program
     .command('create')
@@ -80,24 +82,139 @@ function stripAnsi(value: string): string {
   return value.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')
 }
 
-function centerLine(line: string, width: number): string {
-  const pad = Math.max(0, Math.floor((width - stripAnsi(line).length) / 2))
+function visibleWidth(value: string): number {
+  return stripAnsi(value).length
+}
+
+function centerVisibleLine(line: string, width: number): string {
+  const pad = Math.max(0, Math.floor((width - visibleWidth(line)) / 2))
   return `${' '.repeat(pad)}${line}`
 }
 
-export function printBanner() {
+function createBannerCandidates(): string[][] {
+  const cyan = '\x1b[36m'
+  const reset = '\x1b[0m'
+  const fonts = ['ANSI Shadow', 'Small'] as const
+
+  const figletCandidates = fonts.map(font =>
+    figlet.textSync('C C S P', { font }).split('\n').map(line => `${cyan}${line}${reset}`)
+  )
+
+  return [
+    ...figletCandidates,
+    [`${cyan}C C S P${reset}`],
+    [`${cyan}CCSP${reset}`]
+  ]
+}
+
+function selectBannerCandidate(width: number, candidates: string[][]): string[] {
+  return candidates.find(lines => Math.max(...lines.map(visibleWidth)) <= width) ?? candidates.at(-1) ?? []
+}
+
+export function buildBannerLines(columns: number): string[] {
   const cyan = '\x1b[36m'
   const dim = '\x1b[2m'
   const reset = '\x1b[0m'
+  const safeColumns = Math.max(1, columns)
+  const headline = selectBannerCandidate(safeColumns, createBannerCandidates()).map(line => centerVisibleLine(line, safeColumns))
+  const subtitle = centerVisibleLine(`${dim}${cyan}CC-Settings-Preset${reset}`, safeColumns)
+  const dividerWidth = Math.min(safeColumns, Math.max(stripAnsi(subtitle).length, 12))
+  const divider = centerVisibleLine(`${dim}${'─'.repeat(dividerWidth)}${reset}`, safeColumns)
+
+  return [...headline, subtitle, divider]
+}
+
+export function printBanner() {
   const columns = process.stderr.columns ?? 80
-  const contentWidth = Math.max(48, Math.min(88, columns - 4))
-  const headline = figlet.textSync('C C S P', { font: 'ANSI Shadow' })
-    .split('\n')
-    .map(line => centerLine(`${cyan}${line}${reset}`, contentWidth))
-    .join('\n')
-  const subtitle = centerLine(`${dim}${cyan}CC-Settings-Preset${reset}`, contentWidth)
-  const divider = centerLine(`\x1b[2m${'─'.repeat(contentWidth)}${reset}`, contentWidth)
-  process.stderr.write(`\n\n${headline}\n${subtitle}\n${divider}\n\n`)
+  const lines = buildBannerLines(columns)
+  process.stderr.write(`\n\n${lines.join('\n')}\n\n`)
+}
+
+const CLEAR_TERMINAL_HISTORY = '\x1b[3J\x1b[H\x1b[2J'
+const REFRESH_MARKERS = ['​', '⁠'] as const
+
+export function clearTerminalScreen(
+  stdout: Pick<NodeJS.WriteStream, 'write'> = process.stdout,
+) {
+  stdout.write(CLEAR_TERMINAL_HISTORY)
+}
+
+type ShortcutKey = {
+  ctrl?: boolean
+}
+
+type RefreshableInkApp = Pick<Instance, 'clear' | 'rerender' | 'waitUntilExit'>
+
+type RefreshState = {
+  resizeVersion: number
+}
+
+function rerenderInkApp(
+  app: RefreshableInkApp,
+  createNode: () => React.ReactElement,
+  stdout: Pick<NodeJS.WriteStream, 'write'>,
+  state: RefreshState,
+  onShortcut: (input: string, key: ShortcutKey) => void,
+) {
+  state.resizeVersion += 1
+  clearTerminalScreen(stdout)
+  app.clear()
+  app.rerender(wrapInkNode(createNode, state.resizeVersion, onShortcut))
+}
+
+export function createGlobalShortcutHandler(
+  app: RefreshableInkApp,
+  createNode: () => React.ReactElement,
+  stdout: Pick<NodeJS.WriteStream, 'write'> = process.stdout,
+  state: RefreshState = { resizeVersion: 0 },
+  onShortcut?: (input: string, key: ShortcutKey) => void,
+) {
+  return (input: string, key: ShortcutKey) => {
+    if (key.ctrl && input === 'l') {
+      rerenderInkApp(app, createNode, stdout, state, onShortcut ?? (() => {}))
+    }
+  }
+}
+
+function wrapInkNode(
+  createNode: () => React.ReactElement,
+  resizeVersion: number,
+  onShortcut: (input: string, key: ShortcutKey) => void,
+): React.ReactElement {
+  const marker = REFRESH_MARKERS[resizeVersion % REFRESH_MARKERS.length]
+
+  return h(InkResizeProvider, {
+    value: resizeVersion,
+    children: h(GlobalShortcutHandler, {
+      onShortcut,
+      children: h(React.Fragment, {
+        children: [
+          h(Text, { key: 'refresh-marker' }, marker),
+          React.cloneElement(createNode(), { key: 'app-node' })
+        ]
+      })
+    })
+  })
+}
+
+export async function waitForInkAppExit(
+  app: RefreshableInkApp,
+  createNode: () => React.ReactElement,
+  stdout: Pick<NodeJS.WriteStream, 'on' | 'off' | 'write'> = process.stdout,
+  state: RefreshState = { resizeVersion: 0 },
+  onShortcut: (input: string, key: ShortcutKey) => void = () => {},
+): Promise<void> {
+  const rerender = () => {
+    rerenderInkApp(app, createNode, stdout, state, onShortcut)
+  }
+
+  stdout.on('resize', rerender)
+
+  try {
+    await app.waitUntilExit()
+  } finally {
+    stdout.off('resize', rerender)
+  }
 }
 
 async function renderCreateApp(): Promise<CreateResult | undefined> {
@@ -106,15 +223,19 @@ async function renderCreateApp(): Promise<CreateResult | undefined> {
     filePath: source.filePath
   }))
   let result: CreateResult | undefined
-  const app = render(
-    h(CreateApp, {
-      sources,
-      onSubmit: (value: CreateResult) => {
-        result = value
-      }
-    })
-  )
-  await app.waitUntilExit()
+  const createNode = () => h(CreateApp, {
+    sources,
+    onSubmit: (value: CreateResult) => {
+      result = value
+    }
+  })
+  const state = { resizeVersion: 0 }
+  let app: RefreshableInkApp
+  const onShortcut = (input: string, key: ShortcutKey) => {
+    createGlobalShortcutHandler(app, createNode, process.stdout, state, onShortcut)(input, key)
+  }
+  app = render(wrapInkNode(createNode, state.resizeVersion, onShortcut))
+  await waitForInkAppExit(app, createNode, process.stdout, state, onShortcut)
   return result
 }
 
@@ -152,16 +273,20 @@ async function renderSettingsSelectApp(
   initialName?: string,
 ): Promise<SettingsSelectResult | undefined> {
   let result: SettingsSelectResult | undefined
-  const app = render(
-    h(SettingsSelectApp, {
-      items,
-      ...(initialName ? { initialName } : {}),
-      onSubmit: (value: SettingsSelectResult) => {
-        result = value
-      },
-    })
-  )
-  await app.waitUntilExit()
+  const createNode = () => h(SettingsSelectApp, {
+    items,
+    ...(initialName ? { initialName } : {}),
+    onSubmit: (value: SettingsSelectResult) => {
+      result = value
+    },
+  })
+  const state = { resizeVersion: 0 }
+  let app: RefreshableInkApp
+  const onShortcut = (input: string, key: ShortcutKey) => {
+    createGlobalShortcutHandler(app, createNode, process.stdout, state, onShortcut)(input, key)
+  }
+  app = render(wrapInkNode(createNode, state.resizeVersion, onShortcut))
+  await waitForInkAppExit(app, createNode, process.stdout, state, onShortcut)
   return result
 }
 
@@ -264,63 +389,82 @@ async function buildProjectLaunchInput(selectedSettings: SettingsSelectResult): 
 async function renderProjectLaunchApp(selectedSettings: SettingsSelectResult): Promise<ProjectLaunchResult | undefined> {
   const input = await buildProjectLaunchInput(selectedSettings)
   let result: ProjectLaunchResult | undefined
-  const app = render(
-    h(ProjectLaunchApp, {
-      ...input,
-      onSubmit: (value: ProjectLaunchResult) => {
-        result = value
-      },
-    })
-  )
-  await app.waitUntilExit()
+  const createNode = () => h(ProjectLaunchApp, {
+    ...input,
+    onSubmit: (value: ProjectLaunchResult) => {
+      result = value
+    },
+    onCreateSubmit: async (saveAs: string, toggles: ProjectLaunchToggleState) => {
+      try {
+        await launchPresetService.createPreset(saveAs, launchResultToSettings({ toggles }))
+        return null
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith('Launch preset already exists: ')) {
+          return error.message
+        }
+        throw error
+      }
+    },
+  })
+  const state = { resizeVersion: 0 }
+  let app: RefreshableInkApp
+  const onShortcut = (input: string, key: ShortcutKey) => {
+    createGlobalShortcutHandler(app, createNode, process.stdout, state, onShortcut)(input, key)
+  }
+  app = render(wrapInkNode(createNode, state.resizeVersion, onShortcut))
+  await waitForInkAppExit(app, createNode, process.stdout, state, onShortcut)
   return result
 }
 
 async function renderProjectManageApp(selectedSettings: SettingsSelectResult): Promise<ProjectManageResult | undefined> {
   const input = await buildProjectLaunchInput(selectedSettings)
   let result: ProjectManageResult | undefined
-  const app = render(
-    h(ProjectManageApp, {
-      ...input,
-      onSubmit: (value: ProjectManageResult) => {
-        result = value
-      },
-      onSaveSubmit: async (presetName: string, toggles: ProjectLaunchToggleState) => {
-        try {
-          await launchPresetService.writePresetSettings(presetName, launchResultToSettings({ toggles }))
-          return null
-        } catch (error) {
-          if (error instanceof Error && error.message.startsWith('Launch preset not found: ')) {
-            return error.message
-          }
-          throw error
+  const createNode = () => h(ProjectManageApp, {
+    ...input,
+    onSubmit: (value: ProjectManageResult) => {
+      result = value
+    },
+    onSaveSubmit: async (presetName: string, toggles: ProjectLaunchToggleState) => {
+      try {
+        await launchPresetService.writePresetSettings(presetName, launchResultToSettings({ toggles }))
+        return null
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith('Launch preset not found: ')) {
+          return error.message
         }
-      },
-      onCreateSubmit: async (saveAs: string, toggles: ProjectLaunchToggleState) => {
-        try {
-          await launchPresetService.createPreset(saveAs, launchResultToSettings({ toggles }))
-          return null
-        } catch (error) {
-          if (error instanceof Error && error.message.startsWith('Launch preset already exists: ')) {
-            return error.message
-          }
-          throw error
+        throw error
+      }
+    },
+    onCreateSubmit: async (saveAs: string, toggles: ProjectLaunchToggleState) => {
+      try {
+        await launchPresetService.createPreset(saveAs, launchResultToSettings({ toggles }))
+        return null
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith('Launch preset already exists: ')) {
+          return error.message
         }
-      },
-      onRenameSubmit: async (presetName: string, newName: string) => {
-        try {
-          await launchPresetService.renamePreset(presetName, newName)
-          return null
-        } catch (error) {
-          if (error instanceof Error && error.message.startsWith('Launch preset already exists: ')) {
-            return error.message
-          }
-          throw error
+        throw error
+      }
+    },
+    onRenameSubmit: async (presetName: string, newName: string) => {
+      try {
+        await launchPresetService.renamePreset(presetName, newName)
+        return null
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith('Launch preset already exists: ')) {
+          return error.message
         }
-      },
-    })
-  )
-  await app.waitUntilExit()
+        throw error
+      }
+    },
+  })
+  const state = { resizeVersion: 0 }
+  let app: RefreshableInkApp
+  const onShortcut = (input: string, key: ShortcutKey) => {
+    createGlobalShortcutHandler(app, createNode, process.stdout, state, onShortcut)(input, key)
+  }
+  app = render(wrapInkNode(createNode, state.resizeVersion, onShortcut))
+  await waitForInkAppExit(app, createNode, process.stdout, state, onShortcut)
   return result
 }
 
@@ -338,26 +482,30 @@ function launchResultToSettings(result: { toggles: ProjectLaunchToggleState }): 
 
 async function renderManageApp(items: SettingsSelectResult[]): Promise<ManageResult | undefined> {
   let result: ManageResult | undefined
-  const app = render(
-    h(ManageApp, {
-      items,
-      onSubmit: (value: ManageResult) => {
-        result = value
-      },
-      onRenameSubmit: async (item: SettingsSelectResult, newName: string) => {
-        try {
-          await presetService.renamePreset(item.name, newName)
-          return null
-        } catch (error) {
-          if (error instanceof Error && error.message.startsWith('Preset already exists: ')) {
-            return error.message
-          }
-          throw error
+  const createNode = () => h(ManageApp, {
+    items,
+    onSubmit: (value: ManageResult) => {
+      result = value
+    },
+    onRenameSubmit: async (item: SettingsSelectResult, newName: string) => {
+      try {
+        await presetService.renamePreset(item.name, newName)
+        return null
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith('Preset already exists: ')) {
+          return error.message
         }
-      },
-    })
-  )
-  await app.waitUntilExit()
+        throw error
+      }
+    },
+  })
+  const state = { resizeVersion: 0 }
+  let app: RefreshableInkApp
+  const onShortcut = (input: string, key: ShortcutKey) => {
+    createGlobalShortcutHandler(app, createNode, process.stdout, state, onShortcut)(input, key)
+  }
+  app = render(wrapInkNode(createNode, state.resizeVersion, onShortcut))
+  await waitForInkAppExit(app, createNode, process.stdout, state, onShortcut)
   return result
 }
 
@@ -369,14 +517,21 @@ async function createPresetInteractive(): Promise<PresetMeta | undefined> {
   return presetService.createBasePreset(selection.name, settings)
 }
 
-async function launchWithSelectedSettings(selectedSettings: SettingsSelectResult, rawClaudeArgs: string[]): Promise<void> {
+async function launchWithSelectedSettings(
+  selectedSettings: SettingsSelectResult,
+  rawClaudeArgs: string[],
+): Promise<'back' | 'done' | 'quit'> {
   const sanitized = sanitizeClaudeArgs(rawClaudeArgs)
   if (sanitized.removedSettings) {
     process.stderr.write('\x1b[31mWarning: ccsp ignores passthrough --settings because it manages that flag.\x1b[0m\n')
   }
 
   const launchResult = await renderProjectLaunchApp(selectedSettings)
-  if (!launchResult) return
+  if (!launchResult) return 'quit'
+  if (launchResult.type === 'back') {
+    clearTerminalScreen()
+    return 'back'
+  }
 
   const launchSettings = launchResultToSettings(launchResult)
 
@@ -391,14 +546,19 @@ async function launchWithSelectedSettings(selectedSettings: SettingsSelectResult
   const settingsPath = await launchPresetService.writeTempSettings(finalizeSettings(selectedSettings.settings, launchSettings))
   const code = await spawnClaude(settingsPath, sanitized.args)
   process.exitCode = code
+  return 'done'
 }
 
 async function runInteractive(rawClaudeArgs: string[]): Promise<void> {
   printBanner()
-  const selectedSettings = await resolveInteractiveBaseSettings()
-  if (!selectedSettings) return
+  while (true) {
+    const selectedSettings = await resolveInteractiveBaseSettings()
+    if (!selectedSettings) return
 
-  await launchWithSelectedSettings(selectedSettings, rawClaudeArgs)
+    const outcome = await launchWithSelectedSettings(selectedSettings, rawClaudeArgs)
+    if (outcome !== 'back') return
+    printBanner()
+  }
 }
 
 async function manageInteractive(): Promise<void> {
@@ -408,12 +568,18 @@ async function manageInteractive(): Promise<void> {
     if (!selection || selection.type === 'exit') return
 
     if (selection.type === 'launch') {
-      await launchWithSelectedSettings(selection.item, [])
+      const outcome = await launchWithSelectedSettings(selection.item, [])
+      if (outcome === 'back') continue
       return
     }
 
     if (selection.type === 'rename') {
       await presetService.renamePreset(selection.item.name, selection.newName)
+      continue
+    }
+
+    if (selection.type === 'create') {
+      await createPresetInteractive()
       continue
     }
 
@@ -441,6 +607,20 @@ async function manageProjectInteractive(): Promise<void> {
 
     if (result.type === 'refresh') {
       continue
+    }
+
+    if (result.type === 'launch') {
+      const launchSettings = launchResultToSettings(result)
+
+      if (result.presetName) {
+        await launchPresetService.writePresetSettings(result.presetName, launchSettings)
+        await launchPresetService.writeLastUsed(result.presetName)
+      }
+
+      const settingsPath = await launchPresetService.writeTempSettings(finalizeSettings(selectedSettings.settings, launchSettings))
+      const code = await spawnClaude(settingsPath, [])
+      process.exitCode = code
+      return
     }
 
     if (result.type === 'rename') {

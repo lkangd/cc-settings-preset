@@ -86,6 +86,117 @@ describe('ProjectLaunchApp interactions', () => {
     expect(flattenJson(output!.toJSON())).toContain('press Y to save · n for retained temp settings · esc cancel')
   })
 
+  it('returns back when esc is pressed while presets are focused', () => {
+    const onSubmit = vi.fn()
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <ProjectLaunchApp
+          presets={[]}
+          detected={{
+            plugins: [{ name: 'alpha', enabled: true, source: 'user' }],
+            skills: [],
+            mcps: [],
+          }}
+          statesByPreset={{}}
+          onSubmit={onSubmit}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('', { escape: true })
+    })
+
+    expect(onSubmit).toHaveBeenCalledWith({ type: 'back' })
+    expect(exitMock).toHaveBeenCalled()
+    expect(flattenJson(output!.toJSON())).toMatch(/❯\s+Detected/)
+  })
+
+  it('returns focus to presets when esc is pressed', () => {
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <ProjectLaunchApp
+          presets={[]}
+          detected={{
+            plugins: [{ name: 'alpha', enabled: true, source: 'user' }],
+            skills: [],
+            mcps: [],
+          }}
+          statesByPreset={{}}
+          onSubmit={vi.fn()}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('p', {})
+    })
+
+    expect(flattenJson(output!.toJSON())).not.toMatch(/❯\s+Detected/)
+
+    act(() => {
+      latestInputHandler()?.('', { escape: true })
+    })
+
+    expect(flattenJson(output!.toJSON())).toMatch(/❯\s+Detected/)
+  })
+
+  it('keeps create errors in the input when the new preset name conflicts', async () => {
+    const onSubmit = vi.fn()
+    const onCreateSubmit = vi.fn().mockResolvedValue('Launch preset already exists: fff')
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <ProjectLaunchApp
+          presets={[]}
+          detected={{
+            plugins: [{ name: 'alpha', enabled: true, source: 'user' }],
+            skills: [],
+            mcps: [],
+          }}
+          statesByPreset={{}}
+          onSubmit={onSubmit}
+          onCreateSubmit={onCreateSubmit}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('p', {})
+    })
+
+    act(() => {
+      latestInputHandler()?.(' ', {})
+    })
+
+    act(() => {
+      latestInputHandler()?.('', { return: true })
+    })
+
+    act(() => {
+      latestInputHandler()?.('y', {})
+    })
+
+    act(() => {
+      textInputProps.at(-1)?.onChange('fff')
+    })
+
+    await act(async () => {
+      await textInputProps.at(-1)?.onSubmit()
+    })
+
+    expect(onCreateSubmit).toHaveBeenCalledWith('fff', { plugins: [{ name: 'alpha', enabled: false, source: 'user' }], skills: [], mcps: [] })
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(exitMock).not.toHaveBeenCalled()
+    expect(flattenJson(output!.toJSON())).toContain('Launch preset already exists: fff')
+    expect(textInputProps.at(-1)?.value).toBe('fff')
+  })
+
   it('does not submit when the new preset name is empty', () => {
     const onSubmit = vi.fn()
 

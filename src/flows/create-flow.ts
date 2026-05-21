@@ -1,3 +1,5 @@
+import { derivePresetNameFromSettingsPath } from '../core/name.js'
+
 export type CreateSource = {
   label: string
   filePath: string
@@ -13,5 +15,17 @@ export type CreateFlowState = {
 }
 
 export function createCreateFlowState(sources: CreateSource[]): CreateFlowState {
-  return { sources, cursor: 0, mode: 'select-source', manualPath: '', name: '' }
+  return { sources, cursor: sources.length, mode: 'select-source', manualPath: '', name: '' }
+}
+
+export function transitionCreateFlowToName(
+  state: CreateFlowState,
+  selectedPath: string,
+): CreateFlowState {
+  return {
+    ...state,
+    mode: 'name',
+    selectedPath,
+    name: derivePresetNameFromSettingsPath(selectedPath),
+  }
 }

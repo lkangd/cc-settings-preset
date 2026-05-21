@@ -24,7 +24,7 @@ describe('launch preset service', () => {
     })
 
     const renamed = await service.renamePreset('web-dev', 'Api Work')
-    expect(renamed.name).toBe('api-work')
+    expect(renamed.name).toBe('Api-Work')
     expect(await service.listPresets()).toEqual([renamed])
 
     await service.deletePreset('api-work')
