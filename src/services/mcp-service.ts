@@ -2,7 +2,7 @@ import { promises as fs, type Dirent } from 'node:fs'
 import { basename, join } from 'node:path'
 import { pathExists, readJsonFile } from '../core/json.js'
 import { resolveClaudePluginCacheDir, resolveProjectMcpPath, resolveUserClaudeJsonPath } from '../core/paths.js'
-import type { McpPolicyEntry } from '../core/schema.js'
+import type { McpPolicyEntry, Settings } from '../core/schema.js'
 
 export type McpSource = 'local' | 'project' | 'user' | 'plugin' | 'connector'
 
@@ -99,6 +99,25 @@ export async function discoverMcpStates(input: McpDiscoveryInput): Promise<McpSt
   }
 
   return sortMcpStates(Array.from(resolved.values()))
+}
+
+export function resolveDeniedMcpServers(sources: Array<{ settings: Settings }>): McpPolicyEntry[] {
+  const seenServerNames = new Set<string>()
+  const denied: McpPolicyEntry[] = []
+
+  for (const source of sources) {
+    for (const entry of source.settings.deniedMcpServers ?? []) {
+      if ('serverName' in entry) {
+        if (seenServerNames.has(entry.serverName)) continue
+        seenServerNames.add(entry.serverName)
+        denied.push(entry)
+        continue
+      }
+      denied.push(entry)
+    }
+  }
+
+  return denied
 }
 
 export function applyDeniedMcpServers(states: McpState[], denied: McpPolicyEntry[] = []): McpState[] {

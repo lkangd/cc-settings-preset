@@ -104,18 +104,18 @@ describe('manage launch flow', () => {
     }))
     vi.doMock('../src/services/plugin-service.js', () => ({
       resolvePluginStates: vi.fn().mockReturnValue([]),
-      forceEnablePlugins: vi.fn().mockImplementation((states: unknown) => states),
       pluginStatesToEnabledPlugins: vi.fn().mockReturnValue({}),
       applyPluginOverrides: vi.fn().mockReturnValue([]),
     }))
     vi.doMock('../src/services/skill-service.js', () => ({
       discoverSkillStates: vi.fn().mockResolvedValue([]),
-      forceEnableSkills: vi.fn().mockImplementation((states: unknown) => states),
+      resolveSkillOverrides: vi.fn().mockReturnValue({}),
       skillStatesToOverrides: vi.fn().mockReturnValue({}),
       applySkillOverrides: vi.fn().mockReturnValue([]),
     }))
     vi.doMock('../src/services/mcp-service.js', () => ({
       discoverMcpStates: vi.fn().mockResolvedValue([]),
+      resolveDeniedMcpServers: vi.fn().mockReturnValue([]),
       applyDeniedMcpServers: vi.fn().mockReturnValue([]),
       mcpStatesToDeniedServers: vi.fn().mockReturnValue([]),
     }))
@@ -231,18 +231,18 @@ describe('manage launch flow', () => {
     }))
     vi.doMock('../src/services/plugin-service.js', () => ({
       resolvePluginStates: vi.fn().mockReturnValue([]),
-      forceEnablePlugins: vi.fn().mockImplementation((states: unknown) => states),
       pluginStatesToEnabledPlugins: vi.fn().mockReturnValue({}),
       applyPluginOverrides: vi.fn().mockReturnValue([]),
     }))
     vi.doMock('../src/services/skill-service.js', () => ({
       discoverSkillStates: vi.fn().mockResolvedValue([]),
-      forceEnableSkills: vi.fn().mockImplementation((states: unknown) => states),
+      resolveSkillOverrides: vi.fn().mockReturnValue({}),
       skillStatesToOverrides: vi.fn().mockReturnValue({}),
       applySkillOverrides: vi.fn().mockReturnValue([]),
     }))
     vi.doMock('../src/services/mcp-service.js', () => ({
       discoverMcpStates: vi.fn().mockResolvedValue([]),
+      resolveDeniedMcpServers: vi.fn().mockReturnValue([]),
       applyDeniedMcpServers: vi.fn().mockReturnValue([]),
       mcpStatesToDeniedServers: vi.fn().mockReturnValue([]),
     }))

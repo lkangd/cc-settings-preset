@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { applySkillOverrides, discoverSkillStates, forceEnableSkills } from '../../src/services/skill-service.js'
+import { applySkillOverrides, discoverSkillStates, resolveSkillOverrides } from '../../src/services/skill-service.js'
 
 describe('discoverSkillStates', () => {
   it('discovers user, project, command-backed, and plugin skills', async () => {
@@ -87,14 +87,15 @@ describe('discoverSkillStates', () => {
   })
 })
 
-describe('launch skill helpers', () => {
-  it('forces detected non-plugin skills on by default', () => {
-    expect(forceEnableSkills([
-      { name: 'personal', enabled: false, source: 'user', toggleable: true },
-      { name: 'plugin-a:tool', enabled: true, source: 'plugin', toggleable: false, controlledByPlugin: 'plugin-a' },
-    ])).toEqual([
-      { name: 'plugin-a:tool', enabled: true, source: 'plugin', toggleable: false, controlledByPlugin: 'plugin-a' },
-      { name: 'personal', enabled: true, source: 'user', toggleable: true },
-    ])
+describe('resolveSkillOverrides', () => {
+  it('uses higher-priority settings sources to override lower-priority ones', () => {
+    expect(resolveSkillOverrides([
+      { scope: 'project-local', settings: { skillOverrides: { personal: 'off', shared: 'name-only' } } },
+      { scope: 'project', settings: { skillOverrides: { shared: 'off' } } },
+      { scope: 'user', settings: { skillOverrides: { personal: 'on' } } },
+    ])).toEqual({
+      personal: 'off',
+      shared: 'name-only',
+    })
   })
 })

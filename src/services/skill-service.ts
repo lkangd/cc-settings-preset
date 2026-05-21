@@ -3,7 +3,8 @@ import { basename, dirname, join } from 'node:path'
 
 import { pathExists, readJsonFile } from '../core/json.js'
 import { resolveClaudePluginCacheDir, resolveProjectCommandsDir, resolveProjectSkillsDir, resolveUserSkillsDir } from '../core/paths.js'
-import type { SkillOverrideValue } from '../core/schema.js'
+import type { Settings, SkillOverrideValue } from '../core/schema.js'
+import type { SettingsSourceScope } from './settings-source-service.js'
 
 export type SkillState = {
   name: string
@@ -149,6 +150,50 @@ export function sortSkillStatesByStatus(states: SkillState[]): SkillState[] {
   })
 }
 
+export type SkillSettingsSource = {
+  scope: SettingsSourceScope | 'preset'
+  settings: Settings
+}
+
+export function resolveSkillOverrides(sources: SkillSettingsSource[]): Record<string, SkillOverrideValue> {
+  const ownershipPrecedence: Record<SettingsSourceScope, number> = {
+    user: 0,
+    project: 1,
+    'project-local': 2,
+  }
+  const merged: Record<string, SkillOverrideValue> = {}
+  const ownership = new Map<string, SettingsSourceScope | 'preset'>()
+
+  for (const source of sources) {
+    for (const [name, value] of Object.entries(source.settings.skillOverrides ?? {})) {
+      if (source.scope === 'preset') {
+        merged[name] = value
+        continue
+      }
+
+      const current = ownership.get(name)
+      if (!current) {
+        merged[name] = value
+        ownership.set(name, source.scope)
+        continue
+      }
+
+      if (current === 'preset') {
+        ownership.set(name, source.scope)
+        merged[name] = value
+        continue
+      }
+
+      if (ownershipPrecedence[source.scope] >= ownershipPrecedence[current]) {
+        merged[name] = value
+        ownership.set(name, source.scope)
+      }
+    }
+  }
+
+  return merged
+}
+
 export function applySkillOverrides(
   states: SkillState[],
   overrides: Record<string, SkillOverrideValue> = {},
@@ -157,10 +202,6 @@ export function applySkillOverrides(
     if (skill.source === 'plugin') return skill
     return { ...skill, enabled: overrides[skill.name] !== 'off' }
   }))
-}
-
-export function forceEnableSkills(states: SkillState[]): SkillState[] {
-  return sortSkillStates(states.map(skill => ({ ...skill, enabled: true })))
 }
 
 export async function discoverSkillStates(input: SkillDiscoveryInput): Promise<SkillState[]> {

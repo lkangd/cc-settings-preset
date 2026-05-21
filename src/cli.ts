@@ -21,21 +21,20 @@ import { ProjectManageApp, type ProjectManageResult } from './ink/project-manage
 import { SettingsSelectApp, type SettingsSelectResult } from './ink/settings-select-app.js'
 import {
   applyPluginOverrides,
-  forceEnablePlugins,
   pluginStatesToEnabledPlugins,
   resolvePluginStates,
   type PluginState
 } from './services/plugin-service.js'
 import { createGlobalLastSettingsService } from './services/global-last-settings-service.js'
 import { createLaunchPresetService } from './services/launch-preset-service.js'
-import { applyDeniedMcpServers, discoverMcpStates, mcpStatesToDeniedServers, type McpState } from './services/mcp-service.js'
+import { applyDeniedMcpServers, discoverMcpStates, mcpStatesToDeniedServers, resolveDeniedMcpServers, type McpState } from './services/mcp-service.js'
 import { createPresetService } from './services/preset-service.js'
 import { createSettingsSourceService, type SettingsSource } from './services/settings-source-service.js'
 import { finalizeSettings } from './services/settings-finalizer-service.js'
 import {
   applySkillOverrides,
   discoverSkillStates,
-  forceEnableSkills,
+  resolveSkillOverrides,
   skillStatesToOverrides,
   type SkillState
 } from './services/skill-service.js'
@@ -258,7 +257,7 @@ async function resolveStatesByPreset(
     const discoveredSkills = await discoverSkillStates({
       homeDir: context.homeDir,
       cwd: context.cwd,
-      enabledPlugins: pluginStatesToEnabledPlugins(plugins)
+      enabledPlugins: Object.fromEntries(plugins.filter(plugin => plugin.enabled).map(plugin => [plugin.name, true])),
     })
 
     pluginsByPreset[preset.name] = plugins
@@ -355,16 +354,20 @@ async function buildProjectLaunchInput(selectedSettings: SettingsSelectResult): 
   lastUsedName?: string
 }> {
   const sources = await settingsSourceService.discoverSettingsSources()
-  const basePlugins = forceEnablePlugins(resolvePluginStates([
+  const settingsSources = [
     ...sources,
-    { scope: 'preset', filePath: selectedSettings.sourcePath, settings: selectedSettings.settings },
-  ]))
-  const baseSkills = forceEnableSkills(await discoverSkillStates({
+    { scope: 'preset' as const, filePath: selectedSettings.sourcePath, settings: selectedSettings.settings },
+  ]
+  const basePlugins = resolvePluginStates(settingsSources)
+  const baseSkills = applySkillOverrides(await discoverSkillStates({
     homeDir: context.homeDir,
     cwd: context.cwd,
-    enabledPlugins: pluginStatesToEnabledPlugins(basePlugins),
-  }))
-  const baseMcps = await discoverMcpStates({ homeDir: context.homeDir, cwd: context.cwd })
+    enabledPlugins: Object.fromEntries(basePlugins.filter(plugin => plugin.enabled).map(plugin => [plugin.name, true])),
+  }), resolveSkillOverrides(settingsSources))
+  const baseMcps = applyDeniedMcpServers(
+    await discoverMcpStates({ homeDir: context.homeDir, cwd: context.cwd }),
+    resolveDeniedMcpServers(settingsSources),
+  )
   const launchPresets = await launchPresetService.listPresets()
   const statesByPreset: Record<string, ProjectLaunchToggleState> = {}
 

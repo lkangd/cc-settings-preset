@@ -101,16 +101,22 @@ vi.mock('../src/core/spawn.js', () => ({
 
 vi.mock('../src/services/plugin-service.js', () => ({
   applyPluginOverrides: vi.fn((plugins) => plugins),
-  forceEnablePlugins: vi.fn((plugins) => plugins),
   resolvePluginStates: vi.fn(() => []),
-  pluginStatesToEnabledPlugins: vi.fn((plugins = []) => Object.fromEntries(plugins.map((plugin: { name: string; enabled: boolean }) => [plugin.name, plugin.enabled]))),
+  pluginStatesToEnabledPlugins: vi.fn((plugins = []) => Object.fromEntries(plugins.filter((plugin: { enabled: boolean }) => !plugin.enabled).map((plugin: { name: string }) => [plugin.name, false]))),
 }))
 
 vi.mock('../src/services/skill-service.js', () => ({
   applySkillOverrides: vi.fn((skills) => skills),
   discoverSkillStates: vi.fn().mockResolvedValue([]),
-  forceEnableSkills: vi.fn((skills) => skills),
+  resolveSkillOverrides: vi.fn(() => ({})),
   skillStatesToOverrides: vi.fn((skills = []) => Object.fromEntries(skills.filter((skill: { name: string; enabled: boolean; toggleable: boolean }) => skill.toggleable && !skill.enabled).map((skill: { name: string }) => [skill.name, 'off']))),
+}))
+
+vi.mock('../src/services/mcp-service.js', () => ({
+  discoverMcpStates: vi.fn().mockResolvedValue([]),
+  resolveDeniedMcpServers: vi.fn(() => []),
+  applyDeniedMcpServers: vi.fn((states) => states),
+  mcpStatesToDeniedServers: vi.fn(() => []),
 }))
 
 vi.mock('../src/services/launch-preset-service.js', () => ({

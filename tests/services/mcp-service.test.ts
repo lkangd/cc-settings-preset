@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
-import { discoverMcpStates, mcpStatesToDeniedServers } from '../../src/services/mcp-service.js'
+import { discoverMcpStates, mcpStatesToDeniedServers, resolveDeniedMcpServers } from '../../src/services/mcp-service.js'
 
 describe('discoverMcpStates', () => {
   it('discovers local, project, user, and plugin MCP servers with precedence', async () => {
@@ -50,6 +50,16 @@ describe('discoverMcpStates', () => {
       ['projectOnly', 'project', true],
       ['shared', 'local', true],
       ['userOnly', 'user', true],
+    ])
+  })
+
+  it('merges deniedMcpServers across settings sources', () => {
+    expect(resolveDeniedMcpServers([
+      { settings: { deniedMcpServers: [{ serverName: 'github' }] } },
+      { settings: { deniedMcpServers: [{ serverName: 'chrome-devtools' }, { serverName: 'github' }] } },
+    ])).toEqual([
+      { serverName: 'github' },
+      { serverName: 'chrome-devtools' },
     ])
   })
 

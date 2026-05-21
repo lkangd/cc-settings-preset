@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyPluginOverrides, forceEnablePlugins, resolvePluginStates } from '../../src/services/plugin-service.js'
+import { applyPluginOverrides, pluginStatesToEnabledPlugins, resolvePluginStates } from '../../src/services/plugin-service.js'
 
 describe('resolvePluginStates', () => {
   it('uses higher-priority settings sources to override lower-priority ones', () => {
@@ -17,17 +17,16 @@ describe('resolvePluginStates', () => {
   })
 })
 
-describe('launch plugin helpers', () => {
-  it('forces detected plugins on by default', () => {
-    expect(forceEnablePlugins([
-      { name: 'alpha', enabled: false, source: 'user' },
-      { name: 'beta', enabled: true, source: 'project' },
-    ])).toEqual([
+describe('pluginStatesToEnabledPlugins', () => {
+  it('only records disabled plugins as false', () => {
+    expect(pluginStatesToEnabledPlugins([
       { name: 'alpha', enabled: true, source: 'user' },
-      { name: 'beta', enabled: true, source: 'project' },
-    ])
+      { name: 'beta', enabled: false, source: 'project' },
+    ])).toEqual({ beta: false })
   })
+})
 
+describe('launch plugin helpers', () => {
   it('applies project launch plugin overrides', () => {
     expect(applyPluginOverrides([
       { name: 'alpha', enabled: true, source: 'user' },

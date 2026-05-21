@@ -110,6 +110,11 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedNa
     if (input === ' ') setState(current => reduceProjectLaunchFlow(current, { type: 'toggle-current' }))
     if (key.return) {
       if (state.dirty) {
+        const item = getActiveProjectLaunchItem(state)
+        if (item?.type === 'preset') {
+          submitLaunch()
+          return
+        }
         setSaveChoice('confirm-save')
         return
       }

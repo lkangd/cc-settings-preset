@@ -197,6 +197,57 @@ describe('ProjectLaunchApp interactions', () => {
     expect(textInputProps.at(-1)?.value).toBe('fff')
   })
 
+  it('updates and launches when a saved preset is modified', () => {
+    const onSubmit = vi.fn()
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <ProjectLaunchApp
+          presets={[{ name: 'my-preset', fileName: 'my-preset.json', createdAt: '', updatedAt: '' }]}
+          detected={{
+            plugins: [{ name: 'alpha', enabled: true, source: 'user' }],
+            skills: [],
+            mcps: [],
+          }}
+          statesByPreset={{
+            'my-preset': {
+              plugins: [{ name: 'alpha', enabled: true, source: 'user' }],
+              skills: [],
+              mcps: [],
+            },
+          }}
+          lastUsedName="my-preset"
+          onSubmit={onSubmit}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('p', {})
+    })
+
+    act(() => {
+      latestInputHandler()?.(' ', {})
+    })
+
+    act(() => {
+      latestInputHandler()?.('', { return: true })
+    })
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      type: 'launch',
+      presetName: 'my-preset',
+      toggles: {
+        plugins: [{ name: 'alpha', enabled: false, source: 'user' }],
+        skills: [],
+        mcps: [],
+      },
+    })
+    expect(exitMock).toHaveBeenCalled()
+    expect(flattenJson(output!.toJSON())).not.toContain('Save changes as a new project launch preset?')
+  })
+
   it('does not submit when the new preset name is empty', () => {
     const onSubmit = vi.fn()
 
