@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1 (2026-05-21)
+
+### Features
+* resolve symlinks in direct execution check and add homebrew publish script
+
 ## 1.0.0 (2026-05-21)
 
 ### Features
