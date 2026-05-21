@@ -34,9 +34,8 @@ jobs:
 
       - name: Publish to npm
         run: |
-          npm install -g npm@latest
-          echo "npm $(npm --version) — OIDC trusted publishing (environment: NPM_TOKEN)"
-          npm publish --access public
+          echo "OIDC trusted publishing (environment: NPM_TOKEN)"
+          npx --yes npm@11 publish --access public
 
       - name: Calculate SHA256
         id: sha256
