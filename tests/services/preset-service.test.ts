@@ -41,6 +41,16 @@ describe('preset service', () => {
     expect((await service.listPresets()).map(preset => preset.name)).toEqual(['work'])
   })
 
+  it('treats dot and hyphen normalized rename targets as the same preset', async () => {
+    const { service } = await createService()
+
+    await service.createBasePreset('gpt-5-4', { model: 'opus' })
+    const renamed = await service.renamePreset('gpt-5-4', 'gpt-5.4')
+
+    expect(renamed).toMatchObject({ type: 'base', name: 'gpt-5.4', fileName: 'gpt-5.4-settings.json' })
+    expect((await service.listPresets()).map(preset => preset.name)).toEqual(['gpt-5.4'])
+  })
+
   it('deletes base presets', async () => {
     const { service } = await createService()
 

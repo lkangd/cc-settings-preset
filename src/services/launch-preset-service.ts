@@ -113,6 +113,9 @@ export function createLaunchPresetService(cwd: string) {
       const index = await readIndex()
       const existing = index.presets[name]
       if (!existing) throw new CliError(`Launch preset not found: ${name}`)
+      if (newName === name) {
+        return { ...existing, updatedAt: nowIso() }
+      }
       if (index.presets[newName]) throw new CliError(`Launch preset already exists: ${newName}`)
 
       const updated = {

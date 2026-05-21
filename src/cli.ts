@@ -285,13 +285,46 @@ async function renderProjectManageApp(selectedSettings: SettingsSelectResult): P
       onSubmit: (value: ProjectManageResult) => {
         result = value
       },
+      onSaveSubmit: async (presetName: string, toggles: ProjectLaunchToggleState) => {
+        try {
+          await launchPresetService.writePresetSettings(presetName, launchResultToSettings({ toggles }))
+          return null
+        } catch (error) {
+          if (error instanceof Error && error.message.startsWith('Launch preset not found: ')) {
+            return error.message
+          }
+          throw error
+        }
+      },
+      onCreateSubmit: async (saveAs: string, toggles: ProjectLaunchToggleState) => {
+        try {
+          await launchPresetService.createPreset(saveAs, launchResultToSettings({ toggles }))
+          return null
+        } catch (error) {
+          if (error instanceof Error && error.message.startsWith('Launch preset already exists: ')) {
+            return error.message
+          }
+          throw error
+        }
+      },
+      onRenameSubmit: async (presetName: string, newName: string) => {
+        try {
+          await launchPresetService.renamePreset(presetName, newName)
+          return null
+        } catch (error) {
+          if (error instanceof Error && error.message.startsWith('Launch preset already exists: ')) {
+            return error.message
+          }
+          throw error
+        }
+      },
     })
   )
   await app.waitUntilExit()
   return result
 }
 
-function launchResultToSettings(result: ProjectLaunchResult): {
+function launchResultToSettings(result: { toggles: ProjectLaunchToggleState }): {
   enabledPlugins: Record<string, boolean>
   skillOverrides: ReturnType<typeof skillStatesToOverrides>
   deniedMcpServers: ReturnType<typeof mcpStatesToDeniedServers>
@@ -351,6 +384,7 @@ async function launchWithSelectedSettings(selectedSettings: SettingsSelectResult
     const saved = await launchPresetService.createPreset(launchResult.saveAs, launchSettings)
     await launchPresetService.writeLastUsed(saved.name)
   } else if (launchResult.type === 'launch' && launchResult.presetName) {
+    await launchPresetService.writePresetSettings(launchResult.presetName, launchSettings)
     await launchPresetService.writeLastUsed(launchResult.presetName)
   }
 
@@ -401,23 +435,34 @@ async function manageProjectInteractive(): Promise<void> {
     return
   }
 
-  const result = await renderProjectManageApp(selectedSettings)
-  if (!result) return
+  while (true) {
+    const result = await renderProjectManageApp(selectedSettings)
+    if (!result) return
 
-  if (result.type === 'rename') {
-    await launchPresetService.renamePreset(result.presetName, result.newName)
-    return
+    if (result.type === 'refresh') {
+      continue
+    }
+
+    if (result.type === 'rename') {
+      await launchPresetService.renamePreset(result.presetName, result.newName)
+      continue
+    }
+
+    if (result.type === 'delete') {
+      await launchPresetService.deletePreset(result.presetName)
+      continue
+    }
+
+    if (result.type === 'save') {
+      await launchPresetService.writePresetSettings(result.presetName, launchResultToSettings(result))
+      continue
+    }
+
+    if (result.type === 'create') {
+      await launchPresetService.createPreset(result.saveAs, launchResultToSettings(result))
+      continue
+    }
   }
-
-  if (result.type === 'delete') {
-    await launchPresetService.deletePreset(result.presetName)
-    return
-  }
-
-  const launchSettings = launchResultToSettings(result)
-  const settingsPath = await launchPresetService.writeTempSettings(finalizeSettings(selectedSettings.settings, launchSettings))
-  const code = await spawnClaude(settingsPath, [])
-  process.exitCode = code
 }
 
 export async function main(argv = process.argv): Promise<void> {

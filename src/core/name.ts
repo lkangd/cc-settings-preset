@@ -9,7 +9,7 @@ export function normalizePresetName(input: string, fallbackDate = new Date()): s
   const normalized = input
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/[^a-z0-9.]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .replace(/-{2,}/g, '-')
 

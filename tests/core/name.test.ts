@@ -12,7 +12,7 @@ describe('normalizePresetName', () => {
   it('normalizes names into safe lowercase file segments', () => {
     expect(normalizePresetName(' Work Profile ')).toBe('work-profile')
     expect(normalizePresetName('中文 preset')).toBe('preset')
-    expect(normalizePresetName('../evil')).toBe('evil')
+    expect(normalizePresetName('../evil')).toBe('..-evil')
   })
 
   it('uses timestamp fallback when the input has no safe characters', () => {
