@@ -14,6 +14,7 @@ import type { PluginState } from '../services/plugin-service.js'
 import type { SkillState } from '../services/skill-service.js'
 import { useInkResizeVersion } from './components/resize-context.js'
 import { TextInput } from './components/text-input.js'
+import { normalizePresetName } from '../core/name.js'
 
 type SaveChoice = 'none' | 'confirm-save' | 'name-new'
 
@@ -159,7 +160,7 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedNa
               }
               onSubmit({
                 type: 'launch',
-                presetName: saveAs,
+                presetName: normalizePresetName(saveAs, { preserveCase: true }),
                 toggles: getActiveProjectLaunchState(state),
               })
               exit()

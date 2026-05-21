@@ -75,15 +75,15 @@ export function createLaunchPresetService(cwd: string) {
     },
 
     async createPreset(nameInput: string, settingsInput: unknown): Promise<LaunchPresetMeta> {
-      const name = normalizePresetName(nameInput)
+      const name = normalizePresetName(nameInput, { preserveCase: true })
       const settings = parseLaunchPresetSettings(settingsInput)
       const index = await readIndex()
-      if (index.presets[name]) throw new CliError(`Launch preset already exists: ${name}`)
+      if (resolvePresetIndexKey(index.presets, name)) throw new CliError(`Launch preset already exists: ${name}`)
 
       const timestamp = nowIso()
       const meta: LaunchPresetMeta = {
         name,
-        fileName: buildLaunchPresetFileName(name),
+        fileName: buildLaunchPresetFileName(name, { preserveCase: true }),
         createdAt: timestamp,
         updatedAt: timestamp,
       }
@@ -121,7 +121,8 @@ export function createLaunchPresetService(cwd: string) {
       if (newName === name) {
         return { ...existing, updatedAt: nowIso() }
       }
-      if (index.presets[newName]) throw new CliError(`Launch preset already exists: ${newName}`)
+      const conflictingKey = resolvePresetIndexKey(index.presets, newName)
+      if (conflictingKey && conflictingKey !== name) throw new CliError(`Launch preset already exists: ${newName}`)
 
       const updated = {
         ...existing,

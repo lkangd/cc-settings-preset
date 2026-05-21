@@ -15,7 +15,8 @@ describe('launch preset service', () => {
       deniedMcpServers: [{ serverName: 'github' }],
     })
 
-    expect(created.name).toBe('web-dev')
+    expect(created.name).toBe('Web-Dev')
+    expect(created.fileName).toBe('Web-Dev-launch.json')
     expect(await service.listPresets()).toEqual([created])
     expect(await service.readPresetSettings('web-dev')).toEqual({
       enabledPlugins: { alpha: false },
@@ -23,7 +24,7 @@ describe('launch preset service', () => {
       deniedMcpServers: [{ serverName: 'github' }],
     })
 
-    const renamed = await service.renamePreset('web-dev', 'Api Work')
+    const renamed = await service.renamePreset('Web-Dev', 'Api Work')
     expect(renamed.name).toBe('Api-Work')
     expect(await service.listPresets()).toEqual([renamed])
 
@@ -38,6 +39,17 @@ describe('launch preset service', () => {
     await service.createPreset('web', {})
 
     await expect(service.createPreset('web', {})).rejects.toThrow('Launch preset already exists: web')
+    await expect(service.createPreset('Web', {})).rejects.toThrow('Launch preset already exists: Web')
+  })
+
+  it('preserves case when creating project launch presets', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ccsp-project-'))
+    const service = createLaunchPresetService(cwd)
+
+    const created = await service.createPreset('Expert', {})
+    expect(created.name).toBe('Expert')
+    expect(created.fileName).toBe('Expert-launch.json')
+    expect((await service.listPresets()).map(preset => preset.name)).toEqual(['Expert'])
   })
 
   it('stores and resolves last-used launch preset', async () => {
