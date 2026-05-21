@@ -1,322 +1,304 @@
-# cc-settings-preset
+<p align="center">
+  <a href="https://github.com/lkangd/cc-settings-preset">
+    <img
+      src="https://raw.githubusercontent.com/lkangd/cc-settings-preset/main/assets/ccsp-logo.png"
+      alt="CCSP — Claude Code Settings Preset"
+      width="420"
+    />
+  </a>
+</p>
 
-`cc-settings-preset`（缩写命令 `ccsp`）是一个用于启动 Claude Code 前选择运行时 settings 的命令行工具。
+<p align="center">
+  <strong>A switchable, reusable runtime settings preset selector for Claude Code.</strong>
+</p>
 
-它解决的是这样一个问题：你可能有多套 Claude Code `settings.json`，同时又希望按当前项目临时启用或禁用 plugins、skills、MCP servers。`ccsp` 会先选择完整 settings，再选择项目启动预设，最后生成完整临时 settings 并等价执行：
+<p align="center">
+  <a href="https://www.npmjs.com/package/@lkangd/cc-settings-preset"><img src="https://img.shields.io/npm/v/@lkangd/cc-settings-preset?style=flat-square" alt="npm version" /></a>
+  <a href="https://github.com/lkangd/cc-settings-preset/blob/main/LICENSE"><img src="https://img.shields.io/github/license/lkangd/cc-settings-preset?style=flat-square" alt="license" /></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/node/v/@lkangd/cc-settings-preset?style=flat-square" alt="node version" /></a>
+  <a href="https://github.com/lkangd/cc-settings-preset"><img src="https://img.shields.io/github/stars/lkangd/cc-settings-preset?style=flat-square" alt="stars" /></a>
+  <a href="https://github.com/lkangd/cc-settings-preset/issues"><img src="https://img.shields.io/github/issues/lkangd/cc-settings-preset?style=flat-square" alt="issues" /></a>
+</p>
+
+<p align="center">
+  <img
+    src="https://raw.githubusercontent.com/lkangd/cc-settings-preset/main/assets/screen-shot.png"
+    alt="CCSP TUI: base preset selection and project launch toggles"
+    width="900"
+  />
+</p>
+
+<p align="center">
+  <em>Interactive flow: pick a global base preset (left), preview its JSON (right), then tune plugins / skills / MCP per launch before starting Claude Code.</em>
+</p>
+
+**English** | [简体中文](README.zh-hans.md)
+
+---
+
+## Quick Start
+
+**Prerequisites:** [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI installed (`claude` available on your `PATH`).
+
+### Install
+
+**macOS (Homebrew, recommended)** — via the personal tap [lkangd/homebrew-tap](https://github.com/lkangd/homebrew-tap); Node.js 20 is installed as a dependency:
 
 ```bash
-claude --settings <generated-settings-file> ...
+brew tap lkangd/tap
+brew install cc-settings-preset
 ```
 
-## Features
-
-- 管理 Claude Code 全局 settings 预设
-- 项目级启动预设：保存 plugins、skills、MCP servers 的开关状态
-- 自动发现本地可访问的 Claude settings、plugins、skills、MCP servers
-- 启动前合并全局 settings 与项目启动预设，生成完整 settings 文件
-- `Detected` 虚拟启动项：展示本次自动发现结果，默认全部开启
-- 基于 Ink 的两阶段 TUI：settings 两栏选择 + 项目启动四栏选择
-- 支持 `ccsp claude ...` 透传 Claude 参数
-
-## Installation
-
-### Requirements
-
-- Node.js `>= 20.19.2`
-- pnpm `>= 9`
-
-### Install dependencies
+**npm / pnpm** — requires Node.js ≥ 20.19.2 on your machine:
 
 ```bash
-pnpm install
+npm install -g @lkangd/cc-settings-preset
+# or
+pnpm add -g @lkangd/cc-settings-preset
 ```
 
-### Build
+After install, use either `ccsp` or `cc-settings-preset`.
+
+### Usage
 
 ```bash
-pnpm run build
-```
-
-### Optional: link for local use
-
-```bash
-pnpm link --global
-```
-
-之后就可以直接使用：
-
-```bash
+# Start from a project directory (recommended entry)
 ccsp
+
+# Forward Claude Code args (ccsp owns --settings)
+ccsp claude --help
+ccsp claude -p "review this PR"
 ```
 
-## Commands
-
-### `ccsp`
-
-进入默认两阶段运行流程：
-
-1. 选择一个由 `ccsp create` 创建的全局 settings 预设。
-2. 如果没有全局 settings 预设，则临时展示自动发现到的 settings 文件作为 fallback。
-3. 进入项目启动预设选择界面，选择或调整 plugins、skills、MCP servers。
-4. 启动前生成完整 settings 文件并启动 Claude Code。
-
-### `ccsp claude ...args`
-
-和 `ccsp` 一样进入运行流程，但会把后续参数透传给 Claude Code。
-
-例如：
+**First-time workflow:**
 
 ```bash
-ccsp claude --resume
-ccsp claude --continue
-ccsp claude --print "hello"
+# 1. Import a global base preset from existing settings
+ccsp create
+
+# 2. In a project: pick a preset, tune plugins / skills / MCP for this launch, then start Claude
+ccsp
+
+# 3. Manage global or project launch presets
+ccsp manage
+ccsp manage --project
 ```
 
-`--settings` 是 `ccsp` 保留参数。如果用户透传了 `--settings`，它会被忽略，并输出红色警告。
+---
 
-### `ccsp create`
+## Use Cases
 
-创建一个全局 settings 预设。
+CCSP (**C**laude **C**ode **S**ettings **P**reset) helps when you need to switch Claude Code configuration across contexts without hand-editing JSON every time.
 
-创建时会优先提供已检测到的 Claude settings 文件作为导入来源，也可以手动输入路径。
+### 1. Multiple models / API backends
 
-### `ccsp manage`
+Different projects use different API keys, `ANTHROPIC_BASE_URL`, or default models (Opus, Sonnet, custom gateway). Editing `~/.claude/settings.json` by hand is error-prone.
 
-管理全局 settings 预设。
+**Approach:** Run `ccsp create` to save a **global base preset** per environment (including `env` and model fields). In each project, run `ccsp` and pick the preset—no repeated edits to your main settings file.
 
-支持：
+### 2. Per-project plugins, skills, and MCP
 
-- 启动某个 settings 预设
-- 重命名 settings 预设
-- 删除 settings 预设
+Under one global baseline, project A disables an official plugin, project B blocks Chrome DevTools MCP, project C turns off certain skills.
 
-默认管理界面为两栏：左侧 settings 预设列表，右侧完整 JSON 树预览。
+**Approach:** Use a **launch preset** in the project to override only `enabledPlugins`, `skillOverrides`, and `deniedMcpServers`. CCSP merges that with the base preset into a temp settings file, then starts `claude`.
 
-### `ccsp manage --project` / `ccsp manage -p`
+### 3. Team baseline, personal launch tweaks
 
-管理当前项目的启动预设。
+The team can commit `.claude/settings.json` as the project baseline. Individuals keep global presets locally and store launch combinations under `.claude/.ccsp/` (gitignored by default to avoid leaking secrets).
 
-支持：
+### 4. Replace long `claude` one-liners
 
-- 启动某个项目启动预设
-- 调整 plugins、skills、MCP servers 开关
-- 重命名项目启动预设
-- 删除项目启动预设
-
-项目启动管理界面为四栏：预设 / Plugins / Skills / MCPs。
-
-## Preset Model
-
-### 全局 settings 预设
-
-全局 settings 预设是一个完整、可作为合并基础的 Claude Code `settings.json`。
-
-它由 `ccsp create` 创建，通常用于表达模型、权限、hooks、环境变量等跨项目基础配置。
-
-### 项目启动预设
-
-项目启动预设只保存当前项目的运行时开关：
-
-- `enabledPlugins`
-- `skillOverrides`
-- `deniedMcpServers`
-
-它不保存完整 settings。启动前，`ccsp` 会把全局 settings 与项目启动预设合并成完整 settings 文件。
-
-### `Detected`
-
-`Detected` 是虚拟项目启动项，不写入磁盘。
-
-它表示本次自动发现到的 plugins、skills、MCP servers，默认全部开启。如果用户修改 `Detected` 后启动，`ccsp` 会询问是否保存为新的项目启动预设；如果不保存，则写入保留的临时完整 settings 文件。
-
-## Storage Layout
-
-全局 settings 预设保存在：
-
-```text
-~/.ccsp/settings/
-~/.ccsp/index.json
-```
-
-项目启动预设保存在当前项目：
-
-```text
-.claude/.ccsp/
-  launch-presets/
-    index.json
-    <name>.json
-  last-used.json
-  tmp/
-    <generated-settings>.json
-```
-
-`.claude/.ccsp/tmp/` 中的临时 settings 文件会保留，便于排查启动时实际传给 Claude Code 的配置。
-
-创建 `.claude/.ccsp/` 时，如果当前项目存在 `.gitignore`，`ccsp` 会自动加入 `.claude/.ccsp/` 忽略项。
-
-## TUI Overview
-
-### 第一阶段：settings 选择
-
-两栏界面：
-
-- 左栏：全局 settings 预设列表
-- 右栏：当前 settings 的完整 JSON 树预览
-
-按键：
-
-- `↑ / k`：上移
-- `↓ / j`：下移
-- `enter`：选择
-- `q`：退出
-
-### 第二阶段：项目启动选择
-
-四栏界面：
-
-- Presets：项目启动预设，第一项固定为 `Detected`
-- Plugins：plugin 开关
-- Skills：skill 开关
-- MCPs：MCP server 开关
-
-按键：
-
-- `← / h`、`→ / l`：切换栏
-- `↑ / k`、`↓ / j`：移动光标
-- `p`：聚焦 Plugins
-- `s`：聚焦 Skills
-- `m`：聚焦 MCPs
-- `t`：切换排序
-- `space`：切换当前条目开关
-- `enter`：启动
-- `q`：退出
-
-## Discovery Rules
-
-`ccsp` 只发现磁盘上当前可访问的内容，不伪造不可读取的远端或企业配置。
-
-### Settings discovery
-
-`ccsp create` 会按优先级检测以下 Claude settings 文件：
-
-1. 当前项目：`.claude/settings.local.json`
-2. 当前项目：`.claude/settings.json`
-3. 用户目录：`~/.claude/settings.json`
-
-默认运行时第一阶段只展示已创建的全局 settings 预设。只有当没有全局 settings 预设时，才临时展示自动发现的 settings 文件。
-
-### Skill discovery
-
-非 plugin skills 从以下位置发现：
-
-- `~/.claude/skills/<skill-name>/SKILL.md`
-- 当前项目 `.claude/skills/<skill-name>/SKILL.md`
-- 适用的父级项目 `.claude/skills/<skill-name>/SKILL.md`
-- 当前项目 `.claude/commands/*.md`，作为 skill 兼容条目
-
-说明：
-
-- 如果某个 skill 目录是指向目录的符号链接，也会被识别
-- 当同名 skill 和 command 同时存在时，skill 优先
-
-### Plugin skill rules
-
-plugin 提供的 skills 会以 `plugin-name:skill-name` 形式展示。
-
-这类 skills：
-
-- 会被自动发现
-- 不能单独 toggle
-- 只能通过所属 plugin 的开关控制
-
-### Plugin state
-
-plugin 冲突显示的是 resolved state，而不是逐来源展开。
-
-### MCP discovery
-
-MCP servers 按 Claude Code 的本地可读配置优先级发现并去重：
-
-1. 本地 scope：`~/.claude.json` 中当前项目条目
-2. 项目 scope：当前项目 `.mcp.json`
-3. 用户 scope：`~/.claude.json`
-4. 插件提供的 MCP servers
-5. 本地配置中可读取到的 connector 数据
-
-禁用 MCP server 时，项目启动预设写入：
-
-```json
-{
-  "deniedMcpServers": [
-    { "serverName": "github" }
-  ]
-}
-```
-
-`ccsp` 不写 `allowedMcpServers`，避免把未来新增 MCP server 意外锁死。
-
-## Launch Behavior
-
-最终启动 Claude Code 时，`ccsp` 使用子进程执行，而不是替换当前进程。
-
-流程：
-
-1. 读取第一阶段选择的完整 settings。
-2. 读取第二阶段选择或临时调整得到的项目启动开关。
-3. 合并生成完整 settings。
-4. 写入 `.claude/.ccsp/tmp/<generated-settings>.json`。
-5. 执行：
+Instead of:
 
 ```bash
-claude --settings <generated-settings-file> ...passthroughArgs
+claude --settings ~/.claude/my-api-1.json -- ...
 ```
+
+use `ccsp` or `ccsp claude -- ...` to pick presets and toggles in the TUI; CCSP generates the settings path and runs `claude --settings <generated>`.
+
+### 5. Config management and preview
+
+- `ccsp manage` — browse, rename, delete global base presets, preview JSON, launch from the UI.
+- `ccsp manage --project` — manage launch presets for the current repo (create / save / rename / delete / launch).
+
+---
+
+## How It Works
+
+### Two-layer preset model
+
+| Layer | Location | Role |
+|-------|----------|------|
+| **Base preset** | `~/.ccsp/settings/*.json` | Full settings snapshot (import from user / project / project-local or any JSON) |
+| **Launch preset** | `<project>/.claude/.ccsp/launch-presets/*.json` | **Delta** only: plugin toggles, skill overrides, MCP deny list |
+
+On launch, CCSP does **not** overwrite `~/.claude/settings.json` or the project’s `.claude/settings.json`. It writes a **temporary merged file** (`.claude/.ccsp/tmp/<timestamp>-settings.json`) and runs:
+
+```text
+claude --settings <temp-file> [your other args]
+```
+
+### ASCII flow
+
+```text
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    User runs ccsp / ccsp claude                         │
+└─────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ ① Discover settings sources (collect if present; no runtime merge yet) │
+│    · .claude/settings.local.json  (project-local)                       │
+│    · .claude/settings.json        (project)                             │
+│    · ~/.claude/settings.json      (user)                                │
+└─────────────────────────────────────────────────────────────────────────┘
+                                      │
+                    ┌─────────────────┴─────────────────┐
+                    ▼                                   ▼
+      Base presets exist in ~/.ccsp?              No base presets yet
+                    │                                   │
+                    ▼                                   ▼
+    ┌───────────────────────────┐          Use empty base {} or
+    │ TUI: pick global base      │          run ccsp create first
+    │ (remember last per cwd)    │
+    └───────────────────────────┘
+                    │
+                    ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│ ② Resolve effective baseline                                             │
+│    · Plugins: user < project < project-local < selected base preset      │
+│    · Skills: scan ~/.claude/skills, project skills/commands, plugin cache│
+│    · MCP: merge .mcp.json, ~/.claude.json, plugin manifests, etc.        │
+└──────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ ③ TUI: project launch layer (Launch Preset)                             │
+│    · Left: launch presets  Right: plugin | skill | MCP toggles           │
+│    · Save as preset / overwrite / launch without saving                  │
+└─────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ ④ finalizeSettings(base, launch)                                        │
+│    · Copy full base preset                                               │
+│    · Strip enabledPlugins / skillOverrides / deniedMcpServers from base  │
+│    · Apply launch-layer values for those three fields (if any)           │
+└─────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ ⑤ Write .claude/.ccsp/tmp/*.json (gitignored; keep at most 20 files)   │
+└─────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ ⑥ spawn: claude --settings <tmp> [sanitized args]                      │
+│    · Strip user --settings / --settings=... (managed by ccsp)           │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Pain points with Claude Code settings alone
+
+| Pain point | Why it hurts |
+|------------|--------------|
+| **Multiple files and scopes** | user / project / project-local settings make it hard to see what actually applies. |
+| **High switching cost** | Changing API, model, or plugin mix means editing JSON or memorizing `--settings` paths. |
+| **Easy to break main config** | Editing `~/.claude/settings.json` can mix secrets and global defaults. |
+| **Scattered toggles** | `enabledPlugins`, `skillOverrides`, `deniedMcpServers` sit beside `env` with no “this launch only” view. |
+| **Commit risk** | Project settings with keys in `env` can be committed by mistake. |
+
+### What CCSP adds
+
+- **Non-destructive launch** — inject config via temp files; does not force-overwrite your main settings.
+- **Two-layer split** — global “base environment” vs project “launch delta” for multi-repo work.
+- **Visual toggles** — terminal TUI to browse JSON and flip plugins / skills / MCP.
+- **Remembers last choice** — per project directory for base and launch presets.
+- **Safer defaults** — `.claude/.ccsp/` gets a `.gitignore` that ignores everything on init.
+
+### Limitations (read before assuming)
+
+| Cannot / caveat | Explanation |
+|-----------------|-------------|
+| **Not a Claude Code replacement** | Wraps the `claude` subprocess only; exits if CLI is missing. |
+| **Does not write back main settings** | Merged output is not saved to `~/.claude/settings.json`; sync manually or update base presets via `ccsp create`. |
+| **Owns `--settings`** | Your `--settings` is ignored with a warning; path is generated by CCSP. |
+| **Limited launch fields** | Launch presets only override `enabledPlugins`, `skillOverrides`, `deniedMcpServers`; other fields (e.g. `env`) come from the base preset. |
+| **No “add MCP server” in UI** | Can **deny** discovered MCPs via `deniedMcpServers`; cannot create new server entries. |
+| **No headless / CI mode** | Main flow is Ink TUI; `create` / `manage` are interactive unless you edit JSON yourself. |
+| **Derived presets** | Schema supports `derived` type; CLI does not expose full create/manage flow yet. |
+| **Project store is local by default** | `launch-presets` and `tmp` under `.claude/.ccsp/` are not in Git unless you opt in. |
+| **Temp file cap** | Oldest files in `tmp` are pruned when count exceeds 20. |
+
+---
+
+## Command Reference
+
+| Command | Description |
+|---------|-------------|
+| `ccsp` | Default: pick base preset → configure launch layer → start `claude` |
+| `ccsp claude [args...]` | Same, forwarding `args` to `claude` (without `--settings`) |
+| `ccsp create` | Interactively create a global base preset |
+| `ccsp manage` | Manage global base presets (preview / rename / delete / create / launch) |
+| `ccsp manage --project` | Manage launch presets for the current project |
+
+### TUI shortcuts
+
+**Base preset selection:** `j`/`k` or arrows to move, `Enter` to confirm, `q` to quit.
+
+**Global manage (`ccsp manage`):** `l` launch, `r` rename, `d` delete, `c` create, `o` reveal in Finder, `q` quit.
+
+**Project launch layer:** switch between presets and plugin / skill / MCP columns; save as launch preset. `Ctrl+L` refreshes the UI.
+
+---
+
+## Directory Layout
+
+```text
+~/.ccsp/
+├── index.json                 # global base preset index
+├── settings/
+│   └── <name>-settings.json   # base preset body
+└── last-settings.json         # last base preset name per project cwd
+
+<project>/.claude/.ccsp/       # entire dir gitignored by default
+├── launch-presets/
+│   ├── index.json
+│   └── <name>-launch.json     # launch-layer overrides only
+├── tmp/
+│   └── <timestamp>-settings.json
+└── last-used.json             # last launch preset used
+```
+
+---
 
 ## Development
 
-### Scripts
-
 ```bash
-pnpm run typecheck   # TypeScript 全量类型检查（包含 tests）
-pnpm run test        # 运行 Vitest
-pnpm run build       # 构建 dist
-pnpm run check       # typecheck + build + test
-pnpm run test:coverage
-```
-
-### Local development
-
-```bash
+git clone https://github.com/lkangd/cc-settings-preset.git
+cd cc-settings-preset
 pnpm install
-pnpm run check
-pnpm run dev
+pnpm run dev          # run tsx src/cli.ts directly
+pnpm run check        # typecheck + build + test
 ```
 
-## Tech Stack
+---
 
-- TypeScript
-- Ink
-- React
-- Commander
-- Zod
-- Vitest
+## Contributing
 
-## Status
+Issues and pull requests are welcome. Before you contribute:
 
-当前实现覆盖：
+1. **Search existing issues** to avoid duplicates; open an issue for new features with motivation and proposed usage.
+2. **Verify locally:** `pnpm run check` must pass; CLI changes should include or update tests under `tests/`.
+3. **Style:** Match the codebase (ESM, strict TypeScript, Ink + `flows/` state machines); avoid unrelated refactors.
+4. **Scope:** CCSP focuses on settings presets and launch orchestration—avoid heavy unrelated dependencies.
+5. **Docs:** Update both `README.md` and `README.zh-hans.md` for user-visible behavior changes.
+6. **Commits:** Concise English or Chinese is fine; explain *why*, not only *what*.
 
-- 全局 settings 预设
-- 项目启动预设
-- 两阶段启动界面
-- `create` / `manage` / `manage -p` / `claude` 透传命令
-- plugin / skill / MCP 自动发现
-- 启动前 settings 合并与临时 settings 文件生成
+**Bug reports should include:** OS, Node version, how you invoked `ccsp`, relevant `~/.ccsp` or `.claude/.ccsp` layout (redact secrets), and full terminal output.
 
-如果你要继续扩展，推荐优先查看：
+---
 
-- `src/cli.ts`
-- `src/services/preset-service.ts`
-- `src/services/launch-preset-service.ts`
-- `src/services/plugin-service.ts`
-- `src/services/skill-service.ts`
-- `src/services/mcp-service.ts`
-- `src/ink/`
+## License
+
+[ISC](./LICENSE) © lkangd

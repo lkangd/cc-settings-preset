@@ -1,7 +1,7 @@
 {
   "name": "@lkangd/cc-settings-preset",
   "version": "1.0.0",
-  "description": "A preset selector for Claude Code runtime settings",
+  "description": "A switchable, reusable runtime settings preset selector for Claude Code",
   "homepage": "https://github.com/lkangd/cc-settings-preset#readme",
   "bugs": {
     "url": "https://github.com/lkangd/cc-settings-preset/issues"
