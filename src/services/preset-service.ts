@@ -128,6 +128,9 @@ export function createPresetService(globalRoot: string) {
 
       if (meta.type !== 'base') throw new CliError(`Base preset not found: ${name}`)
       const newName = requestedName
+      if (newName === name) {
+        return { ...meta, updatedAt: nowIso() }
+      }
       if (index.presets[newName]) throw new CliError(`Preset already exists: ${newName}`)
 
       const updated: PresetMeta = { ...meta, name: newName, fileName: buildSettingsFileName(newName), updatedAt: nowIso() }

@@ -1,23 +1,26 @@
 import { useState } from 'react'
 import { Box, Text, useApp, useInput, useStdout } from 'ink'
-import { TruncateText } from './components/truncate-text.js'
 import {
   createProjectLaunchFlowState,
   getActiveProjectLaunchItem,
   getActiveProjectLaunchState,
   reduceProjectLaunchFlow,
+  type ProjectLaunchFlowState,
 } from '../flows/project-launch-flow.js'
 import type { McpState } from '../services/mcp-service.js'
 import type { PluginState } from '../services/plugin-service.js'
 import type { SkillState } from '../services/skill-service.js'
-import { useInkResizeVersion } from './components/resize-context.js'
 import { TextInput } from './components/text-input.js'
 import type { ProjectLaunchAppProps, ProjectLaunchResult } from './project-launch-app.js'
+import type { ProjectLaunchToggleState } from '../flows/project-launch-flow.js'
 
 export type ProjectManageResult =
   | ProjectLaunchResult
+  | { type: 'save'; presetName: string; toggles: ProjectLaunchToggleState }
+  | { type: 'create'; toggles: ProjectLaunchToggleState; saveAs: string }
   | { type: 'rename'; presetName: string; newName: string }
   | { type: 'delete'; presetName: string }
+  | { type: 'refresh' }
 
 function enabledCount(items: Array<{ enabled: boolean }>): number {
   return items.filter(item => item.enabled).length
@@ -34,16 +37,46 @@ function sourceBadge(source: PluginState['source'] | SkillState['source'] | McpS
   return '[D]'
 }
 
-type Props = Omit<ProjectLaunchAppProps, 'onSubmit'> & {
-  onSubmit: (result: ProjectManageResult) => void
+function syncProjectPresetRename(state: ProjectLaunchFlowState, fromName: string, toName: string): ProjectLaunchFlowState {
+  const presetItems = state.presetItems.map(item => item.type === 'preset' && item.name === fromName ? { ...item, name: toName, preset: { ...item.preset, name: toName } } : item)
+  const statesByPreset = Object.fromEntries(Object.entries(state.statesByPreset).map(([name, value]) => [name === fromName ? toName : name, value]))
+  const draftsByPreset = Object.fromEntries(Object.entries(state.draftsByPreset).map(([name, value]) => [name === fromName ? toName : name, value]))
+  return {
+    ...state,
+    presetItems,
+    statesByPreset,
+    draftsByPreset,
+  }
 }
 
-export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedName, onSubmit }: Props) {
-  useInkResizeVersion()
+function syncProjectPresetCreate(state: ProjectLaunchFlowState, name: string): ProjectLaunchFlowState {
+  const createdState = (state.draftsByPreset.Detected ?? state.statesByPreset.Detected) as ProjectLaunchToggleState
+  const draftsByPreset = Object.fromEntries(
+    Object.entries(state.draftsByPreset).filter(([presetName]) => presetName !== 'Detected')
+  ) as Record<string, ProjectLaunchToggleState>
+
+  return {
+    ...state,
+    presetItems: [...state.presetItems, { type: 'preset', name, preset: { name, fileName: `${name}-launch.json`, createdAt: '', updatedAt: '' } }],
+    statesByPreset: { ...state.statesByPreset, [name]: createdState },
+    draftsByPreset,
+  }
+}
+
+type SaveMode = 'none' | 'name-new'
+
+type Props = Omit<ProjectLaunchAppProps, 'onSubmit'> & {
+  onSubmit: (result: ProjectManageResult) => void
+  onSaveSubmit?: (presetName: string, toggles: ProjectLaunchToggleState) => Promise<string | null>
+  onCreateSubmit?: (saveAs: string, toggles: ProjectLaunchToggleState) => Promise<string | null>
+  onRenameSubmit?: (presetName: string, newName: string) => Promise<string | null>
+}
+
+export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedName, onSubmit, onSaveSubmit, onCreateSubmit, onRenameSubmit }: Props) {
   const { exit } = useApp()
   const { stdout } = useStdout()
   const fallbackColumns = 120
-  const innerWidth = stdout.columns ?? fallbackColumns
+  const innerWidth = Math.max(90, stdout.columns ?? fallbackColumns)
   const gapWidth = 3
   const contentWidth = innerWidth - gapWidth
   const presetWidth = Math.max(22, Math.floor(contentWidth * 0.22))
@@ -56,71 +89,189 @@ export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedNa
     ...(lastUsedName ? { lastUsedName } : {}),
   }))
   const [mode, setMode] = useState<'browse' | 'rename' | 'delete'>('browse')
-  const [message, setMessage] = useState<string | null>(null)
+  const [saveMode, setSaveMode] = useState<SaveMode>('none')
+  const [message, setMessage] = useState<{ text: string; color: 'yellow' | 'red' } | null>(null)
   const [newName, setNewName] = useState('')
+  const [renameError, setRenameError] = useState<string | null>(null)
 
   useInput((input, key) => {
-    if (mode !== 'browse') return
+    if (mode !== 'browse' || saveMode !== 'none') return
     if (input === 'q') {
       exit()
       return
     }
     if (key.leftArrow || input === 'h') setState(current => reduceProjectLaunchFlow(current, { type: 'focus-left' }))
-    if (key.rightArrow || input === 'l') setState(current => reduceProjectLaunchFlow(current, { type: 'focus-right' }))
+    if (key.rightArrow) setState(current => reduceProjectLaunchFlow(current, { type: 'focus-right' }))
     if (key.upArrow || input === 'k') setState(current => reduceProjectLaunchFlow(current, { type: 'up' }))
     if (key.downArrow || input === 'j') setState(current => reduceProjectLaunchFlow(current, { type: 'down' }))
     if (input === 'p') setState(current => reduceProjectLaunchFlow(current, { type: 'focus-plugins' }))
     if (input === 's') setState(current => reduceProjectLaunchFlow(current, { type: 'focus-skills' }))
     if (input === 'm') setState(current => reduceProjectLaunchFlow(current, { type: 'focus-mcps' }))
     if (input === 't') setState(current => reduceProjectLaunchFlow(current, { type: 'toggle-sort-mode' }))
-    if (input === ' ') setState(current => reduceProjectLaunchFlow(current, { type: 'toggle-current' }))
+    if (input === ' ') {
+      const item = getActiveProjectLaunchItem(state)
+      setState(current => reduceProjectLaunchFlow(current, { type: 'toggle-current' }))
+      if (item?.type === 'detected') {
+        setMessage({ text: 'Press enter to create a new preset from Detected', color: 'yellow' })
+      }
+    }
     if (input === 'r') {
       const item = getActiveProjectLaunchItem(state)
       if (item?.type !== 'preset') {
-        setMessage('Detected cannot be renamed')
+        setMessage({ text: 'Detected cannot be renamed', color: 'yellow' })
         return
       }
+      setRenameError(null)
+      setNewName(item.name)
       setMode('rename')
       return
     }
     if (input === 'd') {
       const item = getActiveProjectLaunchItem(state)
       if (item?.type !== 'preset') {
-        setMessage('Detected cannot be deleted')
+        setMessage({ text: 'Detected cannot be deleted', color: 'yellow' })
         return
       }
       setMode('delete')
       return
     }
-    if (key.return) {
-      onSubmit({ type: 'launch', toggles: getActiveProjectLaunchState(state) })
+    if (input === 'l') {
+      const item = getActiveProjectLaunchItem(state)
+      const toggles = getActiveProjectLaunchState(state)
+      if (state.dirty) {
+        if (item?.type === 'preset') {
+          if (onSaveSubmit) {
+            void (async () => {
+              const error = await onSaveSubmit(item.name, toggles)
+              if (error) {
+                setMessage({ text: error, color: 'red' })
+                return
+              }
+              onSubmit({ type: 'launch', presetName: item.name, toggles })
+              exit()
+            })()
+            return
+          }
+          onSubmit({ type: 'launch', presetName: item.name, toggles })
+          exit()
+          return
+        }
+        setMessage({ text: 'Press enter to create a new preset from Detected', color: 'yellow' })
+        setNewName('')
+        setSaveMode('name-new')
+        return
+      }
+      onSubmit({
+        type: 'launch',
+        toggles,
+        ...(item?.type === 'preset' ? { presetName: item.name } : {}),
+      })
       exit()
+      return
+    }
+    if (key.return) {
+      if (!state.dirty) return
+      const item = getActiveProjectLaunchItem(state)
+      const toggles = getActiveProjectLaunchState(state)
+      if (item?.type === 'preset') {
+        if (onSaveSubmit) {
+          void (async () => {
+            const error = await onSaveSubmit(item.name, toggles)
+            if (error) {
+              setMessage({ text: error, color: 'red' })
+              return
+            }
+            setMessage({ text: 'Preset saved successfully', color: 'yellow' })
+          })()
+          return
+        }
+        onSubmit({ type: 'save', presetName: item.name, toggles })
+        exit()
+        return
+      }
+      setMessage({ text: 'Press enter to create a new preset from Detected', color: 'yellow' })
+      setNewName('')
+      setSaveMode('name-new')
     }
   })
 
   const activeItem = getActiveProjectLaunchItem(state)
 
+  if (saveMode === 'name-new') {
+    return (
+      <Box flexDirection="column">
+        {message?.color === 'red' ? <Text color="red">{message.text}</Text> : null}
+        <TextInput
+          label="Project launch preset name"
+          value={newName}
+          onChange={value => {
+            if (message?.color === 'red') setMessage(null)
+            setNewName(value)
+          }}
+          onCancel={() => {
+            setSaveMode('none')
+          }}
+          onSubmit={async () => {
+            const saveAs = newName.trim()
+            if (!saveAs) return
+            if (onCreateSubmit) {
+              const error = await onCreateSubmit(saveAs, getActiveProjectLaunchState(state))
+              if (error) {
+                setMessage({ text: error, color: 'red' })
+                return
+              }
+              setState(current => syncProjectPresetCreate(current, saveAs))
+              setMessage({ text: 'Preset created successfully', color: 'yellow' })
+              setSaveMode('none')
+              setNewName('')
+              return
+            }
+            onSubmit({ type: 'create', toggles: getActiveProjectLaunchState(state), saveAs })
+            exit()
+          }}
+        />
+      </Box>
+    )
+  }
+
   if (mode === 'rename') {
     return (
-      <TextInput
-        label={`Rename ${activeItem?.name ?? 'preset'} to`}
-        value={newName}
-        onChange={setNewName}
-        onCancel={() => setMode('browse')}
-        onSubmit={() => {
-          if (activeItem?.type !== 'preset') return
-          onSubmit({ type: 'rename', presetName: activeItem.name, newName })
-          exit()
-        }}
-      />
+      <Box flexDirection="column">
+        {renameError ? <Text color="red">{renameError}</Text> : <Text> </Text>}
+        <TextInput
+          label={`Rename ${activeItem?.name ?? 'preset'} to`}
+          value={newName}
+          onChange={value => {
+            setRenameError(null)
+            setNewName(value)
+          }}
+          onCancel={() => setMode('browse')}
+          onSubmit={async () => {
+            if (activeItem?.type !== 'preset') return
+            if (onRenameSubmit) {
+              const error = await onRenameSubmit(activeItem.name, newName)
+              if (error) {
+                setRenameError(error)
+                return
+              }
+              setState(current => syncProjectPresetRename(current, activeItem.name, newName.trim() || activeItem.name))
+              setMessage({ text: 'Preset renamed successfully', color: 'yellow' })
+              setMode('browse')
+              return
+            }
+            onSubmit({ type: 'rename', presetName: activeItem.name, newName })
+            exit()
+          }}
+        />
+      </Box>
     )
   }
 
   if (mode === 'delete') {
     return (
       <Box flexDirection="column">
-        <TruncateText color="red">Delete preset {activeItem?.name ?? 'preset'}?</TruncateText>
-        <TruncateText dimColor>press y to confirm · esc cancel</TruncateText>
+        <Text color="red">Delete preset {activeItem?.name ?? 'preset'}?</Text>
+        <Text dimColor>press y to confirm · esc cancel</Text>
         <ConfirmDelete
           onCancel={() => setMode('browse')}
           onConfirm={() => {
@@ -135,15 +286,15 @@ export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedNa
 
   return (
     <Box flexDirection="column">
-      <TruncateText bold color="cyan">Manage project launch presets</TruncateText>
-      <TruncateText dimColor>←/→ switch column · p plugins · s skills · m mcps · t sort · space toggle · enter launch · r rename · d delete · q quit</TruncateText>
+      <Text bold color="cyan">Manage project launch presets</Text>
+      <Text dimColor>←/→ switch column · p plugins · s skills · m mcps · t sort · space toggle · enter save · r rename · d delete · q quit</Text>
       <Box marginTop={1} width={innerWidth}>
         <Box flexDirection="column" width={presetWidth} borderStyle="round" borderColor={state.focus === 'presets' ? 'cyan' : 'gray'} paddingX={0.5} paddingY={0.5}>
-          <TruncateText bold>Presets({state.presetItems.length})</TruncateText>
+          <Text bold>Presets({state.presetItems.length})</Text>
           {state.presetItems.map((item, index) => (
-            <TruncateText key={item.name} {...(index === state.presetCursor ? { color: 'cyan' as const } : {})}>
+            <Text key={item.name} wrap="truncate-end" {...(index === state.presetCursor ? { color: 'cyan' as const } : {})}>
               {state.focus === 'presets' && index === state.presetCursor ? '❯ ' : '  '}{item.name}
-            </TruncateText>
+            </Text>
           ))}
         </Box>
         <Box width={1} />
@@ -153,7 +304,7 @@ export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedNa
         <Box width={1} />
         <ToggleColumn title={`MCPs(${enabledCount(state.mcps)}/${state.mcps.length})`} focused={state.focus === 'mcps'} items={state.mcps} cursor={state.mcpCursor} width={mcpWidth} />
       </Box>
-      {message ? <TruncateText color="yellow">{message}</TruncateText> : null}
+      {message ? <Text color={message.color}>{message.text}</Text> : null}
     </Box>
   )
 }
@@ -161,13 +312,13 @@ export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedNa
 function ToggleColumn({ title, focused, items, cursor, width }: { title: string; focused: boolean; items: Array<{ name: string; enabled: boolean; source: PluginState['source'] | SkillState['source'] | McpState['source']; toggleable?: boolean }>; cursor: number; width: number }) {
   return (
     <Box flexDirection="column" width={width} borderStyle="round" borderColor={focused ? 'cyan' : 'gray'} paddingX={0.5} paddingY={0.5}>
-      <TruncateText bold>{title}</TruncateText>
+      <Text bold>{title}</Text>
       {items.map((item, index) => (
-        <TruncateText key={item.name} {...(focused && index === cursor ? { color: 'cyan' as const } : {})}>
+        <Text key={item.name} wrap="truncate-end" {...(focused && index === cursor ? { color: 'cyan' as const } : {})}>
           {focused && index === cursor ? '❯ ' : '  '}<Text color={item.enabled ? 'green' : 'red'}>{item.enabled ? 'ON ' : 'OFF'}</Text> {sourceBadge(item.source)} {item.name}{item.toggleable === false ? ' (plugin)' : ''}
-        </TruncateText>
+        </Text>
       ))}
-      {items.length === 0 ? <TruncateText dimColor>none found</TruncateText> : null}
+      {items.length === 0 ? <Text dimColor>none found</Text> : null}
     </Box>
   )
 }

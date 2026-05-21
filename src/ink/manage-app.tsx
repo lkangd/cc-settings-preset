@@ -24,6 +24,7 @@ export function ManageApp({ items, onSubmit, onRenameSubmit }: Props) {
   const [mode, setMode] = useState<'browse' | 'rename' | 'delete'>('browse')
   const [newName, setNewName] = useState('')
   const [renameError, setRenameError] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
   const active = state.items[state.cursor]
 
   useInput((input, key) => {
@@ -35,13 +36,14 @@ export function ManageApp({ items, onSubmit, onRenameSubmit }: Props) {
     }
     if (key.upArrow || input === 'k') setState(current => reduceSettingsSelectFlow(current, { type: 'up' }))
     if (key.downArrow || input === 'j') setState(current => reduceSettingsSelectFlow(current, { type: 'down' }))
-    if (input === 'l' || key.return) {
+    if (input === 'l') {
       if (!active) return
       onSubmit({ type: 'launch', item: active })
       exit()
     }
     if (input === 'r') {
       setRenameError(null)
+      setNewName(active?.name ?? '')
       setMode('rename')
     }
     if (input === 'd') setMode('delete')
@@ -68,8 +70,12 @@ export function ManageApp({ items, onSubmit, onRenameSubmit }: Props) {
                 setRenameError(error)
                 return
               }
-              onSubmit({ type: 'refresh' })
-              exit()
+              setState(current => ({
+                ...current,
+                items: current.items.map(item => item.name === active.name ? { ...item, name: newName } : item),
+              }))
+              setMessage('Preset renamed successfully')
+              setMode('browse')
               return
             }
             onSubmit({ type: 'rename', item: active, newName })
@@ -98,12 +104,15 @@ export function ManageApp({ items, onSubmit, onRenameSubmit }: Props) {
   }
 
   return (
-    <TwoColumnSettingsView
-      title="Manage settings presets"
-      help="↑/k ↓/j navigate · enter/l launch · o open folder · r rename · d delete · q quit"
-      items={state.items}
-      cursor={state.cursor}
-    />
+    <Box flexDirection="column">
+      <TwoColumnSettingsView
+        title="Manage settings presets"
+        help="↑/k ↓/j navigate · l launch · o open folder · r rename · d delete · q quit"
+        items={state.items}
+        cursor={state.cursor}
+      />
+      {message ? <Text color="yellow">{message}</Text> : null}
+    </Box>
   )
 }
 

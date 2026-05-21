@@ -54,6 +54,17 @@ describe('launch preset service', () => {
     expect(await service.readLastUsed()).toBeUndefined()
   })
 
+  it('treats dot and hyphen normalized rename targets as the same preset', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ccsp-project-'))
+    const service = createLaunchPresetService(cwd)
+
+    await service.createPreset('gpt-5-4', {})
+    const renamed = await service.renamePreset('gpt-5-4', 'gpt-5.4')
+
+    expect(renamed.name).toBe('gpt-5.4')
+    expect((await service.listPresets()).map(preset => preset.name)).toEqual(['gpt-5.4'])
+  })
+
   it('writes retained temp settings files', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'ccsp-project-'))
     const service = createLaunchPresetService(cwd)

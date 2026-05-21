@@ -624,22 +624,30 @@ describe('manage command', () => {
       },
     ])
 
-    renderMock.mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
-      element.props.onSubmit({
-        type: 'launch',
-        toggles: { plugins: [], skills: [], mcps: [] },
+    renderMock
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          type: 'create',
+          saveAs: 'project-manage-created',
+          toggles: { plugins: [], skills: [], mcps: [] },
+        })
+        return { waitUntilExit: async () => undefined }
       })
-      return { waitUntilExit: async () => undefined }
-    })
+      .mockImplementationOnce(() => ({ waitUntilExit: async () => undefined }))
 
     const { main } = await import('../src/cli.js')
     await main(['node', 'cli', 'manage', '--project'])
 
     expect(discoverSettingsSourcesMock).toHaveBeenCalled()
     expect(listPresetsMock).not.toHaveBeenCalled()
-    expect(renderMock).toHaveBeenCalledTimes(1)
-    expect(writeTempSettingsMock).toHaveBeenCalledWith({ permissions: { allow: ['Read(*)'] } })
-    expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
+    expect(renderMock).toHaveBeenCalledTimes(2)
+    expect(createProjectLaunchPresetMock).toHaveBeenCalledWith('project-manage-created', {
+      enabledPlugins: {},
+      skillOverrides: {},
+      deniedMcpServers: [],
+    })
+    expect(writeTempSettingsMock).not.toHaveBeenCalled()
+    expect(spawnClaudeMock).not.toHaveBeenCalled()
   })
 
   it('prints a message and exits when project manage mode finds no project settings sources', async () => {
@@ -654,7 +662,7 @@ describe('manage command', () => {
     stderrWriteSpy.mockRestore()
   })
 
-  it('does not accumulate rename prompts after repeated rename conflicts in a real tty', async () => {
+  it('prefills the current rename value in a real tty', async () => {
     const root = await mkdtemp(join(tmpdir(), 'ccsp-tty-'))
     const homeDir = join(root, 'home')
     const cwd = join(root, 'project')
@@ -688,18 +696,11 @@ describe('manage command', () => {
         { type: 'read', ms: 1500 },
         { type: 'write', data: 'r' },
         { type: 'read', ms: 800 },
-        { type: 'write', data: 'test-dddd' },
-        { type: 'read', ms: 500 },
-        { type: 'write', data: '\r' },
-        { type: 'read', ms: 4000 },
-        { type: 'write', data: '\r' },
-        { type: 'read', ms: 4000 },
       ],
     })
 
     expect(result.rawOutput.length).toBeGreaterThan(0)
-    expect(result.normalizedOutput).toContain('Preset already exists: test-dddd')
-    expect(result.finalFrame).toContain('Preset already exists: test-dddd')
-    expect((result.finalFrame.match(/Rename test-dddd to/g) ?? []).length).toBe(1)
+    expect(result.normalizedOutput).toContain('Rename test-dddd to')
+    expect(result.normalizedOutput).toContain('test-dddd▌')
   }, 15000)
 })

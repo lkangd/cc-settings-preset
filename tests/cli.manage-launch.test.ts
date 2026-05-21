@@ -15,30 +15,23 @@ const launchPreset = {
 }
 
 function unwrapRenderedElement(element: unknown): unknown {
-  if (!React.isValidElement(element)) {
-    return element
-  }
+  if (!React.isValidElement(element)) return element
 
   const props = element.props as Record<string, unknown>
-  if ('onSubmit' in props) {
-    return element
-  }
+  if ('onSubmit' in props || 'onRenameSubmit' in props) return element
 
   const child = props.children
   if (Array.isArray(child)) {
     for (const item of child) {
       const unwrapped = unwrapRenderedElement(item)
-      if (React.isValidElement(unwrapped) && 'onSubmit' in (unwrapped.props as Record<string, unknown>)) {
+      if (React.isValidElement(unwrapped) && ('onSubmit' in (unwrapped.props as Record<string, unknown>) || 'onRenameSubmit' in (unwrapped.props as Record<string, unknown>))) {
         return unwrapped
       }
     }
     return element
   }
 
-  if (React.isValidElement(child)) {
-    return unwrapRenderedElement(child)
-  }
-
+  if (React.isValidElement(child)) return unwrapRenderedElement(child)
   return element
 }
 
@@ -54,6 +47,8 @@ describe('manage launch flow', () => {
     const spawnClaude = vi.fn().mockResolvedValue(0)
     const writeTempSettings = vi.fn().mockResolvedValue('/tmp/final-settings.json')
     const writeLastUsed = vi.fn().mockResolvedValue(undefined)
+    const writePresetSettings = vi.fn().mockResolvedValue(launchPreset)
+    const createPreset = vi.fn()
 
     vi.doMock('figlet', () => ({
       default: { textSync: () => 'CCSP' },
@@ -103,7 +98,8 @@ describe('manage launch flow', () => {
         readLastUsed: vi.fn().mockResolvedValue(undefined),
         writeLastUsed,
         writeTempSettings,
-        createPreset: vi.fn(),
+        writePresetSettings,
+        createPreset,
       }),
     }))
     vi.doMock('../src/services/plugin-service.js', () => ({
@@ -130,7 +126,6 @@ describe('manage launch flow', () => {
       spawnClaude,
     }))
     vi.doMock('ink', () => ({
-      Text: ({ children }: { children?: React.ReactNode }) => children,
       render: (element: React.ReactElement) => {
         const typedElement = unwrapRenderedElement(element) as React.ReactElement<{
           onSubmit: (value: unknown) => void
@@ -162,9 +157,148 @@ describe('manage launch flow', () => {
     await createProgram().parseAsync(['node', 'ccsp', 'manage'])
 
     expect(renderSequence).toEqual(['ManageApp', 'ProjectLaunchApp'])
+    expect(writePresetSettings).toHaveBeenCalledWith(launchPreset.name, {
+      enabledPlugins: {},
+      skillOverrides: {},
+      deniedMcpServers: [],
+    })
+    expect(createPreset).not.toHaveBeenCalled()
     expect(writeTempSettings).toHaveBeenCalledOnce()
     expect(writeLastUsed).toHaveBeenCalledWith(launchPreset.name)
     expect(spawnClaude).toHaveBeenCalledWith('/tmp/final-settings.json', [])
     expect(stderrWrite).toHaveBeenCalled()
   })
-})
+
+  it('refreshes project manage after rename and creates from detected on save', async () => {
+    const renderSequence: string[] = []
+    const renamePreset = vi.fn().mockResolvedValue(undefined)
+    const createPreset = vi.fn().mockResolvedValue({ ...launchPreset, name: 'detected-new' })
+
+    vi.doMock('figlet', () => ({
+      default: { textSync: () => 'CCSP' },
+    }))
+    vi.doMock('gradient-string', () => ({
+      default: () => (text: string) => text,
+    }))
+    vi.doMock('../src/core/paths.js', () => ({
+      createPathContext: () => ({ homeDir: '/Users/test', cwd: '/repo/project' }),
+      resolveGlobalRoot: () => '/Users/test/.ccsp',
+    }))
+    vi.doMock('../src/services/preset-service.js', () => ({
+      createPresetService: () => ({
+        listPresets: vi.fn().mockResolvedValue([]),
+        getPresetPath: vi.fn(),
+        readPresetSettings: vi.fn(),
+        renamePreset: vi.fn(),
+        deletePreset: vi.fn(),
+        createBasePreset: vi.fn(),
+      }),
+    }))
+    vi.doMock('../src/services/settings-source-service.js', () => ({
+      createSettingsSourceService: () => ({
+        discoverSettingsSources: vi.fn().mockResolvedValue([
+          {
+            scope: 'project',
+            filePath: '/repo/project/.claude/settings.json',
+            settings: {},
+          },
+        ]),
+      }),
+    }))
+    vi.doMock('../src/services/global-last-settings-service.js', () => ({
+      createGlobalLastSettingsService: () => ({
+        readLastUsed: vi.fn().mockResolvedValue(undefined),
+        writeLastUsed: vi.fn().mockResolvedValue(undefined),
+      }),
+    }))
+    vi.doMock('../src/services/launch-preset-service.js', () => ({
+      createLaunchPresetService: () => ({
+        listPresets: vi.fn().mockResolvedValue([launchPreset]),
+        readPresetSettings: vi.fn().mockResolvedValue({
+          enabledPlugins: {},
+          skillOverrides: {},
+          deniedMcpServers: [],
+        }),
+        readLastUsed: vi.fn().mockResolvedValue(launchPreset.name),
+        writeLastUsed: vi.fn().mockResolvedValue(undefined),
+        writeTempSettings: vi.fn(),
+        writePresetSettings: vi.fn(),
+        renamePreset,
+        deletePreset: vi.fn(),
+        createPreset,
+      }),
+    }))
+    vi.doMock('../src/services/plugin-service.js', () => ({
+      resolvePluginStates: vi.fn().mockReturnValue([]),
+      forceEnablePlugins: vi.fn().mockImplementation((states: unknown) => states),
+      pluginStatesToEnabledPlugins: vi.fn().mockReturnValue({}),
+      applyPluginOverrides: vi.fn().mockReturnValue([]),
+    }))
+    vi.doMock('../src/services/skill-service.js', () => ({
+      discoverSkillStates: vi.fn().mockResolvedValue([]),
+      forceEnableSkills: vi.fn().mockImplementation((states: unknown) => states),
+      skillStatesToOverrides: vi.fn().mockReturnValue({}),
+      applySkillOverrides: vi.fn().mockReturnValue([]),
+    }))
+    vi.doMock('../src/services/mcp-service.js', () => ({
+      discoverMcpStates: vi.fn().mockResolvedValue([]),
+      applyDeniedMcpServers: vi.fn().mockReturnValue([]),
+      mcpStatesToDeniedServers: vi.fn().mockReturnValue([]),
+    }))
+    vi.doMock('../src/services/settings-finalizer-service.js', () => ({
+      finalizeSettings: vi.fn(),
+    }))
+    vi.doMock('../src/core/spawn.js', () => ({
+      spawnClaude: vi.fn(),
+    }))
+    vi.doMock('ink', () => {
+      let projectManageRenderCount = 0
+      return {
+        render: (element: React.ReactElement) => {
+          const typedElement = unwrapRenderedElement(element) as React.ReactElement<{
+            onSubmit: (value: unknown) => void
+            onRenameSubmit?: (presetName: string, newName: string) => Promise<string | null>
+          }>
+          const typeName = typeof typedElement.type === 'string' ? typedElement.type : (typedElement.type as { name?: string }).name ?? 'unknown'
+          renderSequence.push(typeName)
+
+          if (typeName === 'ProjectManageApp') {
+            projectManageRenderCount += 1
+            return {
+              waitUntilExit: async () => {
+                if (projectManageRenderCount === 1) {
+                  await typedElement.props.onRenameSubmit?.(launchPreset.name, 'project-app')
+                  typedElement.props.onSubmit({ type: 'refresh' })
+                  return
+                }
+                if (projectManageRenderCount === 2) {
+                  typedElement.props.onSubmit({
+                    type: 'create',
+                    saveAs: 'detected-new',
+                    toggles: { plugins: [], skills: [], mcps: [] },
+                  })
+                }
+              },
+            }
+          }
+
+          return {
+            waitUntilExit: async () => {},
+          }
+        },
+      }
+    })
+
+    const { createProgram } = await import('../src/cli.js')
+
+    await createProgram().parseAsync(['node', 'ccsp', 'manage', '--project'])
+
+    expect(renderSequence).toEqual(['ProjectManageApp', 'ProjectManageApp', 'ProjectManageApp'])
+    expect(renamePreset).toHaveBeenCalledWith('project-web', 'project-app')
+    expect(createPreset).toHaveBeenCalledWith('detected-new', {
+      enabledPlugins: {},
+      skillOverrides: {},
+      deniedMcpServers: [],
+    })
+  })
+}
