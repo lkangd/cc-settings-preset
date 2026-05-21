@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import React from 'react'
 import { Command } from 'commander'
@@ -663,9 +664,22 @@ export async function main(argv = process.argv): Promise<void> {
   await createProgram().parseAsync(argv)
 }
 
-const isDirectExecution = process.argv[1] === fileURLToPath(import.meta.url)
+export function isCliDirectExecution(
+  argv: string[],
+  moduleUrl: string | URL = import.meta.url
+): boolean {
+  const entry = argv[1]
+  if (!entry) return false
 
-if (isDirectExecution) {
+  const scriptPath = fileURLToPath(moduleUrl)
+  try {
+    return realpathSync(entry) === realpathSync(scriptPath)
+  } catch {
+    return entry === scriptPath
+  }
+}
+
+if (isCliDirectExecution(process.argv)) {
   main().catch(error => {
     if (error instanceof CliError) {
       process.stderr.write(`\nError: ${error.message}\n`)
