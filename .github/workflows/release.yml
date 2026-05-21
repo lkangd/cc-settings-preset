@@ -12,6 +12,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    environment: NPM_TOKEN
     permissions:
       id-token: write
       contents: write
@@ -32,21 +33,10 @@ jobs:
       - run: pnpm run build
 
       - name: Publish to npm
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          if [ -n "$NPM_TOKEN" ]; then
-            echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> "$HOME/.npmrc"
-          else
-            npm install -g npm@latest
-            echo "npm $(npm --version) — using OIDC trusted publishing (no NPM_TOKEN)"
-          fi
-          if ! npm publish --access public; then
-            if [ -z "$NPM_TOKEN" ]; then
-              echo "::error::Publish failed. Add repo secret NPM_TOKEN, or configure npm Trusted Publisher: org/user=lkangd, repo=cc-settings-preset, workflow=release.yml"
-            fi
-            exit 1
-          fi
+          npm install -g npm@latest
+          echo "npm $(npm --version) — OIDC trusted publishing (environment: NPM_TOKEN)"
+          npm publish --access public
 
       - name: Calculate SHA256
         id: sha256
