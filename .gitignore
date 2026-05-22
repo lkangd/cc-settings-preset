@@ -21,6 +21,7 @@ coverage/
 
 # build output
 dist/
+src/version.ts
 build/
 .next/
 out/

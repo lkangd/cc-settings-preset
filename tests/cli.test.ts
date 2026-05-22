@@ -1,8 +1,8 @@
 import { EventEmitter } from 'node:events'
+import { readFileSync } from 'node:fs'
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { spawn } from 'node:child_process'
 import React from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -13,7 +13,6 @@ import { runInTty } from './helpers/tty.js'
 const createBasePresetMock = vi.fn()
 const readJsonFileMock = vi.fn().mockResolvedValue({})
 const renderMock = vi.fn()
-const clearMock = vi.fn()
 const instanceCleanupMock = vi.fn()
 const listPresetsMock = vi.fn()
 const deletePresetMock = vi.fn()
@@ -174,6 +173,14 @@ describe('cli argument behavior', () => {
     const { createProgram } = await import('../src/cli.js')
     const manage = createProgram().commands.find(command => command.name() === 'manage')
     expect(manage?.options.map(option => option.flags)).toContain('-p, --project')
+  })
+
+  it('shows package version in help output', async () => {
+    const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+    const { createProgram } = await import('../src/cli.js')
+    const help = createProgram().helpInformation()
+
+    expect(help).toContain(`v${pkg.version}`)
   })
 
   it('selects a banner candidate that fits within the terminal width', async () => {

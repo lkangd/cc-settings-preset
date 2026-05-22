@@ -40,9 +40,9 @@ import {
   skillStatesToOverrides,
   type SkillState
 } from './services/skill-service.js'
+import { VERSION } from './version.js'
 
 const h = React.createElement
-const VERSION = '1.0.0'
 
 const context = createPathContext()
 const globalRoot = resolveGlobalRoot(context.homeDir)
@@ -53,7 +53,10 @@ const launchPresetService = createLaunchPresetService(context.cwd)
 
 export function createProgram(): Command {
   const program = new Command()
-  program.name('ccsp/cc-settings-preset').description('Select Claude Code runtime settings presets').version(VERSION)
+  program
+    .name('ccsp/cc-settings-preset')
+    .description(`Select Claude Code runtime settings presets (v${VERSION})`)
+    .version(VERSION)
 
   program
     .command('create')
