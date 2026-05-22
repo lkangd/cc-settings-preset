@@ -139,6 +139,15 @@ vi.mock('../src/services/global-last-settings-service.js', () => ({
   }),
 }))
 
+vi.mock('../src/services/settings-finalizer-service.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/services/settings-finalizer-service.js')>()
+  return {
+    ...actual,
+    finalizeLaunchSettings: vi.fn(async (baseInput: unknown, launchInput: unknown) =>
+      actual.finalizeSettings(baseInput, launchInput)),
+  }
+})
+
 const figletTextSync = vi.fn((text: string, options?: { font?: string }) => {
   if (text === 'C C S P') {
     return options?.font === 'ANSI Shadow'
@@ -378,7 +387,7 @@ describe('run command', () => {
       enabledPlugins: { alpha: false },
       skillOverrides: { personal: 'off' },
       deniedMcpServers: [{ serverName: 'github' }],
-    })
+    }, expect.any(Date))
     expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
   })
 
@@ -493,7 +502,7 @@ describe('run command', () => {
     await main(['node', 'cli'])
 
     expect(createProjectLaunchPresetMock).not.toHaveBeenCalled()
-    expect(writeTempSettingsMock).toHaveBeenCalledWith({})
+    expect(writeTempSettingsMock).toHaveBeenCalledWith({}, expect.any(Date))
   })
 
   it('clears the screen and reopens global settings when backing out of project launch', async () => {
@@ -712,7 +721,7 @@ describe('manage command', () => {
     await main(['node', 'cli', 'manage'])
 
     expect(renderMock).toHaveBeenCalledTimes(2)
-    expect(writeTempSettingsMock).toHaveBeenCalledWith({})
+    expect(writeTempSettingsMock).toHaveBeenCalledWith({}, expect.any(Date))
     expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
   })
 

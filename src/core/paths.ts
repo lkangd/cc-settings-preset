@@ -106,3 +106,27 @@ export function resolveUserClaudeJsonPath(homeDir: string): string {
 export function resolveGlobalLastSettingsPath(globalRoot: string): string {
   return join(globalRoot, '.ccsp', 'last-settings.json')
 }
+
+export function resolveManagedClaudeSettingsDir(): string {
+  return '/Library/Application Support/ClaudeCode'
+}
+
+export function resolveManagedClaudeSettingsPath(): string {
+  return join(resolveManagedClaudeSettingsDir(), 'managed-settings.json')
+}
+
+export function resolveManagedClaudeSettingsDropInDir(): string {
+  return join(resolveManagedClaudeSettingsDir(), 'managed-settings.d')
+}
+
+export function resolveCcspStatuslineWrapperPath(projectRoot: string, stem: string): string {
+  return join(resolveProjectTempSettingsDir(projectRoot), `ccsp-statusline-${stem}.sh`)
+}
+
+export function resolveCcspStatuslineUnderlyingPath(projectRoot: string, stem: string): string {
+  return join(resolveProjectTempSettingsDir(projectRoot), `ccsp-statusline-underlying-${stem}.sh`)
+}
+
+export function resolveCcspStatuslineUnderlyingCommandPath(projectRoot: string, stem: string): string {
+  return join(resolveProjectTempSettingsDir(projectRoot), `ccsp-statusline-underlying-${stem}.cmd`)
+}

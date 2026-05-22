@@ -7,9 +7,13 @@ import {
   buildTempSettingsFileName,
   normalizePresetName,
   parseSettingsFileName,
+  parseTempSettingsStem,
   resolvePresetIndexKey,
 } from '../core/name.js'
 import {
+  resolveCcspStatuslineUnderlyingCommandPath,
+  resolveCcspStatuslineUnderlyingPath,
+  resolveCcspStatuslineWrapperPath,
   resolveProjectLastUsedPath,
   resolveProjectLaunchPresetIndexPath,
   resolveProjectLaunchPresetPath,
@@ -89,6 +93,24 @@ export function createLaunchPresetService(cwd: string) {
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
         }
+
+        const stem = parseTempSettingsStem(fileName)
+        if (!stem) return
+
+        const relatedPaths = [
+          resolveCcspStatuslineWrapperPath(cwd, stem),
+          resolveCcspStatuslineUnderlyingPath(cwd, stem),
+          resolveCcspStatuslineUnderlyingCommandPath(cwd, stem),
+        ]
+        await Promise.all(
+          relatedPaths.map(async relatedPath => {
+            try {
+              await fs.unlink(relatedPath)
+            } catch (error) {
+              if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+            }
+          }),
+        )
       }),
     )
   }

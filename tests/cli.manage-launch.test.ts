@@ -122,6 +122,8 @@ describe('manage launch flow', () => {
     }))
     vi.doMock('../src/services/settings-finalizer-service.js', () => ({
       finalizeSettings: vi.fn().mockImplementation((base: object, launch: object) => ({ base, launch })),
+      finalizeLaunchSettings: vi.fn().mockImplementation(async (base: object, launch: object) => ({ base, launch })),
+      resolveProjectPresetName: vi.fn().mockReturnValue('Detected'),
     }))
     vi.doMock('../src/core/spawn.js', () => ({
       spawnClaude,
@@ -250,6 +252,8 @@ describe('manage launch flow', () => {
     }))
     vi.doMock('../src/services/settings-finalizer-service.js', () => ({
       finalizeSettings: vi.fn(),
+      finalizeLaunchSettings: vi.fn(),
+      resolveProjectPresetName: vi.fn().mockReturnValue('Detected'),
     }))
     vi.doMock('../src/core/spawn.js', () => ({
       spawnClaude: vi.fn(),

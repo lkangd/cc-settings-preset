@@ -2,7 +2,13 @@ import { mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
-import { resolveProjectTempSettingsDir, resolveProjectTempSettingsPath } from '../../src/core/paths.js'
+import {
+  resolveCcspStatuslineUnderlyingCommandPath,
+  resolveCcspStatuslineUnderlyingPath,
+  resolveCcspStatuslineWrapperPath,
+  resolveProjectTempSettingsDir,
+  resolveProjectTempSettingsPath,
+} from '../../src/core/paths.js'
 import { createLaunchPresetService } from '../../src/services/launch-preset-service.js'
 import { ensureProjectCcspStore } from '../../src/services/project-store-service.js'
 
@@ -110,5 +116,33 @@ describe('launch preset service', () => {
     expect(remaining).toHaveLength(20)
     expect(remaining[0]).toBe('2026-05-01-00-00-01-settings.json')
     expect(remaining.at(-1)).toMatch(/^2026-05-02-\d{2}-\d{2}-\d{2}-settings\.json$/)
+  })
+
+  it('prunes related ccsp statusline artifacts with oldest temp settings', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ccsp-project-'))
+    const service = createLaunchPresetService(cwd)
+    await ensureProjectCcspStore(cwd)
+
+    const oldestStem = '2026-05-01-00-00-00'
+    const oldestSettings = `${oldestStem}-settings.json`
+    await writeFile(resolveProjectTempSettingsPath(cwd, oldestSettings), '{}')
+    await writeFile(resolveCcspStatuslineWrapperPath(cwd, oldestStem), '#!/bin/bash\n')
+    await writeFile(resolveCcspStatuslineUnderlyingPath(cwd, oldestStem), '#!/bin/bash\n')
+    await writeFile(resolveCcspStatuslineUnderlyingCommandPath(cwd, oldestStem), "echo 'old'\n")
+
+    for (let index = 1; index < 20; index += 1) {
+      const fileName = `2026-05-01-00-00-${String(index).padStart(2, '0')}-settings.json`
+      await writeFile(resolveProjectTempSettingsPath(cwd, fileName), '{}')
+    }
+
+    await service.writeTempSettings({}, new Date('2026-05-02T12:00:00.000Z'))
+
+    const tempDir = resolveProjectTempSettingsDir(cwd)
+    const remaining = await readdir(tempDir)
+
+    expect(remaining).not.toContain(`ccsp-statusline-${oldestStem}.sh`)
+    expect(remaining).not.toContain(`ccsp-statusline-underlying-${oldestStem}.sh`)
+    expect(remaining).not.toContain(`ccsp-statusline-underlying-${oldestStem}.cmd`)
+    expect(remaining).not.toContain(oldestSettings)
   })
 })

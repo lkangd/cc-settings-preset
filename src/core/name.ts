@@ -66,6 +66,16 @@ export function buildTempSettingsFileName(date = new Date()): string {
   return `${formatTimestampForName(date)}-settings.json`
 }
 
+export function buildTempSettingsStem(date = new Date()): string {
+  return formatTimestampForName(date)
+}
+
+export function parseTempSettingsStem(fileName: string): string | undefined {
+  if (!fileName.endsWith('-settings.json')) return undefined
+  const stem = fileName.slice(0, -'-settings.json'.length)
+  return stem || undefined
+}
+
 export function parseSettingsFileName(fileName: string): { name: string } | undefined {
   if (!fileName.endsWith('-settings.json')) return undefined
   const name = fileName.slice(0, -'-settings.json'.length)

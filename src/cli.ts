@@ -33,7 +33,10 @@ import {
 } from './services/mcp-service.js'
 import { createPresetService } from './services/preset-service.js'
 import { createSettingsSourceService, type SettingsSource } from './services/settings-source-service.js'
-import { finalizeSettings } from './services/settings-finalizer-service.js'
+import {
+  finalizeLaunchSettings,
+  resolveProjectPresetName,
+} from './services/settings-finalizer-service.js'
 import {
   applySkillOverrides,
   discoverSkillStates,
@@ -507,6 +510,30 @@ async function createPresetInteractive(): Promise<PresetMeta | undefined> {
   return presetService.createBasePreset(selection.name, settings)
 }
 
+async function launchClaudeWithFinalizedSettings(input: {
+  baseSettings: unknown
+  globalName: string
+  projectPresetName: string
+  toggles: ProjectLaunchToggleState
+  launchSettings: unknown
+  args: string[]
+}): Promise<void> {
+  const launchDate = new Date()
+  const claudeSources = await settingsSourceService.discoverSettingsSources()
+  const settingsPath = await launchPresetService.writeTempSettings(
+    await finalizeLaunchSettings(input.baseSettings, input.launchSettings, {
+      globalName: input.globalName,
+      projectPresetName: input.projectPresetName,
+      toggles: input.toggles,
+      context,
+      claudeSources,
+      date: launchDate,
+    }),
+    launchDate,
+  )
+  process.exitCode = await spawnClaude(settingsPath, input.args)
+}
+
 async function launchWithSelectedSettings(
   selectedSettings: SettingsSelectResult,
   rawClaudeArgs: string[]
@@ -535,11 +562,14 @@ async function launchWithSelectedSettings(
     await launchPresetService.writeLastUsed(launchResult.presetName)
   }
 
-  const settingsPath = await launchPresetService.writeTempSettings(
-    finalizeSettings(selectedSettings.settings, launchSettings)
-  )
-  const code = await spawnClaude(settingsPath, sanitized.args)
-  process.exitCode = code
+  await launchClaudeWithFinalizedSettings({
+    baseSettings: selectedSettings.settings,
+    globalName: selectedSettings.name,
+    projectPresetName: resolveProjectPresetName(launchResult),
+    toggles: launchResult.toggles,
+    launchSettings,
+    args: sanitized.args,
+  })
   return 'done'
 }
 
@@ -613,11 +643,14 @@ async function manageProjectInteractive(): Promise<void> {
         await launchPresetService.writeLastUsed(result.presetName)
       }
 
-      const settingsPath = await launchPresetService.writeTempSettings(
-        finalizeSettings(selectedSettings.settings, launchSettings)
-      )
-      const code = await spawnClaude(settingsPath, [])
-      process.exitCode = code
+      await launchClaudeWithFinalizedSettings({
+        baseSettings: selectedSettings.settings,
+        globalName: selectedSettings.name,
+        projectPresetName: resolveProjectPresetName(result),
+        toggles: result.toggles,
+        launchSettings,
+        args: [],
+      })
       return
     }
 
