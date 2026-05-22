@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.5 (2026-05-23)
+
+### Features
+* clean up temp launch artifacts after Claude exits
+
 ## 1.0.4 (2026-05-22)
 
 ### Features
