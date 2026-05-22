@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.2 (2026-05-22)
+
+### Features
+* add disable-lock service and MCP availability sync with plugins
+
 ## 1.0.1 (2026-05-21)
 
 ### Features
