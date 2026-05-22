@@ -9,6 +9,7 @@ import {
   resolveProjectTempSettingsDir,
   resolveProjectTempSettingsPath,
 } from '../../src/core/paths.js'
+import { buildTempSettingsStem } from '../../src/core/name.js'
 import { createLaunchPresetService } from '../../src/services/launch-preset-service.js'
 import { ensureProjectCcspStore } from '../../src/services/project-store-service.js'
 
@@ -144,5 +145,22 @@ describe('launch preset service', () => {
     expect(remaining).not.toContain(`ccsp-statusline-underlying-${oldestStem}.sh`)
     expect(remaining).not.toContain(`ccsp-statusline-underlying-${oldestStem}.cmd`)
     expect(remaining).not.toContain(oldestSettings)
+  })
+
+  it('cleans up temp launch artifacts after Claude exits', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ccsp-project-'))
+    const service = createLaunchPresetService(cwd)
+    const date = new Date('2026-05-22T12:00:00.000Z')
+    const stem = buildTempSettingsStem(date)
+
+    const settingsPath = await service.writeTempSettings({ enabledPlugins: { alpha: true } }, date)
+    await writeFile(resolveCcspStatuslineWrapperPath(cwd, stem), '#!/bin/bash\n')
+    await writeFile(resolveCcspStatuslineUnderlyingPath(cwd, stem), '#!/bin/bash\n')
+    await writeFile(resolveCcspStatuslineUnderlyingCommandPath(cwd, stem), "echo 'underlying'\n")
+
+    await service.cleanupTempLaunchArtifacts(settingsPath)
+
+    const tempDir = resolveProjectTempSettingsDir(cwd)
+    await expect(readdir(tempDir)).resolves.toEqual([])
   })
 })

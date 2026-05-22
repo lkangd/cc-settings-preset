@@ -46,6 +46,7 @@ describe('manage launch flow', () => {
     const renderSequence: string[] = []
     const spawnClaude = vi.fn().mockResolvedValue(0)
     const writeTempSettings = vi.fn().mockResolvedValue('/tmp/final-settings.json')
+    const cleanupTempLaunchArtifacts = vi.fn().mockResolvedValue(undefined)
     const writeLastUsed = vi.fn().mockResolvedValue(undefined)
     const writePresetSettings = vi.fn().mockResolvedValue(launchPreset)
     const createPreset = vi.fn()
@@ -98,6 +99,7 @@ describe('manage launch flow', () => {
         readLastUsed: vi.fn().mockResolvedValue(undefined),
         writeLastUsed,
         writeTempSettings,
+        cleanupTempLaunchArtifacts,
         writePresetSettings,
         createPreset,
       }),
@@ -168,6 +170,7 @@ describe('manage launch flow', () => {
     })
     expect(createPreset).not.toHaveBeenCalled()
     expect(writeTempSettings).toHaveBeenCalledOnce()
+    expect(cleanupTempLaunchArtifacts).toHaveBeenCalledWith('/tmp/final-settings.json')
     expect(writeLastUsed).toHaveBeenCalledWith(launchPreset.name)
     expect(spawnClaude).toHaveBeenCalledWith('/tmp/final-settings.json', [])
     expect(stderrWrite).toHaveBeenCalled()

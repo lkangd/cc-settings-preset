@@ -531,7 +531,16 @@ async function launchClaudeWithFinalizedSettings(input: {
     }),
     launchDate,
   )
-  process.exitCode = await spawnClaude(settingsPath, input.args)
+  try {
+    process.exitCode = await spawnClaude(settingsPath, input.args)
+  } catch (error) {
+    if (error instanceof CliError) {
+      process.exitCode = error.exitCode
+    }
+    throw error
+  } finally {
+    await launchPresetService.cleanupTempLaunchArtifacts(settingsPath)
+  }
 }
 
 async function launchWithSelectedSettings(

@@ -39,6 +39,27 @@ function nowIso(): string {
   return new Date().toISOString()
 }
 
+async function unlinkIfExists(filePath: string): Promise<void> {
+  try {
+    await fs.unlink(filePath)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+  }
+}
+
+function resolveTempLaunchArtifactPaths(cwd: string, stem: string): string[] {
+  return [
+    resolveProjectTempSettingsPath(cwd, `${stem}-settings.json`),
+    resolveCcspStatuslineWrapperPath(cwd, stem),
+    resolveCcspStatuslineUnderlyingPath(cwd, stem),
+    resolveCcspStatuslineUnderlyingCommandPath(cwd, stem),
+  ]
+}
+
+async function cleanupTempLaunchArtifactsForStem(cwd: string, stem: string): Promise<void> {
+  await Promise.all(resolveTempLaunchArtifactPaths(cwd, stem).map(unlinkIfExists))
+}
+
 export function createLaunchPresetService(cwd: string) {
   const indexPath = resolveProjectLaunchPresetIndexPath(cwd)
   const lastUsedPath = resolveProjectLastUsedPath(cwd)
@@ -88,29 +109,12 @@ export function createLaunchPresetService(cwd: string) {
 
     await Promise.all(
       settingsFiles.slice(0, excess).map(async fileName => {
-        try {
-          await fs.unlink(resolveProjectTempSettingsPath(cwd, fileName))
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-        }
-
         const stem = parseTempSettingsStem(fileName)
-        if (!stem) return
-
-        const relatedPaths = [
-          resolveCcspStatuslineWrapperPath(cwd, stem),
-          resolveCcspStatuslineUnderlyingPath(cwd, stem),
-          resolveCcspStatuslineUnderlyingCommandPath(cwd, stem),
-        ]
-        await Promise.all(
-          relatedPaths.map(async relatedPath => {
-            try {
-              await fs.unlink(relatedPath)
-            } catch (error) {
-              if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-            }
-          }),
-        )
+        if (!stem) {
+          await unlinkIfExists(resolveProjectTempSettingsPath(cwd, fileName))
+          return
+        }
+        await cleanupTempLaunchArtifactsForStem(cwd, stem)
       }),
     )
   }
@@ -228,6 +232,15 @@ export function createLaunchPresetService(cwd: string) {
       await writeJsonFile(filePath, settings)
       await pruneOldTempSettings()
       return filePath
+    },
+
+    async cleanupTempLaunchArtifacts(settingsPath: string): Promise<void> {
+      const stem = parseTempSettingsStem(basename(settingsPath))
+      if (!stem) {
+        await unlinkIfExists(settingsPath)
+        return
+      }
+      await cleanupTempLaunchArtifactsForStem(cwd, stem)
     },
 
     async importExistingLaunchFile(filePath: string, nameInput?: string): Promise<LaunchPresetMeta> {

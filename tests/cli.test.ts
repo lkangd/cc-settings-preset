@@ -23,6 +23,7 @@ const writeLastUsedLaunchPresetMock = vi.fn()
 const readLastUsedGlobalSettingsMock = vi.fn()
 const writeLastUsedGlobalSettingsMock = vi.fn()
 const writeTempSettingsMock = vi.fn().mockResolvedValue('/tmp/project/.claude/.ccsp/tmp/temp-settings.json')
+const cleanupTempLaunchArtifactsMock = vi.fn().mockResolvedValue(undefined)
 const discoverSettingsSourcesMock = vi.fn().mockResolvedValue([])
 const discoverMcpStatesMock = vi.fn().mockResolvedValue([])
 const spawnClaudeMock = vi.fn().mockResolvedValue(0)
@@ -129,6 +130,7 @@ vi.mock('../src/services/launch-preset-service.js', () => ({
     readLastUsed: vi.fn().mockResolvedValue(undefined),
     writeLastUsed: writeLastUsedLaunchPresetMock,
     writeTempSettings: writeTempSettingsMock,
+    cleanupTempLaunchArtifacts: cleanupTempLaunchArtifactsMock,
   }),
 }))
 
