@@ -2,6 +2,22 @@
   "name": "@lkangd/cc-settings-preset",
   "version": "1.0.3",
   "description": "A switchable, reusable runtime settings preset selector for Claude Code",
+  "keywords": [
+    "claude-code",
+    "claude",
+    "anthropic",
+    "settings",
+    "preset",
+    "presets",
+    "configuration",
+    "cli",
+    "ccsp",
+    "mcp",
+    "plugins",
+    "skills",
+    "developer-tools",
+    "tui"
+  ],
   "homepage": "https://github.com/lkangd/cc-settings-preset#readme",
   "bugs": {
     "url": "https://github.com/lkangd/cc-settings-preset/issues"
