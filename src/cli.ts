@@ -21,15 +21,16 @@ import { ManageApp, type ManageResult } from './ink/manage-app.js'
 import { ProjectLaunchApp, type ProjectLaunchResult } from './ink/project-launch-app.js'
 import { ProjectManageApp, type ProjectManageResult } from './ink/project-manage-app.js'
 import { SettingsSelectApp, type SettingsSelectResult } from './ink/settings-select-app.js'
-import {
-  applyPluginOverrides,
-  pluginStatesToEnabledPlugins,
-  resolvePluginStates,
-  type PluginState
-} from './services/plugin-service.js'
+import { applyPluginOverrides, pluginStatesToEnabledPlugins, resolvePluginStates } from './services/plugin-service.js'
 import { createGlobalLastSettingsService } from './services/global-last-settings-service.js'
 import { createLaunchPresetService } from './services/launch-preset-service.js'
-import { applyDeniedMcpServers, applyPluginMcpAvailability, discoverMcpStates, mcpStatesToDeniedServers, resolveDeniedMcpServers, syncMcpsWithPlugins, type McpState } from './services/mcp-service.js'
+import {
+  applyDeniedMcpServers,
+  applyPluginMcpAvailability,
+  discoverMcpStates,
+  mcpStatesToDeniedServers,
+  resolveDeniedMcpServers
+} from './services/mcp-service.js'
 import { createPresetService } from './services/preset-service.js'
 import { createSettingsSourceService, type SettingsSource } from './services/settings-source-service.js'
 import { finalizeSettings } from './services/settings-finalizer-service.js'
@@ -37,8 +38,7 @@ import {
   applySkillOverrides,
   discoverSkillStates,
   resolveSkillOverrides,
-  skillStatesToOverrides,
-  type SkillState
+  skillStatesToOverrides
 } from './services/skill-service.js'
 import { VERSION } from './version.js'
 
@@ -101,14 +101,13 @@ function createBannerCandidates(): string[][] {
   const fonts = ['ANSI Shadow', 'Small'] as const
 
   const figletCandidates = fonts.map(font =>
-    figlet.textSync('C C S P', { font }).split('\n').map(line => `${cyan}${line}${reset}`)
+    figlet
+      .textSync('C C S P', { font })
+      .split('\n')
+      .map(line => `${cyan}${line}${reset}`)
   )
 
-  return [
-    ...figletCandidates,
-    [`${cyan}C C S P${reset}`],
-    [`${cyan}CCSP${reset}`]
-  ]
+  return [...figletCandidates, [`${cyan}C C S P${reset}`], [`${cyan}CCSP${reset}`]]
 }
 
 function selectBannerCandidate(width: number, candidates: string[][]): string[] {
@@ -120,7 +119,9 @@ export function buildBannerLines(columns: number): string[] {
   const dim = '\x1b[2m'
   const reset = '\x1b[0m'
   const safeColumns = Math.max(1, columns)
-  const headline = selectBannerCandidate(safeColumns, createBannerCandidates()).map(line => centerVisibleLine(line, safeColumns))
+  const headline = selectBannerCandidate(safeColumns, createBannerCandidates()).map(line =>
+    centerVisibleLine(line, safeColumns)
+  )
   const subtitle = centerVisibleLine(`${dim}${cyan}CC-Settings-Preset${reset}`, safeColumns)
   const dividerWidth = Math.min(safeColumns, Math.max(stripAnsi(subtitle).length, 12))
   const divider = centerVisibleLine(`${dim}${'─'.repeat(dividerWidth)}${reset}`, safeColumns)
@@ -137,9 +138,7 @@ export function printBanner() {
 const CLEAR_TERMINAL_HISTORY = '\x1b[3J\x1b[H\x1b[2J'
 const REFRESH_MARKERS = ['​', '⁠'] as const
 
-export function clearTerminalScreen(
-  stdout: Pick<NodeJS.WriteStream, 'write'> = process.stdout,
-) {
+export function clearTerminalScreen(stdout: Pick<NodeJS.WriteStream, 'write'> = process.stdout) {
   stdout.write(CLEAR_TERMINAL_HISTORY)
 }
 
@@ -158,7 +157,7 @@ function rerenderInkApp(
   createNode: () => React.ReactElement,
   stdout: Pick<NodeJS.WriteStream, 'write'>,
   state: RefreshState,
-  onShortcut: (input: string, key: ShortcutKey) => void,
+  onShortcut: (input: string, key: ShortcutKey) => void
 ) {
   state.resizeVersion += 1
   clearTerminalScreen(stdout)
@@ -171,7 +170,7 @@ export function createGlobalShortcutHandler(
   createNode: () => React.ReactElement,
   stdout: Pick<NodeJS.WriteStream, 'write'> = process.stdout,
   state: RefreshState = { resizeVersion: 0 },
-  onShortcut?: (input: string, key: ShortcutKey) => void,
+  onShortcut?: (input: string, key: ShortcutKey) => void
 ) {
   return (input: string, key: ShortcutKey) => {
     if (key.ctrl && input === 'l') {
@@ -183,7 +182,7 @@ export function createGlobalShortcutHandler(
 function wrapInkNode(
   createNode: () => React.ReactElement,
   resizeVersion: number,
-  onShortcut: (input: string, key: ShortcutKey) => void,
+  onShortcut: (input: string, key: ShortcutKey) => void
 ): React.ReactElement {
   const marker = REFRESH_MARKERS[resizeVersion % REFRESH_MARKERS.length]
 
@@ -192,10 +191,7 @@ function wrapInkNode(
     children: h(GlobalShortcutHandler, {
       onShortcut,
       children: h(React.Fragment, {
-        children: [
-          h(Text, { key: 'refresh-marker' }, marker),
-          React.cloneElement(createNode(), { key: 'app-node' })
-        ]
+        children: [h(Text, { key: 'refresh-marker' }, marker), React.cloneElement(createNode(), { key: 'app-node' })]
       })
     })
   })
@@ -206,7 +202,7 @@ export async function waitForInkAppExit(
   createNode: () => React.ReactElement,
   stdout: Pick<NodeJS.WriteStream, 'on' | 'off' | 'write'> = process.stdout,
   state: RefreshState = { resizeVersion: 0 },
-  onShortcut: (input: string, key: ShortcutKey) => void = () => {},
+  onShortcut: (input: string, key: ShortcutKey) => void = () => {}
 ): Promise<void> {
   const rerender = () => {
     rerenderInkApp(app, createNode, stdout, state, onShortcut)
@@ -227,12 +223,13 @@ async function renderCreateApp(): Promise<CreateResult | undefined> {
     filePath: source.filePath
   }))
   let result: CreateResult | undefined
-  const createNode = () => h(CreateApp, {
-    sources,
-    onSubmit: (value: CreateResult) => {
-      result = value
-    }
-  })
+  const createNode = () =>
+    h(CreateApp, {
+      sources,
+      onSubmit: (value: CreateResult) => {
+        result = value
+      }
+    })
   const state = { resizeVersion: 0 }
   let app: RefreshableInkApp
   const onShortcut = (input: string, key: ShortcutKey) => {
@@ -243,47 +240,19 @@ async function renderCreateApp(): Promise<CreateResult | undefined> {
   return result
 }
 
-async function resolveStatesByPreset(
-  presets: PresetMeta[],
-  sources: SettingsSource[]
-): Promise<{
-  pluginsByPreset: Record<string, PluginState[]>
-  skillsByPreset: Record<string, SkillState[]>
-}> {
-  const pluginsByPreset: Record<string, PluginState[]> = {}
-  const skillsByPreset: Record<string, SkillState[]> = {}
-
-  for (const preset of presets) {
-    const presetSettings = await presetService.readPresetSettings(preset.name)
-    const plugins = resolvePluginStates([
-      ...sources,
-      { scope: 'preset', filePath: preset.name, settings: presetSettings }
-    ])
-    const discoveredSkills = await discoverSkillStates({
-      homeDir: context.homeDir,
-      cwd: context.cwd,
-      enabledPlugins: Object.fromEntries(plugins.filter(plugin => plugin.enabled).map(plugin => [plugin.name, true])),
-    })
-
-    pluginsByPreset[preset.name] = plugins
-    skillsByPreset[preset.name] = applySkillOverrides(discoveredSkills, presetSettings.skillOverrides)
-  }
-
-  return { pluginsByPreset, skillsByPreset }
-}
-
 async function renderSettingsSelectApp(
   items: SettingsSelectResult[],
-  initialName?: string,
+  initialName?: string
 ): Promise<SettingsSelectResult | undefined> {
   let result: SettingsSelectResult | undefined
-  const createNode = () => h(SettingsSelectApp, {
-    items,
-    ...(initialName ? { initialName } : {}),
-    onSubmit: (value: SettingsSelectResult) => {
-      result = value
-    },
-  })
+  const createNode = () =>
+    h(SettingsSelectApp, {
+      items,
+      ...(initialName ? { initialName } : {}),
+      onSubmit: (value: SettingsSelectResult) => {
+        result = value
+      }
+    })
   const state = { resizeVersion: 0 }
   let app: RefreshableInkApp
   const onShortcut = (input: string, key: ShortcutKey) => {
@@ -301,23 +270,10 @@ async function buildGlobalSettingsPresetItems(): Promise<SettingsSelectResult[]>
     items.push({
       name: preset.name,
       sourcePath: await presetService.getPresetPath(preset.name),
-      settings: await presetService.readPresetSettings(preset.name),
+      settings: await presetService.readPresetSettings(preset.name)
     })
   }
   return items
-}
-
-async function buildSettingsSelectItems(): Promise<SettingsSelectResult[]> {
-  const presetItems = await buildGlobalSettingsPresetItems()
-  if (presetItems.length > 0) return presetItems
-
-  const sources = await settingsSourceService.discoverSettingsSources()
-  return sources.map(source => ({
-    name: source.scope,
-    sourcePath: source.filePath,
-    settings: source.settings,
-    temporary: true,
-  }))
 }
 
 async function resolveProjectManageBaseSettings(): Promise<SettingsSelectResult | undefined> {
@@ -328,7 +284,7 @@ async function resolveProjectManageBaseSettings(): Promise<SettingsSelectResult 
     name: source.scope,
     sourcePath: source.filePath,
     settings: source.settings,
-    temporary: true,
+    temporary: true
   }
 }
 
@@ -336,9 +292,8 @@ async function resolveInteractiveBaseSettings(): Promise<SettingsSelectResult | 
   const presetItems = await buildGlobalSettingsPresetItems()
   if (presetItems.length > 0) {
     const rememberedName = await globalLastSettingsService.readLastUsed(context.cwd)
-    const initialName = rememberedName && presetItems.some(preset => preset.name === rememberedName)
-      ? rememberedName
-      : undefined
+    const initialName =
+      rememberedName && presetItems.some(preset => preset.name === rememberedName) ? rememberedName : undefined
     const selected = await renderSettingsSelectApp(presetItems, initialName)
     if (selected) await globalLastSettingsService.writeLastUsed(context.cwd, selected.name)
     return selected
@@ -348,7 +303,7 @@ async function resolveInteractiveBaseSettings(): Promise<SettingsSelectResult | 
     name: 'temporary-empty-base',
     sourcePath: '',
     settings: {},
-    temporary: true,
+    temporary: true
   }
 }
 
@@ -356,28 +311,35 @@ async function buildProjectLaunchInput(selectedSettings: SettingsSelectResult): 
   presets: Awaited<ReturnType<typeof launchPresetService.listPresets>>
   detected: ProjectLaunchToggleState
   statesByPreset: Record<string, ProjectLaunchToggleState>
-  disableLockSources: Array<SettingsSource | { scope: 'preset'; filePath: string; settings: SettingsSelectResult['settings'] }>
+  disableLockSources: Array<
+    SettingsSource | { scope: 'preset'; filePath: string; settings: SettingsSelectResult['settings'] }
+  >
   lastUsedName?: string
 }> {
   const sources = await settingsSourceService.discoverSettingsSources()
   const settingsSources = [
     ...sources,
-    { scope: 'preset' as const, filePath: selectedSettings.sourcePath, settings: selectedSettings.settings },
+    { scope: 'preset' as const, filePath: selectedSettings.sourcePath, settings: selectedSettings.settings }
   ]
   const basePlugins = resolvePluginStates(settingsSources)
-  const baseSkills = applySkillOverrides(await discoverSkillStates({
-    homeDir: context.homeDir,
-    cwd: context.cwd,
-    enabledPlugins: Object.fromEntries(basePlugins.filter(plugin => plugin.enabled).map(plugin => [plugin.name, true])),
-  }), resolveSkillOverrides(settingsSources))
+  const baseSkills = applySkillOverrides(
+    await discoverSkillStates({
+      homeDir: context.homeDir,
+      cwd: context.cwd,
+      enabledPlugins: Object.fromEntries(
+        basePlugins.filter(plugin => plugin.enabled).map(plugin => [plugin.name, true])
+      )
+    }),
+    resolveSkillOverrides(settingsSources)
+  )
   const rawMcps = await discoverMcpStates({
     homeDir: context.homeDir,
     cwd: context.cwd,
-    knownPlugins: basePlugins.map(plugin => plugin.name),
+    knownPlugins: basePlugins.map(plugin => plugin.name)
   })
   const baseMcps = applyDeniedMcpServers(
     applyPluginMcpAvailability(rawMcps, basePlugins),
-    resolveDeniedMcpServers(settingsSources),
+    resolveDeniedMcpServers(settingsSources)
   )
   const launchPresets = await launchPresetService.listPresets()
   const statesByPreset: Record<string, ProjectLaunchToggleState> = {}
@@ -388,10 +350,7 @@ async function buildProjectLaunchInput(selectedSettings: SettingsSelectResult): 
     statesByPreset[preset.name] = {
       plugins: presetPlugins,
       skills: applySkillOverrides(baseSkills, settings.skillOverrides),
-      mcps: applyDeniedMcpServers(
-        applyPluginMcpAvailability(rawMcps, presetPlugins),
-        settings.deniedMcpServers,
-      ),
+      mcps: applyDeniedMcpServers(applyPluginMcpAvailability(rawMcps, presetPlugins), settings.deniedMcpServers)
     }
   }
 
@@ -401,7 +360,7 @@ async function buildProjectLaunchInput(selectedSettings: SettingsSelectResult): 
     detected: { plugins: basePlugins, skills: baseSkills, mcps: baseMcps },
     statesByPreset,
     disableLockSources: settingsSources,
-    ...(lastUsedName ? { lastUsedName } : {}),
+    ...(lastUsedName ? { lastUsedName } : {})
   }
 }
 
@@ -410,26 +369,29 @@ async function applyLaunchDisableRemovals(removals?: DisableRemovalMark[]): Prom
   await applyDisableRemovals(removals)
 }
 
-async function renderProjectLaunchApp(selectedSettings: SettingsSelectResult): Promise<ProjectLaunchResult | undefined> {
+async function renderProjectLaunchApp(
+  selectedSettings: SettingsSelectResult
+): Promise<ProjectLaunchResult | undefined> {
   const input = await buildProjectLaunchInput(selectedSettings)
   let result: ProjectLaunchResult | undefined
-  const createNode = () => h(ProjectLaunchApp, {
-    ...input,
-    onSubmit: (value: ProjectLaunchResult) => {
-      result = value
-    },
-    onCreateSubmit: async (saveAs: string, toggles: ProjectLaunchToggleState) => {
-      try {
-        await launchPresetService.createPreset(saveAs, launchResultToSettings({ toggles }))
-        return null
-      } catch (error) {
-        if (error instanceof Error && error.message.startsWith('Launch preset already exists: ')) {
-          return error.message
+  const createNode = () =>
+    h(ProjectLaunchApp, {
+      ...input,
+      onSubmit: (value: ProjectLaunchResult) => {
+        result = value
+      },
+      onCreateSubmit: async (saveAs: string, toggles: ProjectLaunchToggleState) => {
+        try {
+          await launchPresetService.createPreset(saveAs, launchResultToSettings({ toggles }))
+          return null
+        } catch (error) {
+          if (error instanceof Error && error.message.startsWith('Launch preset already exists: ')) {
+            return error.message
+          }
+          throw error
         }
-        throw error
       }
-    },
-  })
+    })
   const state = { resizeVersion: 0 }
   let app: RefreshableInkApp
   const onShortcut = (input: string, key: ShortcutKey) => {
@@ -440,48 +402,51 @@ async function renderProjectLaunchApp(selectedSettings: SettingsSelectResult): P
   return result
 }
 
-async function renderProjectManageApp(selectedSettings: SettingsSelectResult): Promise<ProjectManageResult | undefined> {
+async function renderProjectManageApp(
+  selectedSettings: SettingsSelectResult
+): Promise<ProjectManageResult | undefined> {
   const input = await buildProjectLaunchInput(selectedSettings)
   let result: ProjectManageResult | undefined
-  const createNode = () => h(ProjectManageApp, {
-    ...input,
-    onSubmit: (value: ProjectManageResult) => {
-      result = value
-    },
-    onSaveSubmit: async (presetName: string, toggles: ProjectLaunchToggleState) => {
-      try {
-        await launchPresetService.writePresetSettings(presetName, launchResultToSettings({ toggles }))
-        return null
-      } catch (error) {
-        if (error instanceof Error && error.message.startsWith('Launch preset not found: ')) {
-          return error.message
+  const createNode = () =>
+    h(ProjectManageApp, {
+      ...input,
+      onSubmit: (value: ProjectManageResult) => {
+        result = value
+      },
+      onSaveSubmit: async (presetName: string, toggles: ProjectLaunchToggleState) => {
+        try {
+          await launchPresetService.writePresetSettings(presetName, launchResultToSettings({ toggles }))
+          return null
+        } catch (error) {
+          if (error instanceof Error && error.message.startsWith('Launch preset not found: ')) {
+            return error.message
+          }
+          throw error
         }
-        throw error
-      }
-    },
-    onCreateSubmit: async (saveAs: string, toggles: ProjectLaunchToggleState) => {
-      try {
-        await launchPresetService.createPreset(saveAs, launchResultToSettings({ toggles }))
-        return null
-      } catch (error) {
-        if (error instanceof Error && error.message.startsWith('Launch preset already exists: ')) {
-          return error.message
+      },
+      onCreateSubmit: async (saveAs: string, toggles: ProjectLaunchToggleState) => {
+        try {
+          await launchPresetService.createPreset(saveAs, launchResultToSettings({ toggles }))
+          return null
+        } catch (error) {
+          if (error instanceof Error && error.message.startsWith('Launch preset already exists: ')) {
+            return error.message
+          }
+          throw error
         }
-        throw error
-      }
-    },
-    onRenameSubmit: async (presetName: string, newName: string) => {
-      try {
-        await launchPresetService.renamePreset(presetName, newName)
-        return null
-      } catch (error) {
-        if (error instanceof Error && error.message.startsWith('Launch preset already exists: ')) {
-          return error.message
+      },
+      onRenameSubmit: async (presetName: string, newName: string) => {
+        try {
+          await launchPresetService.renamePreset(presetName, newName)
+          return null
+        } catch (error) {
+          if (error instanceof Error && error.message.startsWith('Launch preset already exists: ')) {
+            return error.message
+          }
+          throw error
         }
-        throw error
       }
-    },
-  })
+    })
   const state = { resizeVersion: 0 }
   let app: RefreshableInkApp
   const onShortcut = (input: string, key: ShortcutKey) => {
@@ -500,29 +465,30 @@ function launchResultToSettings(result: { toggles: ProjectLaunchToggleState }): 
   return {
     enabledPlugins: pluginStatesToEnabledPlugins(result.toggles.plugins),
     skillOverrides: skillStatesToOverrides(result.toggles.skills),
-    deniedMcpServers: mcpStatesToDeniedServers(result.toggles.mcps),
+    deniedMcpServers: mcpStatesToDeniedServers(result.toggles.mcps)
   }
 }
 
 async function renderManageApp(items: SettingsSelectResult[]): Promise<ManageResult | undefined> {
   let result: ManageResult | undefined
-  const createNode = () => h(ManageApp, {
-    items,
-    onSubmit: (value: ManageResult) => {
-      result = value
-    },
-    onRenameSubmit: async (item: SettingsSelectResult, newName: string) => {
-      try {
-        await presetService.renamePreset(item.name, newName)
-        return null
-      } catch (error) {
-        if (error instanceof Error && error.message.startsWith('Preset already exists: ')) {
-          return error.message
+  const createNode = () =>
+    h(ManageApp, {
+      items,
+      onSubmit: (value: ManageResult) => {
+        result = value
+      },
+      onRenameSubmit: async (item: SettingsSelectResult, newName: string) => {
+        try {
+          await presetService.renamePreset(item.name, newName)
+          return null
+        } catch (error) {
+          if (error instanceof Error && error.message.startsWith('Preset already exists: ')) {
+            return error.message
+          }
+          throw error
         }
-        throw error
       }
-    },
-  })
+    })
   const state = { resizeVersion: 0 }
   let app: RefreshableInkApp
   const onShortcut = (input: string, key: ShortcutKey) => {
@@ -543,7 +509,7 @@ async function createPresetInteractive(): Promise<PresetMeta | undefined> {
 
 async function launchWithSelectedSettings(
   selectedSettings: SettingsSelectResult,
-  rawClaudeArgs: string[],
+  rawClaudeArgs: string[]
 ): Promise<'back' | 'done' | 'quit'> {
   const sanitized = sanitizeClaudeArgs(rawClaudeArgs)
   if (sanitized.removedSettings) {
@@ -569,7 +535,9 @@ async function launchWithSelectedSettings(
     await launchPresetService.writeLastUsed(launchResult.presetName)
   }
 
-  const settingsPath = await launchPresetService.writeTempSettings(finalizeSettings(selectedSettings.settings, launchSettings))
+  const settingsPath = await launchPresetService.writeTempSettings(
+    finalizeSettings(selectedSettings.settings, launchSettings)
+  )
   const code = await spawnClaude(settingsPath, sanitized.args)
   process.exitCode = code
   return 'done'
@@ -645,7 +613,9 @@ async function manageProjectInteractive(): Promise<void> {
         await launchPresetService.writeLastUsed(result.presetName)
       }
 
-      const settingsPath = await launchPresetService.writeTempSettings(finalizeSettings(selectedSettings.settings, launchSettings))
+      const settingsPath = await launchPresetService.writeTempSettings(
+        finalizeSettings(selectedSettings.settings, launchSettings)
+      )
       const code = await spawnClaude(settingsPath, [])
       process.exitCode = code
       return
@@ -690,10 +660,7 @@ export async function main(argv = process.argv): Promise<void> {
   await createProgram().parseAsync(argv)
 }
 
-export function isCliDirectExecution(
-  argv: string[],
-  moduleUrl: string | URL = import.meta.url
-): boolean {
+export function isCliDirectExecution(argv: string[], moduleUrl: string | URL = import.meta.url): boolean {
   const entry = argv[1]
   if (!entry) return false
 
