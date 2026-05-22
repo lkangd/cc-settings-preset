@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.4 (2026-05-22)
+
+### Features
+* add managed settings and statusline injection
+
+### Code Refactoring
+* **cli**: remove unused functions and apply formatting
+
 ## 1.0.3 (2026-05-22)
 
 ### Code Refactoring
