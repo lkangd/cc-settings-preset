@@ -2,14 +2,18 @@ import { useState } from 'react'
 import { Box, Text, useApp, useInput, useStdout } from 'ink'
 import { TruncateText } from './components/truncate-text.js'
 import type { LaunchPresetMeta } from '../core/schema.js'
+import type { DisableRemovalMark } from '../flows/project-launch-flow.js'
 import {
   annotateToggleItems,
   createProjectLaunchFlowState,
   getActiveProjectLaunchItem,
   getActiveProjectLaunchState,
+  getPendingDisableRemovals,
   reduceProjectLaunchFlow,
-  type ProjectLaunchToggleState
+  type ProjectLaunchToggleState,
 } from '../flows/project-launch-flow.js'
+import type { DisableLockSource } from '../services/disable-lock-service.js'
+import { ConfirmEnableUnlock } from './components/confirm-enable-unlock.js'
 import { ToggleColumn } from './components/toggle-column.js'
 import { useInkResizeVersion } from './components/resize-context.js'
 import { TextInput } from './components/text-input.js'
@@ -18,14 +22,15 @@ import { normalizePresetName } from '../core/name.js'
 type SaveChoice = 'none' | 'confirm-save' | 'name-new'
 
 export type ProjectLaunchResult =
-  | { type: 'launch'; presetName?: string; toggles: ProjectLaunchToggleState; saveAs?: string }
-  | { type: 'temp-launch'; toggles: ProjectLaunchToggleState }
+  | { type: 'launch'; presetName?: string; toggles: ProjectLaunchToggleState; saveAs?: string; disableRemovals?: DisableRemovalMark[] }
+  | { type: 'temp-launch'; toggles: ProjectLaunchToggleState; disableRemovals?: DisableRemovalMark[] }
   | { type: 'back' }
 
 export type ProjectLaunchAppProps = {
   presets: LaunchPresetMeta[]
   detected: ProjectLaunchToggleState
   statesByPreset: Record<string, ProjectLaunchToggleState>
+  disableLockSources?: DisableLockSource[]
   lastUsedName?: string
   onSubmit: (result: ProjectLaunchResult) => void
   onCreateSubmit?: (saveAs: string, toggles: ProjectLaunchToggleState) => Promise<string | null>
@@ -35,7 +40,7 @@ function enabledCount(items: Array<{ enabled: boolean }>): number {
   return items.filter(item => item.enabled).length
 }
 
-export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedName, onSubmit, onCreateSubmit }: ProjectLaunchAppProps) {
+export function ProjectLaunchApp({ presets, detected, statesByPreset, disableLockSources = [], lastUsedName, onSubmit, onCreateSubmit }: ProjectLaunchAppProps) {
   useInkResizeVersion()
   const { exit } = useApp()
   const { stdout } = useStdout()
@@ -51,12 +56,18 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedNa
       presets,
       detected,
       statesByPreset,
-      ...(lastUsedName ? { lastUsedName } : {})
+      disableLockSources,
+      ...(lastUsedName ? { lastUsedName } : {}),
     })
   )
   const [saveChoice, setSaveChoice] = useState<SaveChoice>('none')
   const [newName, setNewName] = useState('')
   const [createError, setCreateError] = useState<string | null>(null)
+
+  function disableRemovalsFromState() {
+    const removals = getPendingDisableRemovals(state)
+    return removals.length > 0 ? { disableRemovals: removals } : {}
+  }
 
   function submitLaunch(saveAs?: string) {
     const normalizedSaveAs = saveAs?.trim()
@@ -67,14 +78,15 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedNa
     onSubmit({
       type: 'launch',
       toggles,
+      ...disableRemovalsFromState(),
       ...(item?.type === 'preset' ? { presetName: item.name } : {}),
-      ...(normalizedSaveAs ? { saveAs: normalizedSaveAs } : {})
+      ...(normalizedSaveAs ? { saveAs: normalizedSaveAs } : {}),
     })
     exit()
   }
 
   useInput((input, key) => {
-    if (saveChoice !== 'none') return
+    if (saveChoice !== 'none' || state.pendingEnableUnlock) return
     if (input === 'q') {
       exit()
       return
@@ -110,6 +122,20 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedNa
     }
   })
 
+  if (state.pendingEnableUnlock) {
+    return (
+      <Box flexDirection="column">
+        <ConfirmEnableUnlock
+          itemName={state.pendingEnableUnlock.name}
+          {...(state.pendingEnableUnlock.filePath ? { filePath: state.pendingEnableUnlock.filePath } : {})}
+          {...(state.pendingEnableUnlock.requiredPlugin ? { requiredPlugin: state.pendingEnableUnlock.requiredPlugin } : {})}
+          onConfirm={() => setState(current => reduceProjectLaunchFlow(current, { type: 'confirm-enable-unlock' }))}
+          onCancel={() => setState(current => reduceProjectLaunchFlow(current, { type: 'cancel-enable-unlock' }))}
+        />
+      </Box>
+    )
+  }
+
   if (saveChoice === 'confirm-save') {
     return (
       <Box flexDirection="column">
@@ -118,7 +144,11 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedNa
         <ConfirmSaveChoice
           onSave={() => setSaveChoice('name-new')}
           onTemp={() => {
-            onSubmit({ type: 'temp-launch', toggles: getActiveProjectLaunchState(state) })
+            onSubmit({
+              type: 'temp-launch',
+              toggles: getActiveProjectLaunchState(state),
+              ...disableRemovalsFromState(),
+            })
             exit()
           }}
           onCancel={() => setSaveChoice('none')}
@@ -155,6 +185,7 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedNa
                 type: 'launch',
                 presetName: normalizePresetName(saveAs, { preserveCase: true }),
                 toggles: getActiveProjectLaunchState(state),
+                ...disableRemovalsFromState(),
               })
               exit()
               return
@@ -167,9 +198,9 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, lastUsedNa
   }
 
   const detectedBaseline = state.statesByPreset.Detected ?? detected
-  const pluginItems = annotateToggleItems(detectedBaseline, 'plugins', state.plugins)
-  const skillItems = annotateToggleItems(detectedBaseline, 'skills', state.skills)
-  const mcpItems = annotateToggleItems(detectedBaseline, 'mcps', state.mcps)
+  const pluginItems = annotateToggleItems(state, detectedBaseline, 'plugins', state.plugins)
+  const skillItems = annotateToggleItems(state, detectedBaseline, 'skills', state.skills)
+  const mcpItems = annotateToggleItems(state, detectedBaseline, 'mcps', state.mcps)
 
   return (
     <Box flexDirection="column">

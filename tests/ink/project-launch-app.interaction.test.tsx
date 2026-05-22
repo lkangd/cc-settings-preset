@@ -248,6 +248,82 @@ describe('ProjectLaunchApp interactions', () => {
     expect(flattenJson(output!.toJSON())).not.toContain('Save changes as a new project launch preset?')
   })
 
+  it('shows unlock confirmation with file path and confirms on y', () => {
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <ProjectLaunchApp
+          presets={[]}
+          detected={{
+            plugins: [{ name: 'alpha', enabled: false, source: 'project-local' }],
+            skills: [],
+            mcps: [],
+          }}
+          statesByPreset={{}}
+          disableLockSources={[
+            { scope: 'project-local', filePath: '/tmp/.claude/settings.local.json', settings: { enabledPlugins: { alpha: false } } },
+          ]}
+          onSubmit={vi.fn()}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('p', {})
+    })
+
+    act(() => {
+      latestInputHandler()?.(' ', {})
+    })
+
+    expect(flattenJson(output!.toJSON())).toContain('/tmp/.claude/settings.local.json')
+    expect(flattenJson(output!.toJSON())).toContain('Remove this disable entry? (y/N)')
+
+    act(() => {
+      latestInputHandler()?.('y', {})
+    })
+
+    expect(flattenJson(output!.toJSON())).not.toContain('Remove this disable entry? (y/N)')
+  })
+
+  it('cancels unlock confirmation on Enter without enabling', () => {
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <ProjectLaunchApp
+          presets={[]}
+          detected={{
+            plugins: [{ name: 'alpha', enabled: false, source: 'project-local' }],
+            skills: [],
+            mcps: [],
+          }}
+          statesByPreset={{}}
+          disableLockSources={[
+            { scope: 'project-local', filePath: '/tmp/.claude/settings.local.json', settings: { enabledPlugins: { alpha: false } } },
+          ]}
+          onSubmit={vi.fn()}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('p', {})
+    })
+
+    act(() => {
+      latestInputHandler()?.(' ', {})
+    })
+
+    act(() => {
+      latestInputHandler()?.('', { return: true })
+    })
+
+    expect(flattenJson(output!.toJSON())).not.toContain('Remove this disable entry? (y/N)')
+    expect(flattenJson(output!.toJSON())).toMatch(/Plugins\(0\/1\)/)
+  })
+
   it('does not submit when the new preset name is empty', () => {
     const onSubmit = vi.fn()
 

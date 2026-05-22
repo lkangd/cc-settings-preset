@@ -3,6 +3,7 @@ import { basename, join } from 'node:path'
 import { pathExists, readJsonFile } from '../core/json.js'
 import { resolveClaudePluginCacheDir, resolveProjectMcpPath, resolveUserClaudeJsonPath } from '../core/paths.js'
 import type { McpPolicyEntry, Settings } from '../core/schema.js'
+import { resolvePluginRegistryKey, type PluginState } from './plugin-service.js'
 
 export type McpSource = 'local' | 'project' | 'user' | 'plugin' | 'connector'
 
@@ -11,11 +12,13 @@ export type McpState = {
   enabled: boolean
   source: McpSource
   config: unknown
+  controlledByPlugin?: string
 }
 
 export type McpDiscoveryInput = {
   homeDir: string
   cwd: string
+  knownPlugins?: string[]
 }
 
 async function readDirSafe(dirPath: string): Promise<Dirent[]> {
@@ -38,9 +41,12 @@ function sortMcpStates(states: McpState[]): McpState[] {
   return [...states].sort((a, b) => a.name.localeCompare(b.name))
 }
 
-async function discoverPluginMcpServers(homeDir: string): Promise<Array<{ name: string; config: unknown }>> {
+async function discoverPluginMcpServers(
+  homeDir: string,
+  knownPlugins: string[] = [],
+): Promise<Array<{ name: string; config: unknown; controlledByPlugin: string }>> {
   const cacheDir = resolveClaudePluginCacheDir(homeDir)
-  const servers: Array<{ name: string; config: unknown }> = []
+  const servers: Array<{ name: string; config: unknown; controlledByPlugin: string }> = []
 
   async function scan(dirPath: string): Promise<void> {
     const entries = await readDirSafe(dirPath)
@@ -55,8 +61,15 @@ async function discoverPluginMcpServers(homeDir: string): Promise<Array<{ name: 
         const pluginName = typeof (manifest as { name?: unknown }).name === 'string'
           ? (manifest as { name: string }).name
           : basename(fullPath)
+        const registryKey = resolvePluginRegistryKey(pluginName, knownPlugins)
+        if (!registryKey) continue
+
         for (const [name, config] of Object.entries(readMcpServers(manifest))) {
-          servers.push({ name, config: { pluginName, ...asRecord(config) } })
+          servers.push({
+            name,
+            controlledByPlugin: registryKey,
+            config: { pluginName, ...asRecord(config) },
+          })
         }
         continue
       }
@@ -76,13 +89,14 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 export async function discoverMcpStates(input: McpDiscoveryInput): Promise<McpState[]> {
   const resolved = new Map<string, McpState>()
+  const knownPlugins = input.knownPlugins ?? []
   const userClaudePath = resolveUserClaudeJsonPath(input.homeDir)
   const userClaudeJson = await pathExists(userClaudePath) ? await readJsonFile(userClaudePath) : {}
   const projectMcpPath = resolveProjectMcpPath(input.cwd)
   const projectMcpJson = await pathExists(projectMcpPath) ? await readJsonFile(projectMcpPath) : {}
 
-  for (const { name, config } of await discoverPluginMcpServers(input.homeDir)) {
-    resolved.set(name, { name, enabled: true, source: 'plugin', config })
+  for (const { name, config, controlledByPlugin } of await discoverPluginMcpServers(input.homeDir, knownPlugins)) {
+    resolved.set(name, { name, enabled: true, source: 'plugin', config, controlledByPlugin })
   }
 
   for (const [name, config] of Object.entries(readMcpServers(userClaudeJson))) {
@@ -99,6 +113,21 @@ export async function discoverMcpStates(input: McpDiscoveryInput): Promise<McpSt
   }
 
   return sortMcpStates(Array.from(resolved.values()))
+}
+
+export function applyPluginMcpAvailability(states: McpState[], plugins: PluginState[]): McpState[] {
+  const pluginEnabled = new Map(plugins.map(plugin => [plugin.name, plugin.enabled]))
+  return sortMcpStates(states.map(state => {
+    if (!state.controlledByPlugin) return state
+    if (pluginEnabled.get(state.controlledByPlugin) === false) {
+      return { ...state, enabled: false }
+    }
+    return state
+  }))
+}
+
+export function syncMcpsWithPlugins(plugins: PluginState[], mcps: McpState[]): McpState[] {
+  return applyPluginMcpAvailability(mcps, plugins)
 }
 
 export function resolveDeniedMcpServers(sources: Array<{ settings: Settings }>): McpPolicyEntry[] {

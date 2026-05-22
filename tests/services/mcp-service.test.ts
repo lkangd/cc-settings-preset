@@ -2,7 +2,13 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
-import { applyDeniedMcpServers, discoverMcpStates, mcpStatesToDeniedServers, resolveDeniedMcpServers } from '../../src/services/mcp-service.js'
+import {
+  applyDeniedMcpServers,
+  applyPluginMcpAvailability,
+  discoverMcpStates,
+  mcpStatesToDeniedServers,
+  resolveDeniedMcpServers,
+} from '../../src/services/mcp-service.js'
 
 describe('discoverMcpStates', () => {
   it('discovers local, project, user, and plugin MCP servers with precedence', async () => {
@@ -42,17 +48,84 @@ describe('discoverMcpStates', () => {
       },
     }), 'utf8')
 
-    const states = await discoverMcpStates({ homeDir, cwd })
+    const states = await discoverMcpStates({ homeDir, cwd, knownPlugins: ['plugin-a'] })
 
-    expect(states.map(state => [state.name, state.source, state.enabled])).toEqual([
-      ['localOnly', 'local', true],
-      ['pluginOnly', 'plugin', true],
-      ['projectOnly', 'project', true],
-      ['shared', 'local', true],
-      ['userOnly', 'user', true],
+    expect(states.map(state => [state.name, state.source, state.enabled, state.controlledByPlugin])).toEqual([
+      ['localOnly', 'local', true, undefined],
+      ['pluginOnly', 'plugin', true, 'plugin-a'],
+      ['projectOnly', 'project', true, undefined],
+      ['shared', 'local', true, undefined],
+      ['userOnly', 'user', true, undefined],
     ])
   })
 
+  it('ignores plugin MCP servers when the plugin is not in the detected plugin list', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ccsp-mcp-'))
+    const homeDir = join(root, 'home')
+    const cwd = join(root, 'repo')
+    await mkdir(join(homeDir, '.claude', 'plugins', 'cache', 'vendor', 'plugin-a'), { recursive: true })
+    await mkdir(cwd, { recursive: true })
+
+    await writeFile(join(homeDir, '.claude', 'plugins', 'cache', 'vendor', 'plugin-a', 'plugin.json'), JSON.stringify({
+      name: 'plugin-a',
+      mcpServers: {
+        pluginOnly: { command: 'node', args: ['plugin.js'] },
+      },
+    }), 'utf8')
+
+    expect(await discoverMcpStates({ homeDir, cwd, knownPlugins: [] })).toEqual([])
+    expect(await discoverMcpStates({ homeDir, cwd, knownPlugins: ['other-plugin@market'] })).toEqual([])
+  })
+
+  it('matches plugin MCP servers using registry keys with marketplace suffix', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ccsp-mcp-'))
+    const homeDir = join(root, 'home')
+    const cwd = join(root, 'repo')
+    await mkdir(join(homeDir, '.claude', 'plugins', 'cache', 'vendor', 'plugin-a'), { recursive: true })
+    await mkdir(cwd, { recursive: true })
+
+    await writeFile(join(homeDir, '.claude', 'plugins', 'cache', 'vendor', 'plugin-a', 'plugin.json'), JSON.stringify({
+      name: 'plugin-a',
+      mcpServers: {
+        pluginOnly: { command: 'node', args: ['plugin.js'] },
+      },
+    }), 'utf8')
+
+    const states = await discoverMcpStates({
+      homeDir,
+      cwd,
+      knownPlugins: ['plugin-a@vendor'],
+    })
+
+    expect(states).toEqual([
+      {
+        name: 'pluginOnly',
+        enabled: true,
+        source: 'plugin',
+        config: { pluginName: 'plugin-a', command: 'node', args: ['plugin.js'] },
+        controlledByPlugin: 'plugin-a@vendor',
+      },
+    ])
+  })
+})
+
+describe('applyPluginMcpAvailability', () => {
+  it('disables plugin MCP servers when the parent plugin is off', () => {
+    const states = applyPluginMcpAvailability([
+      { name: 'pluginOnly', enabled: true, source: 'plugin', config: {}, controlledByPlugin: 'plugin-a@vendor' },
+      { name: 'context7', enabled: true, source: 'user', config: {} },
+    ], [
+      { name: 'plugin-a@vendor', enabled: false, source: 'user' },
+    ])
+
+    expect(states).toEqual([
+      { name: 'context7', enabled: true, source: 'user', config: {} },
+      { name: 'pluginOnly', enabled: false, source: 'plugin', config: {}, controlledByPlugin: 'plugin-a@vendor' },
+    ])
+  })
+})
+
+describe('resolveDeniedMcpServers', () => {
   it('merges deniedMcpServers across settings sources', () => {
     expect(resolveDeniedMcpServers([
       { settings: { deniedMcpServers: [{ serverName: 'github' }] } },
@@ -62,7 +135,9 @@ describe('discoverMcpStates', () => {
       { serverName: 'chrome-devtools' },
     ])
   })
+})
 
+describe('applyDeniedMcpServers', () => {
   it('only disables listed servers and preserves baseline when denied list is empty', () => {
     const baseline = [
       { name: 'chrome-devtools', enabled: false, source: 'user' as const, config: {} },
@@ -75,7 +150,9 @@ describe('discoverMcpStates', () => {
       { name: 'github', enabled: false, source: 'project', config: {} },
     ])
   })
+})
 
+describe('mcpStatesToDeniedServers', () => {
   it('converts disabled MCP states to deniedMcpServers entries', () => {
     expect(mcpStatesToDeniedServers([
       { name: 'github', enabled: false, source: 'project', config: {} },

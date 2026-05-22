@@ -1,7 +1,15 @@
 import type { LaunchPresetMeta } from '../core/schema.js'
+import {
+  resolveDisableLockLocation,
+  type DisableLockSource,
+  type DisableRemovalMark,
+} from '../services/disable-lock-service.js'
 import { sortPluginStates, type PluginState } from '../services/plugin-service.js'
 import { sortSkillStatesByStatus, type SkillState } from '../services/skill-service.js'
 import type { McpState } from '../services/mcp-service.js'
+import { syncMcpsWithPlugins } from '../services/mcp-service.js'
+
+export type { DisableRemovalMark }
 
 export type ProjectLaunchFocus = 'presets' | 'plugins' | 'skills' | 'mcps'
 export type ProjectLaunchSortMode = 'status' | 'name'
@@ -28,6 +36,14 @@ export type ProjectLaunchFlowState = ProjectLaunchToggleState & {
   dirty: boolean
   sortMode: ProjectLaunchSortMode
   toggleMessage?: string
+  disableLockSources: DisableLockSource[]
+  pendingEnableUnlock?: {
+    kind: 'plugins' | 'skills' | 'mcps'
+    name: string
+    filePath?: string
+    requiredPlugin?: string
+  }
+  pendingDisableRemovals: DisableRemovalMark[]
 }
 
 export type ToggleColumnItem = {
@@ -49,6 +65,8 @@ export type ProjectLaunchFlowEvent =
   | { type: 'down' }
   | { type: 'toggle-current' }
   | { type: 'toggle-sort-mode' }
+  | { type: 'confirm-enable-unlock' }
+  | { type: 'cancel-enable-unlock' }
 
 function clamp(value: number, length: number): number {
   return Math.max(0, Math.min(value, Math.max(0, length - 1)))
@@ -75,15 +93,17 @@ function sortSkills(states: SkillState[], sortMode: ProjectLaunchSortMode): Skil
 }
 
 function isPinnedToBottom(
+  state: ProjectLaunchFlowState,
   detected: ProjectLaunchToggleState,
   kind: 'plugins' | 'skills' | 'mcps',
   item: { name: string; enabled: boolean },
 ): boolean {
-  return isEnableLocked(detected, kind, item.name) && !item.enabled
+  return isItemEnableLocked(state, detected, kind, item) && !item.enabled
 }
 
 function sortWithPinnedBottom<T extends { name: string; enabled: boolean }>(
   items: T[],
+  state: ProjectLaunchFlowState,
   detected: ProjectLaunchToggleState,
   kind: 'plugins' | 'skills' | 'mcps',
   sortRegular: (regular: T[]) => T[],
@@ -92,7 +112,7 @@ function sortWithPinnedBottom<T extends { name: string; enabled: boolean }>(
   const regular: T[] = []
 
   for (const item of items) {
-    if (isPinnedToBottom(detected, kind, item)) pinned.push(item)
+    if (isPinnedToBottom(state, detected, kind, item)) pinned.push(item)
     else regular.push(item)
   }
 
@@ -124,13 +144,115 @@ export function formatEnableLockReason(source: ToggleColumnItem['source']): stri
 }
 
 function isEnableLocked(
+  state: ProjectLaunchFlowState,
   detected: ProjectLaunchToggleState,
   kind: 'plugins' | 'skills' | 'mcps',
   name: string,
 ): boolean {
+  if (state.pendingDisableRemovals.some(mark => mark.kind === kind && mark.name === name)) {
+    return false
+  }
   const items = detected[kind]
   const baseline = items.find(item => item.name === name)
   return baseline !== undefined && !baseline.enabled
+}
+
+function appendDisableRemovalMark(state: ProjectLaunchFlowState, mark: DisableRemovalMark): DisableRemovalMark[] {
+  if (state.pendingDisableRemovals.some(
+    existing => existing.kind === mark.kind && existing.name === mark.name && existing.filePath === mark.filePath,
+  )) {
+    return state.pendingDisableRemovals
+  }
+  return [...state.pendingDisableRemovals, mark]
+}
+
+function clearPendingEnableUnlock(state: ProjectLaunchFlowState): ProjectLaunchFlowState {
+  if (!state.pendingEnableUnlock) return state
+  const { pendingEnableUnlock: _pendingEnableUnlock, ...rest } = state
+  return rest
+}
+
+function isMcpPluginLocked(mcp: McpState, plugins: PluginState[]): boolean {
+  if (!mcp.controlledByPlugin || mcp.enabled) return false
+  const parent = plugins.find(plugin => plugin.name === mcp.controlledByPlugin)
+  return parent !== undefined && !parent.enabled
+}
+
+function isItemEnableLocked(
+  state: ProjectLaunchFlowState,
+  detected: ProjectLaunchToggleState,
+  kind: 'plugins' | 'skills' | 'mcps',
+  item: { name: string; enabled: boolean; controlledByPlugin?: string },
+): boolean {
+  if (kind === 'mcps' && isMcpPluginLocked(item as McpState, state.plugins)) return true
+  return isEnableLocked(state, detected, kind, item.name)
+}
+
+function requestLockedMcpEnableToggle(
+  state: ProjectLaunchFlowState,
+  current: McpState,
+): ProjectLaunchFlowState {
+  const detected = detectedBaseline(state)
+
+  if (isMcpPluginLocked(current, state.plugins)) {
+    const requiredPlugin = current.controlledByPlugin!
+    const pluginLockedInSettings = isEnableLocked(state, detected, 'plugins', requiredPlugin)
+    const filePath = pluginLockedInSettings
+      ? resolveDisableLockLocation('plugins', requiredPlugin, state.disableLockSources)
+      : undefined
+
+    return clearToggleMessage({
+      ...state,
+      pendingEnableUnlock: {
+        kind: 'mcps',
+        name: current.name,
+        requiredPlugin,
+        ...(filePath ? { filePath } : {}),
+      },
+    })
+  }
+
+  if (!isEnableLocked(state, detected, 'mcps', current.name)) return state
+
+  const filePath = resolveDisableLockLocation('mcps', current.name, state.disableLockSources)
+  if (!filePath) {
+    return { ...state, toggleMessage: formatEnableLockReason(current.source) }
+  }
+
+  return clearToggleMessage({
+    ...state,
+    pendingEnableUnlock: { kind: 'mcps', name: current.name, filePath },
+  })
+}
+
+function enablePluginInDraft(state: ProjectLaunchFlowState, pluginName: string, draftState: ProjectLaunchToggleState): ProjectLaunchToggleState {
+  const plugins = draftState.plugins.map(plugin => (
+    plugin.name === pluginName ? { ...plugin, enabled: true } : plugin
+  ))
+  return {
+    ...draftState,
+    plugins,
+    mcps: syncMcpsWithPlugins(plugins, draftState.mcps),
+  }
+}
+
+function requestLockedEnableToggle(
+  state: ProjectLaunchFlowState,
+  kind: 'plugins' | 'skills' | 'mcps',
+  current: { name: string; enabled: boolean; source: ToggleColumnItem['source'] },
+): ProjectLaunchFlowState {
+  const detected = detectedBaseline(state)
+  if (current.enabled || !isEnableLocked(state, detected, kind, current.name)) return state
+
+  const filePath = resolveDisableLockLocation(kind, current.name, state.disableLockSources)
+  if (!filePath) {
+    return { ...state, toggleMessage: formatEnableLockReason(current.source) }
+  }
+
+  return clearToggleMessage({
+    ...state,
+    pendingEnableUnlock: { kind, name: current.name, filePath },
+  })
 }
 
 function clearToggleMessage(state: ProjectLaunchFlowState): ProjectLaunchFlowState {
@@ -139,14 +261,15 @@ function clearToggleMessage(state: ProjectLaunchFlowState): ProjectLaunchFlowSta
   return rest
 }
 
-export function annotateToggleItems<T extends { name: string; enabled: boolean; source: ToggleColumnItem['source']; toggleable?: boolean }>(
+export function annotateToggleItems<T extends { name: string; enabled: boolean; source: ToggleColumnItem['source']; toggleable?: boolean; controlledByPlugin?: string }>(
+  state: ProjectLaunchFlowState,
   detected: ProjectLaunchToggleState,
   kind: 'plugins' | 'skills' | 'mcps',
   items: T[],
 ): Array<T & { enableLocked: boolean }> {
   return items.map(item => ({
     ...item,
-    enableLocked: isEnableLocked(detected, kind, item.name),
+    enableLocked: isItemEnableLocked(state, detected, kind, item),
   }))
 }
 
@@ -158,9 +281,9 @@ function getActiveToggleState(state: ProjectLaunchFlowState): ProjectLaunchToggl
 function syncActive(state: ProjectLaunchFlowState): ProjectLaunchFlowState {
   const active = getActiveToggleState(state)
   const detected = detectedBaseline(state)
-  const plugins = sortWithPinnedBottom(active.plugins, detected, 'plugins', items => sortPlugins(items, state.sortMode))
-  const skills = sortWithPinnedBottom(active.skills, detected, 'skills', items => sortSkills(items, state.sortMode))
-  const mcps = sortWithPinnedBottom(active.mcps, detected, 'mcps', items => sortMcps(items, state.sortMode))
+  const plugins = sortWithPinnedBottom(active.plugins, state, detected, 'plugins', items => sortPlugins(items, state.sortMode))
+  const skills = sortWithPinnedBottom(active.skills, state, detected, 'skills', items => sortSkills(items, state.sortMode))
+  const mcps = sortWithPinnedBottom(active.mcps, state, detected, 'mcps', items => sortMcps(items, state.sortMode))
 
   return {
     ...state,
@@ -177,6 +300,7 @@ export function createProjectLaunchFlowState(input: {
   presets: LaunchPresetMeta[]
   detected: ProjectLaunchToggleState
   statesByPreset: Record<string, ProjectLaunchToggleState>
+  disableLockSources?: DisableLockSource[]
   lastUsedName?: string
 }): ProjectLaunchFlowState {
   const presetItems: ProjectLaunchPresetItem[] = [
@@ -202,6 +326,8 @@ export function createProjectLaunchFlowState(input: {
     mcpCursor: 0,
     dirty: false,
     sortMode: 'status',
+    disableLockSources: input.disableLockSources ?? [],
+    pendingDisableRemovals: [],
   })
 }
 
@@ -247,25 +373,76 @@ export function reduceProjectLaunchFlow(state: ProjectLaunchFlowState, event: Pr
     return clearToggleMessage(syncActive({ ...state, sortMode }))
   }
 
-  if (event.type === 'toggle-current') {
-    const detected = detectedBaseline(state)
+  if (event.type === 'confirm-enable-unlock') {
+    const pending = state.pendingEnableUnlock
+    if (!pending) return state
 
+    let nextState = clearPendingEnableUnlock(state)
+    if (pending.filePath) {
+      nextState = {
+        ...nextState,
+        pendingDisableRemovals: appendDisableRemovalMark(state, {
+          kind: pending.requiredPlugin ? 'plugins' : pending.kind,
+          name: pending.requiredPlugin ?? pending.name,
+          filePath: pending.filePath,
+        }),
+      }
+    }
+
+    if (pending.kind === 'plugins') {
+      const plugins = state.plugins.map((plugin, index) => (
+        index === state.pluginCursor ? { ...plugin, enabled: true } : plugin
+      ))
+      return clearToggleMessage(syncActive(writeDraft(nextState, {
+        plugins,
+        skills: state.skills,
+        mcps: syncMcpsWithPlugins(plugins, state.mcps),
+      })))
+    }
+
+    if (pending.kind === 'skills') {
+      const skills = state.skills.map((skill, index) => (
+        index === state.skillCursor ? { ...skill, enabled: true } : skill
+      ))
+      return clearToggleMessage(syncActive(writeDraft(nextState, { plugins: state.plugins, skills, mcps: state.mcps })))
+    }
+
+    let draft: ProjectLaunchToggleState = {
+      plugins: state.plugins,
+      skills: state.skills,
+      mcps: state.mcps.map((mcp, index) => (
+        index === state.mcpCursor ? { ...mcp, enabled: true } : mcp
+      )),
+    }
+    if (pending.requiredPlugin) {
+      draft = enablePluginInDraft(nextState, pending.requiredPlugin, draft)
+    }
+    return clearToggleMessage(syncActive(writeDraft(nextState, draft)))
+  }
+
+  if (event.type === 'cancel-enable-unlock') {
+    return clearPendingEnableUnlock(state)
+  }
+
+  if (event.type === 'toggle-current') {
     if (state.focus === 'plugins') {
       const current = state.plugins[state.pluginCursor]
       if (!current) return state
-      if (!current.enabled && isEnableLocked(detected, 'plugins', current.name)) {
-        return { ...state, toggleMessage: formatEnableLockReason(current.source) }
-      }
+      const locked = requestLockedEnableToggle(state, 'plugins', current)
+      if (locked !== state) return locked
       const plugins = state.plugins.map((plugin, index) => index === state.pluginCursor ? { ...plugin, enabled: !plugin.enabled } : plugin)
-      return clearToggleMessage(syncActive(writeDraft(state, { plugins, skills: state.skills, mcps: state.mcps })))
+      return clearToggleMessage(syncActive(writeDraft(state, {
+        plugins,
+        skills: state.skills,
+        mcps: syncMcpsWithPlugins(plugins, state.mcps),
+      })))
     }
 
     if (state.focus === 'skills') {
       const current = state.skills[state.skillCursor]
       if (!current?.toggleable) return state
-      if (!current.enabled && isEnableLocked(detected, 'skills', current.name)) {
-        return { ...state, toggleMessage: formatEnableLockReason(current.source) }
-      }
+      const locked = requestLockedEnableToggle(state, 'skills', current)
+      if (locked !== state) return locked
       const skills = state.skills.map((skill, index) => index === state.skillCursor ? { ...skill, enabled: !skill.enabled } : skill)
       return clearToggleMessage(syncActive(writeDraft(state, { plugins: state.plugins, skills, mcps: state.mcps })))
     }
@@ -273,8 +450,9 @@ export function reduceProjectLaunchFlow(state: ProjectLaunchFlowState, event: Pr
     if (state.focus === 'mcps') {
       const current = state.mcps[state.mcpCursor]
       if (!current) return state
-      if (!current.enabled && isEnableLocked(detected, 'mcps', current.name)) {
-        return { ...state, toggleMessage: formatEnableLockReason(current.source) }
+      if (!current.enabled) {
+        const locked = requestLockedMcpEnableToggle(state, current)
+        if (locked !== state) return locked
       }
       const mcps = state.mcps.map((mcp, index) => index === state.mcpCursor ? { ...mcp, enabled: !mcp.enabled } : mcp)
       return clearToggleMessage(syncActive(writeDraft(state, { plugins: state.plugins, skills: state.skills, mcps })))
@@ -282,6 +460,10 @@ export function reduceProjectLaunchFlow(state: ProjectLaunchFlowState, event: Pr
   }
 
   return state
+}
+
+export function getPendingDisableRemovals(state: ProjectLaunchFlowState): DisableRemovalMark[] {
+  return state.pendingDisableRemovals
 }
 
 export function getActiveProjectLaunchState(state: ProjectLaunchFlowState): ProjectLaunchToggleState {

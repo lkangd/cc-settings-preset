@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyPluginOverrides, pluginStatesToEnabledPlugins, resolvePluginStates } from '../../src/services/plugin-service.js'
+import { applyPluginOverrides, pluginStatesToEnabledPlugins, resolvePluginRegistryKey, resolvePluginStates } from '../../src/services/plugin-service.js'
 
 describe('resolvePluginStates', () => {
   it('uses higher-priority settings sources to override lower-priority ones', () => {
@@ -23,6 +23,13 @@ describe('pluginStatesToEnabledPlugins', () => {
       { name: 'alpha', enabled: true, source: 'user' },
       { name: 'beta', enabled: false, source: 'project' },
     ])).toEqual({ beta: false })
+  })
+})
+
+describe('resolvePluginRegistryKey', () => {
+  it('matches manifest names to registry keys with marketplace suffix', () => {
+    expect(resolvePluginRegistryKey('plugin-a', ['other@vendor', 'plugin-a@vendor'])).toBe('plugin-a@vendor')
+    expect(resolvePluginRegistryKey('missing', ['plugin-a@vendor'])).toBeUndefined()
   })
 })
 

@@ -75,3 +75,7 @@ export function pluginStatesToEnabledPlugins(states: PluginState[]): Record<stri
   }
   return enabledPlugins
 }
+
+export function resolvePluginRegistryKey(manifestName: string, pluginNames: string[]): string | undefined {
+  return pluginNames.find(name => name === manifestName || name.startsWith(`${manifestName}@`))
+}

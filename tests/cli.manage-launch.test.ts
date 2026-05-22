@@ -116,6 +116,7 @@ describe('manage launch flow', () => {
     vi.doMock('../src/services/mcp-service.js', () => ({
       discoverMcpStates: vi.fn().mockResolvedValue([]),
       resolveDeniedMcpServers: vi.fn().mockReturnValue([]),
+      applyPluginMcpAvailability: vi.fn((mcps: unknown[]) => mcps),
       applyDeniedMcpServers: vi.fn().mockReturnValue([]),
       mcpStatesToDeniedServers: vi.fn().mockReturnValue([]),
     }))
@@ -243,6 +244,7 @@ describe('manage launch flow', () => {
     vi.doMock('../src/services/mcp-service.js', () => ({
       discoverMcpStates: vi.fn().mockResolvedValue([]),
       resolveDeniedMcpServers: vi.fn().mockReturnValue([]),
+      applyPluginMcpAvailability: vi.fn((mcps: unknown[]) => mcps),
       applyDeniedMcpServers: vi.fn().mockReturnValue([]),
       mcpStatesToDeniedServers: vi.fn().mockReturnValue([]),
     }))

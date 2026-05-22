@@ -15,7 +15,8 @@ import { spawnClaude } from './core/spawn.js'
 import { CreateApp, type CreateResult } from './ink/create-app.js'
 import { GlobalShortcutHandler } from './ink/components/global-shortcut-handler.js'
 import { InkResizeProvider } from './ink/components/resize-context.js'
-import type { ProjectLaunchToggleState } from './flows/project-launch-flow.js'
+import type { DisableRemovalMark, ProjectLaunchToggleState } from './flows/project-launch-flow.js'
+import { applyDisableRemovals } from './services/disable-lock-service.js'
 import { ManageApp, type ManageResult } from './ink/manage-app.js'
 import { ProjectLaunchApp, type ProjectLaunchResult } from './ink/project-launch-app.js'
 import { ProjectManageApp, type ProjectManageResult } from './ink/project-manage-app.js'
@@ -28,7 +29,7 @@ import {
 } from './services/plugin-service.js'
 import { createGlobalLastSettingsService } from './services/global-last-settings-service.js'
 import { createLaunchPresetService } from './services/launch-preset-service.js'
-import { applyDeniedMcpServers, discoverMcpStates, mcpStatesToDeniedServers, resolveDeniedMcpServers, type McpState } from './services/mcp-service.js'
+import { applyDeniedMcpServers, applyPluginMcpAvailability, discoverMcpStates, mcpStatesToDeniedServers, resolveDeniedMcpServers, syncMcpsWithPlugins, type McpState } from './services/mcp-service.js'
 import { createPresetService } from './services/preset-service.js'
 import { createSettingsSourceService, type SettingsSource } from './services/settings-source-service.js'
 import { finalizeSettings } from './services/settings-finalizer-service.js'
@@ -352,6 +353,7 @@ async function buildProjectLaunchInput(selectedSettings: SettingsSelectResult): 
   presets: Awaited<ReturnType<typeof launchPresetService.listPresets>>
   detected: ProjectLaunchToggleState
   statesByPreset: Record<string, ProjectLaunchToggleState>
+  disableLockSources: Array<SettingsSource | { scope: 'preset'; filePath: string; settings: SettingsSelectResult['settings'] }>
   lastUsedName?: string
 }> {
   const sources = await settingsSourceService.discoverSettingsSources()
@@ -365,8 +367,13 @@ async function buildProjectLaunchInput(selectedSettings: SettingsSelectResult): 
     cwd: context.cwd,
     enabledPlugins: Object.fromEntries(basePlugins.filter(plugin => plugin.enabled).map(plugin => [plugin.name, true])),
   }), resolveSkillOverrides(settingsSources))
+  const rawMcps = await discoverMcpStates({
+    homeDir: context.homeDir,
+    cwd: context.cwd,
+    knownPlugins: basePlugins.map(plugin => plugin.name),
+  })
   const baseMcps = applyDeniedMcpServers(
-    await discoverMcpStates({ homeDir: context.homeDir, cwd: context.cwd }),
+    applyPluginMcpAvailability(rawMcps, basePlugins),
     resolveDeniedMcpServers(settingsSources),
   )
   const launchPresets = await launchPresetService.listPresets()
@@ -374,10 +381,14 @@ async function buildProjectLaunchInput(selectedSettings: SettingsSelectResult): 
 
   for (const preset of launchPresets) {
     const settings = await launchPresetService.readPresetSettings(preset.name)
+    const presetPlugins = applyPluginOverrides(basePlugins, settings.enabledPlugins)
     statesByPreset[preset.name] = {
-      plugins: applyPluginOverrides(basePlugins, settings.enabledPlugins),
+      plugins: presetPlugins,
       skills: applySkillOverrides(baseSkills, settings.skillOverrides),
-      mcps: applyDeniedMcpServers(baseMcps, settings.deniedMcpServers),
+      mcps: applyDeniedMcpServers(
+        applyPluginMcpAvailability(rawMcps, presetPlugins),
+        settings.deniedMcpServers,
+      ),
     }
   }
 
@@ -386,8 +397,14 @@ async function buildProjectLaunchInput(selectedSettings: SettingsSelectResult): 
     presets: launchPresets,
     detected: { plugins: basePlugins, skills: baseSkills, mcps: baseMcps },
     statesByPreset,
+    disableLockSources: settingsSources,
     ...(lastUsedName ? { lastUsedName } : {}),
   }
+}
+
+async function applyLaunchDisableRemovals(removals?: DisableRemovalMark[]): Promise<void> {
+  if (!removals || removals.length === 0) return
+  await applyDisableRemovals(removals)
 }
 
 async function renderProjectLaunchApp(selectedSettings: SettingsSelectResult): Promise<ProjectLaunchResult | undefined> {
@@ -537,6 +554,8 @@ async function launchWithSelectedSettings(
     return 'back'
   }
 
+  await applyLaunchDisableRemovals(launchResult.disableRemovals)
+
   const launchSettings = launchResultToSettings(launchResult)
 
   if (launchResult.type === 'launch' && launchResult.saveAs) {
@@ -614,6 +633,8 @@ async function manageProjectInteractive(): Promise<void> {
     }
 
     if (result.type === 'launch') {
+      await applyLaunchDisableRemovals(result.disableRemovals)
+
       const launchSettings = launchResultToSettings(result)
 
       if (result.presetName) {
@@ -638,11 +659,13 @@ async function manageProjectInteractive(): Promise<void> {
     }
 
     if (result.type === 'save') {
+      await applyLaunchDisableRemovals(result.disableRemovals)
       await launchPresetService.writePresetSettings(result.presetName, launchResultToSettings(result))
       continue
     }
 
     if (result.type === 'create') {
+      await applyLaunchDisableRemovals(result.disableRemovals)
       await launchPresetService.createPreset(result.saveAs, launchResultToSettings(result))
       continue
     }

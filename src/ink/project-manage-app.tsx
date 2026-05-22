@@ -1,14 +1,18 @@
 import { useState } from 'react'
 import { Box, Text, useApp, useInput, useStdout } from 'ink'
+import type { DisableRemovalMark } from '../flows/project-launch-flow.js'
 import {
   annotateToggleItems,
   createProjectLaunchFlowState,
   focusProjectLaunchPreset,
   getActiveProjectLaunchItem,
   getActiveProjectLaunchState,
+  getPendingDisableRemovals,
   reduceProjectLaunchFlow,
   type ProjectLaunchFlowState,
 } from '../flows/project-launch-flow.js'
+import type { DisableLockSource } from '../services/disable-lock-service.js'
+import { ConfirmEnableUnlock } from './components/confirm-enable-unlock.js'
 import { TextInput } from './components/text-input.js'
 import { ToggleColumn } from './components/toggle-column.js'
 import type { ProjectLaunchAppProps, ProjectLaunchResult } from './project-launch-app.js'
@@ -17,8 +21,8 @@ import { buildLaunchPresetFileName, normalizePresetName } from '../core/name.js'
 
 export type ProjectManageResult =
   | ProjectLaunchResult
-  | { type: 'save'; presetName: string; toggles: ProjectLaunchToggleState }
-  | { type: 'create'; toggles: ProjectLaunchToggleState; saveAs: string }
+  | { type: 'save'; presetName: string; toggles: ProjectLaunchToggleState; disableRemovals?: DisableRemovalMark[] }
+  | { type: 'create'; toggles: ProjectLaunchToggleState; saveAs: string; disableRemovals?: DisableRemovalMark[] }
   | { type: 'rename'; presetName: string; newName: string }
   | { type: 'delete'; presetName: string }
   | { type: 'refresh' }
@@ -63,7 +67,7 @@ type Props = Omit<ProjectLaunchAppProps, 'onSubmit'> & {
   onRenameSubmit?: (presetName: string, newName: string) => Promise<string | null>
 }
 
-export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedName, onSubmit, onSaveSubmit, onCreateSubmit, onRenameSubmit }: Props) {
+export function ProjectManageApp({ presets, detected, statesByPreset, disableLockSources = [], lastUsedName, onSubmit, onSaveSubmit, onCreateSubmit, onRenameSubmit }: Props) {
   const { exit } = useApp()
   const { stdout } = useStdout()
   const fallbackColumns = 120
@@ -77,8 +81,13 @@ export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedNa
     presets,
     detected,
     statesByPreset,
+    disableLockSources,
     ...(lastUsedName ? { lastUsedName } : {}),
   }))
+  function disableRemovalsFromState() {
+    const removals = getPendingDisableRemovals(state)
+    return removals.length > 0 ? { disableRemovals: removals } : {}
+  }
   const [mode, setMode] = useState<'browse' | 'rename' | 'delete'>('browse')
   const [saveMode, setSaveMode] = useState<SaveMode>('none')
   const [message, setMessage] = useState<{ text: string; color: 'yellow' | 'red' } | null>(null)
@@ -86,7 +95,7 @@ export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedNa
   const [renameError, setRenameError] = useState<string | null>(null)
 
   useInput((input, key) => {
-    if (mode !== 'browse' || saveMode !== 'none') return
+    if (mode !== 'browse' || saveMode !== 'none' || state.pendingEnableUnlock) return
     if (input === 'q') {
       exit()
       return
@@ -139,12 +148,12 @@ export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedNa
                 setMessage({ text: error, color: 'red' })
                 return
               }
-              onSubmit({ type: 'launch', presetName: item.name, toggles })
+              onSubmit({ type: 'launch', presetName: item.name, toggles, ...disableRemovalsFromState() })
               exit()
             })()
             return
           }
-          onSubmit({ type: 'launch', presetName: item.name, toggles })
+          onSubmit({ type: 'launch', presetName: item.name, toggles, ...disableRemovalsFromState() })
           exit()
           return
         }
@@ -156,6 +165,7 @@ export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedNa
       onSubmit({
         type: 'launch',
         toggles,
+        ...disableRemovalsFromState(),
         ...(item?.type === 'preset' ? { presetName: item.name } : {}),
       })
       exit()
@@ -177,7 +187,7 @@ export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedNa
           })()
           return
         }
-        onSubmit({ type: 'save', presetName: item.name, toggles })
+        onSubmit({ type: 'save', presetName: item.name, toggles, ...disableRemovalsFromState() })
         exit()
         return
       }
@@ -189,9 +199,23 @@ export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedNa
 
   const activeItem = getActiveProjectLaunchItem(state)
   const detectedBaseline = state.statesByPreset.Detected ?? detected
-  const pluginItems = annotateToggleItems(detectedBaseline, 'plugins', state.plugins)
-  const skillItems = annotateToggleItems(detectedBaseline, 'skills', state.skills)
-  const mcpItems = annotateToggleItems(detectedBaseline, 'mcps', state.mcps)
+  const pluginItems = annotateToggleItems(state, detectedBaseline, 'plugins', state.plugins)
+  const skillItems = annotateToggleItems(state, detectedBaseline, 'skills', state.skills)
+  const mcpItems = annotateToggleItems(state, detectedBaseline, 'mcps', state.mcps)
+
+  if (state.pendingEnableUnlock) {
+    return (
+      <Box flexDirection="column">
+        <ConfirmEnableUnlock
+          itemName={state.pendingEnableUnlock.name}
+          {...(state.pendingEnableUnlock.filePath ? { filePath: state.pendingEnableUnlock.filePath } : {})}
+          {...(state.pendingEnableUnlock.requiredPlugin ? { requiredPlugin: state.pendingEnableUnlock.requiredPlugin } : {})}
+          onConfirm={() => setState(current => reduceProjectLaunchFlow(current, { type: 'confirm-enable-unlock' }))}
+          onCancel={() => setState(current => reduceProjectLaunchFlow(current, { type: 'cancel-enable-unlock' }))}
+        />
+      </Box>
+    )
+  }
 
   if (saveMode === 'name-new') {
     return (
@@ -222,7 +246,12 @@ export function ProjectManageApp({ presets, detected, statesByPreset, lastUsedNa
               setNewName('')
               return
             }
-            onSubmit({ type: 'create', toggles: getActiveProjectLaunchState(state), saveAs })
+            onSubmit({
+              type: 'create',
+              toggles: getActiveProjectLaunchState(state),
+              saveAs,
+              ...disableRemovalsFromState(),
+            })
             exit()
           }}
         />
