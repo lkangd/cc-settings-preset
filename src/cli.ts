@@ -9,7 +9,7 @@ import figlet from 'figlet'
 import { sanitizeClaudeArgs } from './core/args.js'
 import { CliError } from './core/errors.js'
 import { readJsonFile } from './core/json.js'
-import { createPathContext, resolveGlobalRoot } from './core/paths.js'
+import { createPathContext, resolveGlobalRoot, resolveUserClaudeSettingsPath } from './core/paths.js'
 import { parseSettings, type PresetMeta } from './core/schema.js'
 import { spawnClaude } from './core/spawn.js'
 import { CreateApp, type CreateResult } from './ink/create-app.js'
@@ -31,6 +31,7 @@ import {
   mcpStatesToDeniedServers,
   resolveDeniedMcpServers
 } from './services/mcp-service.js'
+import { createClaudeLoginService } from './services/claude-login-service.js'
 import { createPresetService } from './services/preset-service.js'
 import { createSettingsSourceService, type SettingsSource } from './services/settings-source-service.js'
 import {
@@ -53,6 +54,12 @@ const presetService = createPresetService(globalRoot)
 const settingsSourceService = createSettingsSourceService(context)
 const globalLastSettingsService = createGlobalLastSettingsService(context.homeDir)
 const launchPresetService = createLaunchPresetService(context.cwd)
+const claudeLoginService = createClaudeLoginService(context)
+
+async function buildClaudeOfficialPresetItem(): Promise<SettingsSelectResult | undefined> {
+  if (!(await claudeLoginService.isLoggedIn())) return undefined
+  return presetService.buildClaudeOfficialItem(resolveUserClaudeSettingsPath(context.homeDir))
+}
 
 export function createProgram(): Command {
   const program = new Command()
@@ -292,7 +299,8 @@ async function resolveProjectManageBaseSettings(): Promise<SettingsSelectResult 
 }
 
 async function resolveInteractiveBaseSettings(): Promise<SettingsSelectResult | undefined> {
-  const presetItems = await buildGlobalSettingsPresetItems()
+  const officialItem = await buildClaudeOfficialPresetItem()
+  const presetItems = [...(officialItem ? [officialItem] : []), ...(await buildGlobalSettingsPresetItems())]
   if (presetItems.length > 0) {
     const rememberedName = await globalLastSettingsService.readLastUsed(context.cwd)
     const initialName =

@@ -1,8 +1,8 @@
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { createPresetService } from '../../src/services/preset-service.js'
+import { CLAUDE_OFFICIAL_PRESET_NAME, createPresetService } from '../../src/services/preset-service.js'
 
 describe('preset service', () => {
   async function createService() {
@@ -58,5 +58,34 @@ describe('preset service', () => {
     await service.deletePreset('base')
 
     expect(await service.listPresets()).toEqual([])
+  })
+
+  it('builds a Claude official item from an existing settings file', async () => {
+    const { root, service } = await createService()
+    const settingsPath = join(root, 'settings.json')
+    await writeFile(settingsPath, JSON.stringify({ model: 'opus' }), 'utf8')
+
+    const item = await service.buildClaudeOfficialItem(settingsPath)
+
+    expect(item).toEqual({
+      name: CLAUDE_OFFICIAL_PRESET_NAME,
+      sourcePath: settingsPath,
+      settings: { model: 'opus' },
+      temporary: true,
+    })
+  })
+
+  it('builds a Claude official item with empty settings when the file is missing', async () => {
+    const { root, service } = await createService()
+    const settingsPath = join(root, 'missing.json')
+
+    const item = await service.buildClaudeOfficialItem(settingsPath)
+
+    expect(item).toEqual({
+      name: CLAUDE_OFFICIAL_PRESET_NAME,
+      sourcePath: settingsPath,
+      settings: {},
+      temporary: true,
+    })
   })
 })

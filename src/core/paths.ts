@@ -103,6 +103,10 @@ export function resolveUserClaudeJsonPath(homeDir: string): string {
   return join(homeDir, '.claude.json')
 }
 
+export function resolveClaudeCredentialsPath(homeDir: string): string {
+  return join(homeDir, '.claude', '.credentials.json')
+}
+
 export function resolveGlobalLastSettingsPath(globalRoot: string): string {
   return join(globalRoot, '.ccsp', 'last-settings.json')
 }

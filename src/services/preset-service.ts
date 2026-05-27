@@ -14,6 +14,15 @@ import {
   type Settings,
 } from '../core/schema.js'
 
+export const CLAUDE_OFFICIAL_PRESET_NAME = '*Claude Official*'
+
+export type ClaudeOfficialPresetItem = {
+  name: string
+  sourcePath: string
+  settings: Settings
+  temporary: true
+}
+
 function nowIso(): string {
   return new Date().toISOString()
 }
@@ -165,6 +174,16 @@ export function createPresetService(globalRoot: string) {
       const settings = parseSettings(await readJsonFile(filePath))
       const baseName = nameInput ?? derivePresetNameFromSettingsPath(filePath)
       return service.createBasePreset(baseName, settings)
+    },
+
+    async buildClaudeOfficialItem(settingsPath: string): Promise<ClaudeOfficialPresetItem> {
+      const settings = (await pathExists(settingsPath)) ? parseSettings(await readJsonFile(settingsPath)) : {}
+      return {
+        name: CLAUDE_OFFICIAL_PRESET_NAME,
+        sourcePath: settingsPath,
+        settings,
+        temporary: true,
+      }
     },
   }
 

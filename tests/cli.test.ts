@@ -141,6 +141,12 @@ vi.mock('../src/services/global-last-settings-service.js', () => ({
   }),
 }))
 
+vi.mock('../src/services/claude-login-service.js', () => ({
+  createClaudeLoginService: () => ({
+    isLoggedIn: vi.fn().mockResolvedValue(false),
+  }),
+}))
+
 vi.mock('../src/services/settings-finalizer-service.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/services/settings-finalizer-service.js')>()
   return {

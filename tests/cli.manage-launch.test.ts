@@ -88,6 +88,11 @@ describe('manage launch flow', () => {
         writeLastUsed: vi.fn().mockResolvedValue(undefined),
       }),
     }))
+    vi.doMock('../src/services/claude-login-service.js', () => ({
+      createClaudeLoginService: () => ({
+        isLoggedIn: vi.fn().mockResolvedValue(false),
+      }),
+    }))
     vi.doMock('../src/services/launch-preset-service.js', () => ({
       createLaunchPresetService: () => ({
         listPresets: vi.fn().mockResolvedValue([launchPreset]),
@@ -216,6 +221,11 @@ describe('manage launch flow', () => {
       createGlobalLastSettingsService: () => ({
         readLastUsed: vi.fn().mockResolvedValue(undefined),
         writeLastUsed: vi.fn().mockResolvedValue(undefined),
+      }),
+    }))
+    vi.doMock('../src/services/claude-login-service.js', () => ({
+      createClaudeLoginService: () => ({
+        isLoggedIn: vi.fn().mockResolvedValue(false),
       }),
     }))
     vi.doMock('../src/services/launch-preset-service.js', () => ({
