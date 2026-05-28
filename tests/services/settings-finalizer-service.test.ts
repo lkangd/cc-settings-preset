@@ -81,6 +81,7 @@ describe('finalizeLaunchSettings', () => {
         toggles,
         context: { homeDir: '/tmp/home', cwd: '/tmp/project' },
         claudeSources,
+        stem: 'session-stem',
       },
     )
 

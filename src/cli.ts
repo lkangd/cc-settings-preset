@@ -6,11 +6,12 @@ import { Command } from 'commander'
 import { render, Text, type Instance } from 'ink'
 import figlet from 'figlet'
 
-import { sanitizeClaudeArgs } from './core/args.js'
+import { randomUUID } from 'node:crypto'
+import { isUuid, resolveSessionLaunch, sanitizeClaudeArgs } from './core/args.js'
 import { CliError } from './core/errors.js'
 import { readJsonFile } from './core/json.js'
 import { createPathContext, resolveGlobalRoot, resolveUserClaudeSettingsPath } from './core/paths.js'
-import { parseSettings, type PresetMeta } from './core/schema.js'
+import { parseSettings, type PresetMeta, type SessionBinding } from './core/schema.js'
 import { spawnClaude } from './core/spawn.js'
 import { CreateApp, type CreateResult } from './ink/create-app.js'
 import { GlobalShortcutHandler } from './ink/components/global-shortcut-handler.js'
@@ -23,6 +24,7 @@ import { ProjectManageApp, type ProjectManageResult } from './ink/project-manage
 import { SettingsSelectApp, type SettingsSelectResult } from './ink/settings-select-app.js'
 import { applyPluginOverrides, pluginStatesToEnabledPlugins, resolvePluginStates } from './services/plugin-service.js'
 import { createGlobalLastSettingsService } from './services/global-last-settings-service.js'
+import { createClaudeSessionService } from './services/claude-session-service.js'
 import { createLaunchPresetService } from './services/launch-preset-service.js'
 import {
   applyDeniedMcpServers,
@@ -54,6 +56,7 @@ const presetService = createPresetService(globalRoot)
 const settingsSourceService = createSettingsSourceService(context)
 const globalLastSettingsService = createGlobalLastSettingsService(context.homeDir)
 const launchPresetService = createLaunchPresetService(context.cwd)
+const claudeSessionService = createClaudeSessionService(context.homeDir, context.cwd)
 const claudeLoginService = createClaudeLoginService(context)
 
 async function buildClaudeOfficialPresetItem(): Promise<SettingsSelectResult | undefined> {
@@ -526,7 +529,8 @@ async function launchClaudeWithFinalizedSettings(input: {
   launchSettings: unknown
   args: string[]
 }): Promise<void> {
-  const launchDate = new Date()
+  const session = resolveSessionLaunch(input.args)
+  const stem = randomUUID()
   const claudeSources = await settingsSourceService.discoverSettingsSources()
   const settingsPath = await launchPresetService.writeTempSettings(
     await finalizeLaunchSettings(input.baseSettings, input.launchSettings, {
@@ -535,19 +539,44 @@ async function launchClaudeWithFinalizedSettings(input: {
       toggles: input.toggles,
       context,
       claudeSources,
-      date: launchDate,
+      stem,
     }),
-    launchDate,
+    stem,
   )
+
+  const bindingInput = {
+    globalName: input.globalName,
+    projectPresetName: input.projectPresetName,
+    baseSettings: input.baseSettings,
+    launchSettings: input.launchSettings,
+    toggles: input.toggles,
+  }
+
+  // When we already know the session id (explicit --session-id / --resume <uuid>),
+  // record the binding upfront so the config is recoverable even if Claude is
+  // killed before exit. Otherwise snapshot Claude's project dir and discover
+  // the id post-spawn by diffing.
+  const sessionSnapshot = session.sessionId ? undefined : await claudeSessionService.snapshot()
+  if (session.sessionId) {
+    await launchPresetService.writeSessionBinding({ sessionId: session.sessionId, ...bindingInput })
+  }
+
   try {
-    process.exitCode = await spawnClaude(settingsPath, input.args)
+    process.exitCode = await spawnClaude(settingsPath, session.args)
   } catch (error) {
     if (error instanceof CliError) {
       process.exitCode = error.exitCode
     }
     throw error
   } finally {
-    await launchPresetService.cleanupTempLaunchArtifacts(settingsPath)
+    await launchPresetService.cleanupTempScripts(stem)
+    const sessionId = session.sessionId ?? (sessionSnapshot && (await claudeSessionService.findNewSessionId(sessionSnapshot)))
+    if (sessionId) {
+      if (!session.sessionId) {
+        await launchPresetService.writeSessionBinding({ sessionId, ...bindingInput })
+      }
+      await launchPresetService.recordSessionExit(sessionId)
+    }
   }
 }
 
@@ -590,16 +619,93 @@ async function launchWithSelectedSettings(
   return 'done'
 }
 
-async function runInteractive(rawClaudeArgs: string[]): Promise<void> {
+async function runInteractive(rawClaudeArgs: string[], fallbackMode?: 'resume' | 'continue'): Promise<void> {
   printBanner()
   while (true) {
     const selectedSettings = await resolveInteractiveBaseSettings()
     if (!selectedSettings) return
 
-    const outcome = await launchWithSelectedSettings(selectedSettings, rawClaudeArgs)
+    const launchArgs =
+      fallbackMode === 'resume'
+        ? ['--resume', ...rawClaudeArgs]
+        : fallbackMode === 'continue'
+          ? rawClaudeArgs
+          : rawClaudeArgs
+
+    const outcome = await launchWithSelectedSettings(selectedSettings, launchArgs)
     if (outcome !== 'back') return
     printBanner()
   }
+}
+
+async function launchFromBinding(binding: SessionBinding, extraArgs: string[]): Promise<void> {
+  const sanitized = sanitizeClaudeArgs(extraArgs)
+  if (sanitized.removedSettings) {
+    process.stderr.write('\x1b[31mWarning: ccsp ignores passthrough --settings because it manages that flag.\x1b[0m\n')
+  }
+  process.stderr.write(
+    `\x1b[2mResuming ${binding.globalName}/${binding.projectPresetName} (session ${binding.sessionId})\x1b[0m\n`,
+  )
+  const filteredArgs = sanitized.args.filter(
+    (arg, index, args) =>
+      arg !== '--continue' &&
+      arg !== '-c' &&
+      !arg.startsWith('--continue=') &&
+      !arg.startsWith('--resume=') &&
+      arg !== '-r' &&
+      !(arg === '--resume') &&
+      !(arg === '--session-id') &&
+      !arg.startsWith('--session-id=') &&
+      !((args[index - 1] === '--resume' || args[index - 1] === '-r' || args[index - 1] === '--session-id') &&
+        !arg.startsWith('-')),
+  )
+
+  await launchClaudeWithFinalizedSettings({
+    baseSettings: binding.baseSettings,
+    globalName: binding.globalName,
+    projectPresetName: binding.projectPresetName,
+    toggles: binding.toggles as unknown as ProjectLaunchToggleState,
+    launchSettings: binding.launchSettings,
+    args: ['--resume', binding.sessionId, ...filteredArgs],
+  })
+}
+
+async function resolveLiveBinding(binding: SessionBinding | undefined): Promise<SessionBinding | undefined> {
+  if (!binding) return undefined
+  if (await claudeSessionService.hasSession(binding.sessionId)) return binding
+  process.stderr.write(
+    `\x1b[2mDiscarding stale binding (no Claude session for ${binding.sessionId}).\x1b[0m\n`,
+  )
+  await launchPresetService.deleteSessionBinding(binding.sessionId)
+  return undefined
+}
+
+async function runResume(sessionId: string, extraArgs: string[]): Promise<void> {
+  const binding = await resolveLiveBinding(await launchPresetService.readSessionBinding(sessionId))
+  if (binding) {
+    await launchFromBinding(binding, extraArgs)
+    return
+  }
+  process.stderr.write(
+    `\x1b[2mNo saved ccsp launch config for session ${sessionId}; pick a preset to resume with.\x1b[0m\n`,
+  )
+  await runInteractive([sessionId, ...extraArgs], 'resume')
+}
+
+async function runContinue(extraArgs: string[]): Promise<void> {
+  // Walk newest-exited bindings until one points at a live Claude session.
+  // resolveLiveBinding prunes stale entries, so each loop iteration makes progress.
+  while (true) {
+    const candidate = await launchPresetService.findLatestExitedSession()
+    if (!candidate) break
+    const live = await resolveLiveBinding(candidate)
+    if (live) {
+      await launchFromBinding(live, extraArgs)
+      return
+    }
+  }
+  process.stderr.write('\x1b[2mNo saved ccsp session to continue; pick a preset.\x1b[0m\n')
+  await runInteractive(extraArgs)
 }
 
 async function manageInteractive(): Promise<void> {
@@ -702,8 +808,52 @@ export async function main(argv = process.argv): Promise<void> {
     return
   }
 
+  if (args[0] === '--continue' || args[0] === '-c') {
+    await runContinue(args.slice(1))
+    return
+  }
+
+  if (args[0] === '--resume' || args[0] === '-r') {
+    const id = args[1]
+    if (id && isUuid(id)) {
+      await runResume(id, args.slice(2))
+      return
+    }
+    await runInteractive(args)
+    return
+  }
+
+  if (args[0]?.startsWith('--resume=')) {
+    const id = args[0].slice('--resume='.length)
+    if (isUuid(id)) {
+      await runResume(id, args.slice(1))
+      return
+    }
+    await runInteractive(args)
+    return
+  }
+
   if (args[0] === 'claude') {
-    await runInteractive(args.slice(1))
+    const claudeArgs = args.slice(1)
+    if (claudeArgs[0] === '--continue' || claudeArgs[0] === '-c') {
+      await runContinue(claudeArgs.slice(1))
+      return
+    }
+    if (claudeArgs[0] === '--resume' || claudeArgs[0] === '-r') {
+      const id = claudeArgs[1]
+      if (id && isUuid(id)) {
+        await runResume(id, claudeArgs.slice(2))
+        return
+      }
+    }
+    if (claudeArgs[0]?.startsWith('--resume=')) {
+      const id = claudeArgs[0].slice('--resume='.length)
+      if (isUuid(id)) {
+        await runResume(id, claudeArgs.slice(1))
+        return
+      }
+    }
+    await runInteractive(claudeArgs)
     return
   }
 

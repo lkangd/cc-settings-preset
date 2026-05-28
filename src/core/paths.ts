@@ -87,6 +87,10 @@ export function resolveProjectLastUsedPath(projectRoot: string): string {
   return join(resolveProjectCcspRoot(projectRoot), 'last-used.json')
 }
 
+export function resolveProjectSessionsPath(projectRoot: string): string {
+  return join(resolveProjectCcspRoot(projectRoot), 'sessions.json')
+}
+
 export function resolveProjectTempSettingsDir(projectRoot: string): string {
   return join(resolveProjectCcspRoot(projectRoot), 'tmp')
 }

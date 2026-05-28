@@ -14,8 +14,11 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@lkangd/cc-settings-preset"><img src="https://img.shields.io/npm/v/@lkangd/cc-settings-preset?style=flat-square" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/@lkangd/cc-settings-preset"><img src="https://img.shields.io/npm/dm/@lkangd/cc-settings-preset?style=flat-square&color=cb3837&label=downloads" alt="npm downloads per month" /></a>
+  <a href="https://www.npmjs.com/package/@lkangd/cc-settings-preset"><img src="https://img.shields.io/npm/dt/@lkangd/cc-settings-preset?style=flat-square&label=total" alt="npm total downloads" /></a>
   <a href="https://github.com/lkangd/cc-settings-preset/blob/main/LICENSE"><img src="https://img.shields.io/github/license/lkangd/cc-settings-preset?style=flat-square" alt="license" /></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/node/v/@lkangd/cc-settings-preset?style=flat-square" alt="node version" /></a>
+  <a href="https://github.com/lkangd/cc-settings-preset/commits/main"><img src="https://img.shields.io/github/last-commit/lkangd/cc-settings-preset?style=flat-square" alt="last commit" /></a>
   <a href="https://github.com/lkangd/cc-settings-preset"><img src="https://img.shields.io/github/stars/lkangd/cc-settings-preset?style=flat-square" alt="stars" /></a>
   <a href="https://github.com/lkangd/cc-settings-preset/issues"><img src="https://img.shields.io/github/issues/lkangd/cc-settings-preset?style=flat-square" alt="issues" /></a>
 </p>
@@ -68,6 +71,12 @@ ccsp
 # Forward Claude Code args (ccsp owns --settings)
 ccsp claude --help
 ccsp claude -p "review this PR"
+
+# Resume the last session in this project with its original preset/launch config
+ccsp --continue
+
+# Resume a specific session by id, reusing the preset/launch config it was launched with
+ccsp --resume 99580820-9437-475c-883c-399bcfba3c47
 ```
 
 **First-time workflow:**
@@ -188,7 +197,7 @@ claude --settings <temp-file> [your other args]
                                       │
                                       ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ ⑤ Write .claude/.ccsp/tmp/*.json (gitignored; keep at most 20 files)   │
+│ ⑤ Write .claude/.ccsp/tmp/*.json (gitignored; keep at most 50 files)   │
 └─────────────────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
@@ -214,7 +223,16 @@ claude --settings <temp-file> [your other args]
 - **Two-layer split** — global “base environment” vs project “launch delta” for multi-repo work.
 - **Visual toggles** — terminal TUI to browse JSON and flip plugins / skills / MCP.
 - **Remembers last choice** — per project directory for base and launch presets.
+- **Resumable sessions** — every launch is bound to its preset/launch config; `ccsp --continue` and `ccsp --resume <id>` restore the original config and resume the matching Claude session in one shot.
 - **Safer defaults** — `.claude/.ccsp/` gets a `.gitignore` that ignores everything on init.
+
+### Session resume
+
+After Claude exits, CCSP records the **real** Claude session id (discovered by diffing `~/.claude/projects/<encoded-cwd>/` against a pre-launch snapshot — `--session-id` is unreliable in interactive mode, so we don't pin it) and binds it to the launch config used. Stored under `.claude/.ccsp/sessions.json` (capped at 50, pruned by last-used time):
+
+- `ccsp --resume <uuid>` — re-finalize that session's stored config and run `claude --resume <uuid>` in one step.
+- `ccsp --continue` — pick the **most recently exited** ccsp session in this project and resume it deterministically by id. Concretely: launch A, then B, exit A first, run `ccsp --continue` — you get A back with A's original preset/launch config (not B's).
+- If the stored binding points at a Claude session that no longer exists, CCSP discards it and falls back to interactive preset selection.
 
 ### Limitations (read before assuming)
 
@@ -227,8 +245,9 @@ claude --settings <temp-file> [your other args]
 | **No “add MCP server” in UI** | Can **deny** discovered MCPs via `deniedMcpServers`; cannot create new server entries. |
 | **No headless / CI mode** | Main flow is Ink TUI; `create` / `manage` are interactive unless you edit JSON yourself. |
 | **Derived presets** | Schema supports `derived` type; CLI does not expose full create/manage flow yet. |
-| **Project store is local by default** | `launch-presets` and `tmp` under `.claude/.ccsp/` are not in Git unless you opt in. |
-| **Temp file cap** | Oldest files in `tmp` are pruned when count exceeds 20. |
+| **Project store is local by default** | `launch-presets`, `tmp`, and `sessions.json` under `.claude/.ccsp/` are not in Git unless you opt in. |
+| **Temp file cap** | Oldest temp settings in `tmp/` are pruned past 50 by last-used time; statusline scripts are cleaned every exit. |
+| **Resume only sees ccsp launches** | `ccsp --continue` / `--resume` only know about sessions started through ccsp on the new code path; sessions started directly with `claude` aren't bound and won't appear. |
 
 ---
 
@@ -238,6 +257,8 @@ claude --settings <temp-file> [your other args]
 |---------|-------------|
 | `ccsp` | Default: pick base preset → configure launch layer → start `claude` |
 | `ccsp claude [args...]` | Same, forwarding `args` to `claude` (without `--settings`) |
+| `ccsp --continue` | Resume the most recently exited ccsp session in this project with its original preset / launch config |
+| `ccsp --resume <uuid>` | Resume a specific session by id, reusing the preset / launch config it was launched with (falls back to interactive if the binding is unknown) |
 | `ccsp create` | Interactively create a global base preset |
 | `ccsp manage` | Manage global base presets (preview / rename / delete / create / launch) |
 | `ccsp manage --project` | Manage launch presets for the current project |
@@ -266,7 +287,8 @@ claude --settings <temp-file> [your other args]
 │   ├── index.json
 │   └── <name>-launch.json     # launch-layer overrides only
 ├── tmp/
-│   └── <timestamp>-settings.json
+│   └── <stem>-settings.json   # finalized launch config (max 50, pruned by use time)
+├── sessions.json              # sessionId → launch config binding, for --continue / --resume
 └── last-used.json             # last launch preset used
 ```
 

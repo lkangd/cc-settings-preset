@@ -14,8 +14,11 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@lkangd/cc-settings-preset"><img src="https://img.shields.io/npm/v/@lkangd/cc-settings-preset?style=flat-square" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/@lkangd/cc-settings-preset"><img src="https://img.shields.io/npm/dm/@lkangd/cc-settings-preset?style=flat-square&color=cb3837&label=downloads" alt="npm 月下载量" /></a>
+  <a href="https://www.npmjs.com/package/@lkangd/cc-settings-preset"><img src="https://img.shields.io/npm/dt/@lkangd/cc-settings-preset?style=flat-square&label=total" alt="npm 总下载量" /></a>
   <a href="https://github.com/lkangd/cc-settings-preset/blob/main/LICENSE"><img src="https://img.shields.io/github/license/lkangd/cc-settings-preset?style=flat-square" alt="license" /></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/node/v/@lkangd/cc-settings-preset?style=flat-square" alt="node version" /></a>
+  <a href="https://github.com/lkangd/cc-settings-preset/commits/main"><img src="https://img.shields.io/github/last-commit/lkangd/cc-settings-preset?style=flat-square" alt="最近提交" /></a>
   <a href="https://github.com/lkangd/cc-settings-preset"><img src="https://img.shields.io/github/stars/lkangd/cc-settings-preset?style=flat-square" alt="stars" /></a>
   <a href="https://github.com/lkangd/cc-settings-preset/issues"><img src="https://img.shields.io/github/issues/lkangd/cc-settings-preset?style=flat-square" alt="issues" /></a>
 </p>
@@ -68,6 +71,12 @@ ccsp
 # 透传 Claude Code 参数（ccsp 会接管 --settings）
 ccsp claude --help
 ccsp claude -p "review this PR"
+
+# 恢复本项目最近退出的会话，并复用其原始预设 / 启动配置
+ccsp --continue
+
+# 按 session id 精确恢复某个会话，复用启动时所用的预设 / 启动配置
+ccsp --resume 99580820-9437-475c-883c-399bcfba3c47
 ```
 
 **首次使用建议：**
@@ -188,7 +197,7 @@ claude --settings <临时文件> [你传入的其它参数]
                                       │
                                       ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ ⑤ 写入 .claude/.ccsp/tmp/*.json（目录默认 gitignore，最多保留 20 份）        │
+│ ⑤ 写入 .claude/.ccsp/tmp/*.json（目录默认 gitignore，最多保留 50 份）        │
 └─────────────────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
@@ -214,7 +223,16 @@ claude --settings <临时文件> [你传入的其它参数]
 - **两层分离**：全局「基础环境」与项目「启动差异」解耦，适合多仓库并行开发。
 - **可视化开关**：在终端 TUI 中浏览 JSON、切换插件 / Skill / MCP，比手改数组更不易出错。
 - **记忆上次选择**：按项目目录记住上次使用的基础预设与启动预设。
+- **可恢复会话**：每次启动都会把会话与所用预设 / 启动配置绑定，`ccsp --continue` 与 `ccsp --resume <id>` 可一键恢复原配置并续上对应 Claude 会话。
 - **安全默认值**：`.claude/.ccsp/` 初始化时写入 `.gitignore`（忽略全部），降低临时文件与本地预设误提交概率。
+
+### 会话恢复（Session Resume）
+
+Claude 退出后，CCSP 会**主动发现** Claude 真实分配的 session id（启动前对 `~/.claude/projects/<编码后的 cwd>/` 做快照，退出时做 diff——`--session-id` 在交互模式下并不可靠，所以我们不直接 pin），并把它和本次启动配置绑定，存入 `.claude/.ccsp/sessions.json`（最多 50 条，按 lastUsedAt 淘汰）：
+
+- `ccsp --resume <uuid>`：用绑定里的输入重新 finalize 启动配置，并以 `claude --resume <uuid>` 一步启动。
+- `ccsp --continue`：选取本项目里**最近退出**的 ccsp 会话，按其 id 确定性地恢复。具体例子：先启 A 再启 B，先退出 A，再 `ccsp --continue`，恢复的是 A（带 A 当时的预设 / 启动配置），不是 B。
+- 若绑定对应的 Claude 会话已不存在（如旧版本残留），CCSP 会丢弃该绑定并回退到交互式选择。
 
 ### 局限与误解澄清（请务必阅读）
 
@@ -227,8 +245,9 @@ claude --settings <临时文件> [你传入的其它参数]
 | **不能通过 UI 新增 MCP Server** | 仅支持基于已发现 MCP 的**禁用**（`deniedMcpServers`），不能创建新 server 配置。 |
 | **无无头 / CI 模式** | 主流程为 Ink 交互界面；`create` / `manage` 亦为 TUI，不适合纯脚本无人值守选型（除非自行读写 JSON）。 |
 | **Derived 预设** | 数据模型支持 `derived` 类型，但当前 CLI 未暴露创建/管理衍生预设的完整流程。 |
-| **项目存储默认本地** | `launch-presets` 与 `tmp` 在 `.claude/.ccsp/` 下，默认不进 Git；团队共享需另行约定导出方式。 |
-| **临时文件有上限** | `tmp` 目录超过 20 个 settings 文件时会删除最旧的。 |
+| **项目存储默认本地** | `launch-presets`、`tmp` 与 `sessions.json` 都在 `.claude/.ccsp/` 下，默认不进 Git；团队共享需另行约定导出方式。 |
+| **临时文件有上限** | `tmp` 中的 settings 文件按 lastUsedAt 淘汰，最多保留 50 份；statusline 脚本每次退出都会清理。 |
+| **Resume 只覆盖 ccsp 启动的会话** | `ccsp --continue` / `--resume` 只能看到通过新版 ccsp 启动并记录过绑定的会话；直接用 `claude` 启动的会话不在范围内。 |
 
 ---
 
@@ -238,6 +257,8 @@ claude --settings <临时文件> [你传入的其它参数]
 |------|------|
 | `ccsp` | 默认流程：选基础预设 → 配置启动层 → 启动 `claude` |
 | `ccsp claude [args...]` | 同上，并将 `args` 传给 `claude`（不含 `--settings`） |
+| `ccsp --continue` | 恢复本项目最近退出的 ccsp 会话，复用原始预设 / 启动配置 |
+| `ccsp --resume <uuid>` | 按 session id 精确恢复某个会话，复用启动时所用的预设 / 启动配置（未知绑定时回退到交互式选择） |
 | `ccsp create` | 交互式创建全局基础预设 |
 | `ccsp manage` | 管理全局基础预设（预览 / 重命名 / 删除 / 新建 / 启动） |
 | `ccsp manage --project` | 管理当前项目的启动预设 |
@@ -266,7 +287,8 @@ claude --settings <临时文件> [你传入的其它参数]
 │   ├── index.json
 │   └── <name>-launch.json     # 仅含启动层覆盖字段
 ├── tmp/
-│   └── <timestamp>-settings.json
+│   └── <stem>-settings.json   # 本次启动的最终配置（最多 50 份，按使用时间淘汰）
+├── sessions.json              # sessionId → 启动配置 的绑定，供 --continue / --resume
 └── last-used.json             # 上次使用的启动预设
 ```
 

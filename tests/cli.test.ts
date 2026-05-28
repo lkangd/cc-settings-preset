@@ -23,7 +23,13 @@ const writeLastUsedLaunchPresetMock = vi.fn()
 const readLastUsedGlobalSettingsMock = vi.fn()
 const writeLastUsedGlobalSettingsMock = vi.fn()
 const writeTempSettingsMock = vi.fn().mockResolvedValue('/tmp/project/.claude/.ccsp/tmp/temp-settings.json')
-const cleanupTempLaunchArtifactsMock = vi.fn().mockResolvedValue(undefined)
+const cleanupTempScriptsMock = vi.fn().mockResolvedValue(undefined)
+const writeSessionBindingMock = vi.fn().mockResolvedValue(undefined)
+const recordSessionExitMock = vi.fn().mockResolvedValue(undefined)
+const readSessionBindingMock = vi.fn().mockResolvedValue(undefined)
+const findLatestExitedSessionMock = vi.fn().mockResolvedValue(undefined)
+const claudeSessionSnapshotMock = vi.fn().mockResolvedValue(new Set<string>())
+const findNewClaudeSessionIdMock = vi.fn().mockResolvedValue(undefined)
 const discoverSettingsSourcesMock = vi.fn().mockResolvedValue([])
 const discoverMcpStatesMock = vi.fn().mockResolvedValue([])
 const spawnClaudeMock = vi.fn().mockResolvedValue(0)
@@ -130,7 +136,18 @@ vi.mock('../src/services/launch-preset-service.js', () => ({
     readLastUsed: vi.fn().mockResolvedValue(undefined),
     writeLastUsed: writeLastUsedLaunchPresetMock,
     writeTempSettings: writeTempSettingsMock,
-    cleanupTempLaunchArtifacts: cleanupTempLaunchArtifactsMock,
+    cleanupTempScripts: cleanupTempScriptsMock,
+    writeSessionBinding: writeSessionBindingMock,
+    recordSessionExit: recordSessionExitMock,
+    readSessionBinding: readSessionBindingMock,
+    findLatestExitedSession: findLatestExitedSessionMock,
+  }),
+}))
+
+vi.mock('../src/services/claude-session-service.js', () => ({
+  createClaudeSessionService: () => ({
+    snapshot: claudeSessionSnapshotMock,
+    findNewSessionId: findNewClaudeSessionIdMock,
   }),
 }))
 
@@ -395,7 +412,7 @@ describe('run command', () => {
       enabledPlugins: { alpha: false },
       skillOverrides: { personal: 'off' },
       deniedMcpServers: [{ serverName: 'github' }],
-    }, expect.any(Date))
+    }, expect.any(String))
     expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
   })
 
@@ -510,7 +527,36 @@ describe('run command', () => {
     await main(['node', 'cli'])
 
     expect(createProjectLaunchPresetMock).not.toHaveBeenCalled()
-    expect(writeTempSettingsMock).toHaveBeenCalledWith({}, expect.any(Date))
+    expect(writeTempSettingsMock).toHaveBeenCalledWith({}, expect.any(String))
+  })
+
+  it('does not mark a session exited when Claude launch throws', async () => {
+    const basePreset = {
+      type: 'base' as const,
+      name: 'base',
+      fileName: 'base-settings.json',
+      createdAt: '2026-05-17T00:00:00.000Z',
+      updatedAt: '2026-05-17T00:00:00.000Z',
+    }
+    listPresetsMock.mockResolvedValue([basePreset])
+    spawnClaudeMock.mockRejectedValueOnce(new Error('spawn failed'))
+    recordSessionExitMock.mockClear()
+    cleanupTempScriptsMock.mockClear()
+
+    renderMock
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({ name: 'base', sourcePath: '/tmp/.ccsp/settings/base-settings.json', settings: {} })
+        return { waitUntilExit: async () => undefined }
+      })
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({ type: 'temp-launch', toggles: { plugins: [], skills: [], mcps: [] } })
+        return { waitUntilExit: async () => undefined }
+      })
+
+    const { main } = await import('../src/cli.js')
+    await expect(main(['node', 'cli'])).rejects.toThrow('spawn failed')
+    expect(recordSessionExitMock).not.toHaveBeenCalled()
+    expect(cleanupTempScriptsMock).toHaveBeenCalledOnce()
   })
 
   it('clears the screen and reopens global settings when backing out of project launch', async () => {
@@ -729,7 +775,7 @@ describe('manage command', () => {
     await main(['node', 'cli', 'manage'])
 
     expect(renderMock).toHaveBeenCalledTimes(2)
-    expect(writeTempSettingsMock).toHaveBeenCalledWith({}, expect.any(Date))
+    expect(writeTempSettingsMock).toHaveBeenCalledWith({}, expect.any(String))
     expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
   })
 

@@ -4,9 +4,7 @@ import { CliError } from '../core/errors.js'
 import { pathExists, readJsonFile, writeJsonFile } from '../core/json.js'
 import {
   buildLaunchPresetFileName,
-  buildTempSettingsFileName,
   normalizePresetName,
-  parseSettingsFileName,
   parseTempSettingsStem,
   resolvePresetIndexKey,
 } from '../core/name.js'
@@ -17,23 +15,37 @@ import {
   resolveProjectLastUsedPath,
   resolveProjectLaunchPresetIndexPath,
   resolveProjectLaunchPresetPath,
+  resolveProjectSessionsPath,
   resolveProjectTempSettingsDir,
   resolveProjectTempSettingsPath,
 } from '../core/paths.js'
 import {
   createEmptyLaunchPresetIndex,
+  createEmptySessionIndex,
   lastUsedLaunchPresetSchema,
   launchPresetIndexSchema,
   parseLaunchPresetSettings,
   parseSettings,
+  sessionIndexSchema,
   type LaunchPresetIndex,
   type LaunchPresetMeta,
   type LaunchPresetSettings,
+  type SessionBinding,
+  type SessionIndex,
   type Settings,
 } from '../core/schema.js'
 import { ensureProjectCcspStore } from './project-store-service.js'
 
-const MAX_TEMP_SETTINGS_FILES = 20
+const MAX_TEMP_SETTINGS_FILES = 50
+
+export type SessionBindingInput = {
+  sessionId: string
+  globalName: string
+  projectPresetName: string
+  baseSettings: unknown
+  launchSettings: unknown
+  toggles: { plugins: unknown[]; skills: unknown[]; mcps: unknown[] }
+}
 
 function nowIso(): string {
   return new Date().toISOString()
@@ -47,22 +59,30 @@ async function unlinkIfExists(filePath: string): Promise<void> {
   }
 }
 
-function resolveTempLaunchArtifactPaths(cwd: string, stem: string): string[] {
+function resolveStatuslineScriptPaths(cwd: string, stem: string): string[] {
   return [
-    resolveProjectTempSettingsPath(cwd, `${stem}-settings.json`),
     resolveCcspStatuslineWrapperPath(cwd, stem),
     resolveCcspStatuslineUnderlyingPath(cwd, stem),
     resolveCcspStatuslineUnderlyingCommandPath(cwd, stem),
   ]
 }
 
+async function cleanupStatuslineScriptsForStem(cwd: string, stem: string): Promise<void> {
+  await Promise.all(resolveStatuslineScriptPaths(cwd, stem).map(unlinkIfExists))
+}
+
 async function cleanupTempLaunchArtifactsForStem(cwd: string, stem: string): Promise<void> {
-  await Promise.all(resolveTempLaunchArtifactPaths(cwd, stem).map(unlinkIfExists))
+  await Promise.all(
+    [resolveProjectTempSettingsPath(cwd, `${stem}-settings.json`), ...resolveStatuslineScriptPaths(cwd, stem)].map(
+      unlinkIfExists,
+    ),
+  )
 }
 
 export function createLaunchPresetService(cwd: string) {
   const indexPath = resolveProjectLaunchPresetIndexPath(cwd)
   const lastUsedPath = resolveProjectLastUsedPath(cwd)
+  const sessionsPath = resolveProjectSessionsPath(cwd)
 
   async function readIndex(): Promise<LaunchPresetIndex> {
     if (!(await pathExists(indexPath))) return createEmptyLaunchPresetIndex()
@@ -72,6 +92,16 @@ export function createLaunchPresetService(cwd: string) {
   async function writeIndex(index: LaunchPresetIndex): Promise<void> {
     await ensureProjectCcspStore(cwd)
     await writeJsonFile(indexPath, launchPresetIndexSchema.parse(index))
+  }
+
+  async function readSessions(): Promise<SessionIndex> {
+    if (!(await pathExists(sessionsPath))) return createEmptySessionIndex()
+    return sessionIndexSchema.parse(await readJsonFile(sessionsPath))
+  }
+
+  async function writeSessions(sessions: SessionIndex): Promise<void> {
+    await ensureProjectCcspStore(cwd)
+    await writeJsonFile(sessionsPath, sessionIndexSchema.parse(sessions))
   }
 
   function getPresetPath(meta: LaunchPresetMeta): string {
@@ -93,7 +123,7 @@ export function createLaunchPresetService(cwd: string) {
     await writeJsonFile(lastUsedPath, { presetName: name, updatedAt: nowIso() })
   }
 
-  async function pruneOldTempSettings(): Promise<void> {
+  async function pruneOldTempSettings(retainStem?: string): Promise<void> {
     const tempDir = resolveProjectTempSettingsDir(cwd)
     let entries: string[]
     try {
@@ -103,20 +133,31 @@ export function createLaunchPresetService(cwd: string) {
       throw error
     }
 
-    const settingsFiles = entries.filter(entry => parseSettingsFileName(entry)).sort()
-    const excess = settingsFiles.length - MAX_TEMP_SETTINGS_FILES
+    const allStems = entries.map(entry => parseTempSettingsStem(entry)).filter((stem): stem is string => Boolean(stem))
+    const excess = allStems.length - MAX_TEMP_SETTINGS_FILES
     if (excess <= 0) return
 
-    await Promise.all(
-      settingsFiles.slice(0, excess).map(async fileName => {
-        const stem = parseTempSettingsStem(fileName)
-        if (!stem) {
-          await unlinkIfExists(resolveProjectTempSettingsPath(cwd, fileName))
-          return
-        }
-        await cleanupTempLaunchArtifactsForStem(cwd, stem)
-      }),
-    )
+    const stems = allStems.filter(stem => stem !== retainStem)
+    const sessions = await readSessions()
+    // Oldest-first by recorded use time; legacy files without a session binding
+    // sort to the front (empty string) and are pruned first.
+    const sorted = [...stems].sort((a, b) => {
+      const ta = sessions.sessions[a]?.lastUsedAt ?? ''
+      const tb = sessions.sessions[b]?.lastUsedAt ?? ''
+      if (ta !== tb) return ta < tb ? -1 : 1
+      return a < b ? -1 : 1
+    })
+
+    let sessionsChanged = false
+    for (const stem of sorted.slice(0, excess)) {
+      await cleanupTempLaunchArtifactsForStem(cwd, stem)
+      if (sessions.sessions[stem]) {
+        delete sessions.sessions[stem]
+        sessionsChanged = true
+      }
+    }
+
+    if (sessionsChanged) await writeSessions(sessions)
   }
 
   const service = {
@@ -224,23 +265,67 @@ export function createLaunchPresetService(cwd: string) {
 
     readLastUsed,
 
-    async writeTempSettings(settingsInput: unknown, date = new Date()): Promise<string> {
+    async writeTempSettings(settingsInput: unknown, stem: string): Promise<string> {
       const settings = parseSettings(settingsInput) as Settings
       await ensureProjectCcspStore(cwd)
-      const fileName = buildTempSettingsFileName(date)
-      const filePath = resolveProjectTempSettingsPath(cwd, fileName)
+      const filePath = resolveProjectTempSettingsPath(cwd, `${stem}-settings.json`)
       await writeJsonFile(filePath, settings)
-      await pruneOldTempSettings()
+      await pruneOldTempSettings(stem)
       return filePath
     },
 
-    async cleanupTempLaunchArtifacts(settingsPath: string): Promise<void> {
-      const stem = parseTempSettingsStem(basename(settingsPath))
-      if (!stem) {
-        await unlinkIfExists(settingsPath)
-        return
+    async cleanupTempScripts(stem: string): Promise<void> {
+      await cleanupStatuslineScriptsForStem(cwd, stem)
+    },
+
+    async writeSessionBinding(input: SessionBindingInput): Promise<void> {
+      const sessions = await readSessions()
+      const now = nowIso()
+      const existing = sessions.sessions[input.sessionId]
+      sessions.sessions[input.sessionId] = {
+        sessionId: input.sessionId,
+        globalName: input.globalName,
+        projectPresetName: input.projectPresetName,
+        baseSettings: input.baseSettings,
+        launchSettings: parseLaunchPresetSettings(input.launchSettings),
+        toggles: input.toggles,
+        createdAt: existing?.createdAt ?? now,
+        lastUsedAt: now,
       }
-      await cleanupTempLaunchArtifactsForStem(cwd, stem)
+      await writeSessions(sessions)
+    },
+
+    async readSessionBinding(sessionId: string): Promise<SessionBinding | undefined> {
+      const sessions = await readSessions()
+      return sessions.sessions[sessionId]
+    },
+
+    async recordSessionExit(sessionId: string): Promise<void> {
+      const sessions = await readSessions()
+      const existing = sessions.sessions[sessionId]
+      if (!existing) return
+      sessions.sessions[sessionId] = { ...existing, exitedAt: nowIso() }
+      await writeSessions(sessions)
+    },
+
+    async deleteSessionBinding(sessionId: string): Promise<void> {
+      const sessions = await readSessions()
+      if (!sessions.sessions[sessionId]) return
+      delete sessions.sessions[sessionId]
+      await writeSessions(sessions)
+    },
+
+    async findLatestExitedSession(): Promise<SessionBinding | undefined> {
+      const sessions = await readSessions()
+      const all = Object.values(sessions.sessions)
+      const exited = all.filter(session => session.exitedAt)
+      const pool = exited.length > 0 ? exited : all
+      if (pool.length === 0) return undefined
+      return [...pool].sort((a, b) => {
+        const ta = a.exitedAt ?? a.lastUsedAt
+        const tb = b.exitedAt ?? b.lastUsedAt
+        return ta < tb ? 1 : ta > tb ? -1 : 0
+      })[0]
     },
 
     async importExistingLaunchFile(filePath: string, nameInput?: string): Promise<LaunchPresetMeta> {

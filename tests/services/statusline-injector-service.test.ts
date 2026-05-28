@@ -2,12 +2,10 @@ import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { buildTempSettingsStem } from '../../src/core/name.js'
 import { injectCcspStatusLine } from '../../src/services/statusline-injector-service.js'
 
 const projectRoot = '/tmp/ccsp-statusline-project'
-const launchDate = new Date('2026-05-22T12:00:00.000Z')
-const launchStem = buildTempSettingsStem(launchDate)
+const launchStem = '11111111-1111-4111-8111-111111111111'
 
 async function cleanupProjectTemp(): Promise<void> {
   await fs.rm(join(projectRoot, '.claude', '.ccsp', 'tmp'), { recursive: true, force: true })
@@ -31,7 +29,7 @@ describe('injectCcspStatusLine', () => {
         },
       },
       context: { homeDir: '/tmp/home', cwd: projectRoot },
-      date: launchDate,
+      stem: launchStem,
     })
 
     const tmpDir = join(projectRoot, '.claude', '.ccsp', 'tmp')
@@ -66,7 +64,7 @@ describe('injectCcspStatusLine', () => {
         },
       },
       context: { homeDir: '/tmp/home', cwd: projectRoot },
-      date: launchDate,
+      stem: launchStem,
     })
 
     const tmpDir = join(projectRoot, '.claude', '.ccsp', 'tmp')

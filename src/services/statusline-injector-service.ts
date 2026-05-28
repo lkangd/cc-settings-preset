@@ -1,6 +1,5 @@
 import { promises as fs } from 'node:fs'
 
-import { buildTempSettingsStem } from '../core/name.js'
 import {
   resolveCcspStatuslineUnderlyingCommandPath,
   resolveCcspStatuslineUnderlyingPath,
@@ -103,10 +102,9 @@ export async function injectCcspStatusLine(input: {
   resolved?: ResolvedStatusLine
   meta: CcspStatusLineMeta
   context: PathContext
-  date?: Date
+  stem: string
 }): Promise<InjectedLaunchSettings> {
-  const date = input.date ?? new Date()
-  const stem = buildTempSettingsStem(date)
+  const stem = input.stem
   const ccspLine = formatCcspStatusLine(input.meta)
 
   await ensureProjectCcspStore(input.context.cwd)

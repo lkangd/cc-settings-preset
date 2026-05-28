@@ -50,7 +50,7 @@ export async function finalizeLaunchSettings(
     toggles: ProjectLaunchToggleState
     context: PathContext
     claudeSources: SettingsSource[]
-    date?: Date
+    stem: string
   },
 ): Promise<Settings> {
   const finalized = finalizeSettings(baseInput, launchInput)
@@ -68,6 +68,6 @@ export async function finalizeLaunchSettings(
       toggles: options.toggles,
     },
     context: options.context,
-    ...(options.date ? { date: options.date } : {}),
+    stem: options.stem,
   })
 }

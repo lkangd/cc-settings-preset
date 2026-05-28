@@ -70,6 +70,29 @@ export const lastUsedLaunchPresetSchema = z.object({
 
 export const lastSettingsSchema = z.record(z.string(), lastUsedBasePresetSchema)
 
+const sessionToggleStateSchema = z.object({
+  plugins: z.array(z.unknown()),
+  skills: z.array(z.unknown()),
+  mcps: z.array(z.unknown()),
+})
+
+const sessionBindingSchema = z.object({
+  sessionId: z.string().min(1),
+  globalName: z.string(),
+  projectPresetName: z.string(),
+  baseSettings: z.unknown(),
+  launchSettings: launchPresetSettingsSchema,
+  toggles: sessionToggleStateSchema,
+  createdAt: timestampSchema,
+  lastUsedAt: timestampSchema,
+  exitedAt: timestampSchema.optional(),
+})
+
+export const sessionIndexSchema = z.object({
+  version: z.literal(1),
+  sessions: z.record(z.string(), sessionBindingSchema),
+})
+
 export type McpPolicyEntry = z.infer<typeof mcpPolicyEntrySchema>
 export type Settings = z.infer<typeof settingsSchema>
 export type LaunchPresetSettings = z.infer<typeof launchPresetSettingsSchema>
@@ -83,6 +106,8 @@ export type LaunchPresetIndex = z.infer<typeof launchPresetIndexSchema>
 export type LastUsedLaunchPreset = z.infer<typeof lastUsedLaunchPresetSchema>
 export type LastUsedBasePreset = z.infer<typeof lastUsedBasePresetSchema>
 export type LastSettings = z.infer<typeof lastSettingsSchema>
+export type SessionBinding = z.infer<typeof sessionBindingSchema>
+export type SessionIndex = z.infer<typeof sessionIndexSchema>
 
 export function parseSettings(value: unknown): Settings {
   return settingsSchema.parse(value)
@@ -98,4 +123,8 @@ export function createEmptyIndex(): PresetIndex {
 
 export function createEmptyLaunchPresetIndex(): LaunchPresetIndex {
   return { version: 1, presets: {} }
+}
+
+export function createEmptySessionIndex(): SessionIndex {
+  return { version: 1, sessions: {} }
 }

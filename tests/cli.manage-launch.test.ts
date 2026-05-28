@@ -46,7 +46,12 @@ describe('manage launch flow', () => {
     const renderSequence: string[] = []
     const spawnClaude = vi.fn().mockResolvedValue(0)
     const writeTempSettings = vi.fn().mockResolvedValue('/tmp/final-settings.json')
-    const cleanupTempLaunchArtifacts = vi.fn().mockResolvedValue(undefined)
+    const cleanupTempScripts = vi.fn().mockResolvedValue(undefined)
+    const writeSessionBinding = vi.fn().mockResolvedValue(undefined)
+    const recordSessionExit = vi.fn().mockResolvedValue(undefined)
+    const discoveredSessionId = '99999999-9999-4999-8999-999999999999'
+    const claudeSnapshot = vi.fn().mockResolvedValue(new Set<string>())
+    const findNewSessionId = vi.fn().mockResolvedValue(discoveredSessionId)
     const writeLastUsed = vi.fn().mockResolvedValue(undefined)
     const writePresetSettings = vi.fn().mockResolvedValue(launchPreset)
     const createPreset = vi.fn()
@@ -93,6 +98,12 @@ describe('manage launch flow', () => {
         isLoggedIn: vi.fn().mockResolvedValue(false),
       }),
     }))
+    vi.doMock('../src/services/claude-session-service.js', () => ({
+      createClaudeSessionService: () => ({
+        snapshot: claudeSnapshot,
+        findNewSessionId,
+      }),
+    }))
     vi.doMock('../src/services/launch-preset-service.js', () => ({
       createLaunchPresetService: () => ({
         listPresets: vi.fn().mockResolvedValue([launchPreset]),
@@ -104,7 +115,9 @@ describe('manage launch flow', () => {
         readLastUsed: vi.fn().mockResolvedValue(undefined),
         writeLastUsed,
         writeTempSettings,
-        cleanupTempLaunchArtifacts,
+        cleanupTempScripts,
+        writeSessionBinding,
+        recordSessionExit,
         writePresetSettings,
         createPreset,
       }),
@@ -175,7 +188,11 @@ describe('manage launch flow', () => {
     })
     expect(createPreset).not.toHaveBeenCalled()
     expect(writeTempSettings).toHaveBeenCalledOnce()
-    expect(cleanupTempLaunchArtifacts).toHaveBeenCalledWith('/tmp/final-settings.json')
+    expect(cleanupTempScripts).toHaveBeenCalledOnce()
+    expect(claudeSnapshot).toHaveBeenCalledOnce()
+    expect(findNewSessionId).toHaveBeenCalledOnce()
+    expect(writeSessionBinding).toHaveBeenCalledWith(expect.objectContaining({ sessionId: discoveredSessionId }))
+    expect(recordSessionExit).toHaveBeenCalledWith(discoveredSessionId)
     expect(writeLastUsed).toHaveBeenCalledWith(launchPreset.name)
     expect(spawnClaude).toHaveBeenCalledWith('/tmp/final-settings.json', [])
     expect(stderrWrite).toHaveBeenCalled()
