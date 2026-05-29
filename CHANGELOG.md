@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.8 (2026-05-29)
+
+### Features
+* add ccsp config command with global preferences
+* add YAML preview format for settings and previewFormat config option
+
+### Documentation
+* add ARCHITECTURE.md and Chinese translation
+* move architecture docs to docs/ directory
+
 ## 1.0.7 (2026-05-28)
 
 ### Features
