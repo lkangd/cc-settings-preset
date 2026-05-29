@@ -262,14 +262,26 @@ After Claude exits, CCSP records the **real** Claude session id (discovered by d
 | `ccsp create` | Interactively create a global base preset |
 | `ccsp manage` | Manage global base presets (preview / rename / delete / create / launch) |
 | `ccsp manage --project` | Manage launch presets for the current project |
+| `ccsp config` | Configure ccsp preferences (env-only preview, statusline) |
 
 ### TUI shortcuts
 
-**Base preset selection:** `j`/`k` or arrows to move, `Enter` to confirm, `q` to quit.
+**Base preset selection:** `j`/`k` or arrows to move, `f` toggle between env-only and full settings preview, `Enter` to confirm, `q` to quit.
 
 **Global manage (`ccsp manage`):** `l` launch, `r` rename, `d` delete, `c` create, `o` reveal in Finder, `q` quit.
 
 **Project launch layer:** switch between presets and plugin / skill / MCP columns; save as launch preset. `Ctrl+L` refreshes the UI.
+
+**Config (`ccsp config`):** `j`/`k` or arrows to move, `space`/`Enter` toggle the focused option, `q` quit.
+
+### Preferences (`ccsp config`)
+
+`ccsp config` opens a two-column view (options on the left, the focused option's description on the right) for global, per-user preferences stored in `~/.ccsp/config.json`. Both default to **enabled**:
+
+| Option | Default | Effect |
+|--------|---------|--------|
+| **Global preset env-only** | enabled | The base preset selection screen previews only the `env` field of the selected preset by default. Press `f` on that screen to toggle between the env-only view and the full settings view. When disabled, the full settings are shown by default. |
+| **Show statusline** | enabled | ccsp injects a statusline at the bottom of Claude Code showing the active preset and toggle summary (`CCSP: <base>/<launch> | plugins(…) | skills(…) | MCPs(…)`). When disabled, the statusline is not injected and no statusline scripts are generated. |
 
 ---
 
@@ -280,6 +292,7 @@ After Claude exits, CCSP records the **real** Claude session id (discovered by d
 ├── index.json                 # global base preset index
 ├── settings/
 │   └── <name>-settings.json   # base preset body
+├── config.json                # user preferences (env-only preview, statusline)
 └── last-settings.json         # last base preset name per project cwd
 
 <project>/.claude/.ccsp/       # entire dir gitignored by default

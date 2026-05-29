@@ -158,6 +158,14 @@ vi.mock('../src/services/global-last-settings-service.js', () => ({
   }),
 }))
 
+vi.mock('../src/services/ccsp-config-service.js', () => ({
+  createCcspConfigService: () => ({
+    read: vi.fn().mockResolvedValue({ globalPresetEnvOnly: true, statusLineEnabled: true }),
+    write: vi.fn().mockResolvedValue(undefined),
+    setOption: vi.fn().mockResolvedValue(undefined),
+  }),
+}))
+
 vi.mock('../src/services/claude-login-service.js', () => ({
   createClaudeLoginService: () => ({
     isLoggedIn: vi.fn().mockResolvedValue(false),

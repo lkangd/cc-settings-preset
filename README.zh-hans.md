@@ -262,14 +262,26 @@ Claude 退出后，CCSP 会**主动发现** Claude 真实分配的 session id（
 | `ccsp create` | 交互式创建全局基础预设 |
 | `ccsp manage` | 管理全局基础预设（预览 / 重命名 / 删除 / 新建 / 启动） |
 | `ccsp manage --project` | 管理当前项目的启动预设 |
+| `ccsp config` | 配置 ccsp 偏好（仅 env 预览、statusline） |
 
 ### 常用快捷键（TUI）
 
-**选择基础预设：** `j`/`k` 或方向键移动，`Enter` 确认，`q` 退出。
+**选择基础预设：** `j`/`k` 或方向键移动，`f` 在「仅 env」与「完整配置」预览间切换，`Enter` 确认，`q` 退出。
 
 **管理全局预设（`ccsp manage`）：** `l` 启动，`r` 重命名，`d` 删除，`c` 新建，`o` 在 Finder 中打开文件，`q` 退出。
 
 **项目启动层：** 在预设与插件 / Skill / MCP 列间切换并开关；支持保存为启动预设。终端内 `Ctrl+L` 可刷新界面。
+
+**配置（`ccsp config`）：** `j`/`k` 或方向键移动，`space`/`Enter` 切换当前选项，`q` 退出。
+
+### 偏好设置（`ccsp config`）
+
+`ccsp config` 打开左右两栏视图（左侧为选项，右侧为当前聚焦选项的说明），用于管理存放在 `~/.ccsp/config.json` 的全局（按用户）偏好。两项默认均为 **开启**：
+
+| 选项 | 默认 | 作用 |
+|------|------|------|
+| **Global preset env-only** | 开启 | 基础预设选择页默认只预览所选预设的 `env` 字段。在该页面按 `f` 可在「仅 env」与「完整配置」视图间切换；关闭后默认展示完整配置。 |
+| **Show statusline** | 开启 | 在 Claude Code 底部注入 ccsp statusline，显示当前预设与开关概览（`CCSP: <base>/<launch> \| plugins(…) \| skills(…) \| MCPs(…)`）。关闭后不再注入，也不会生成任何 statusline 脚本。 |
 
 ---
 
@@ -280,6 +292,7 @@ Claude 退出后，CCSP 会**主动发现** Claude 真实分配的 session id（
 ├── index.json                 # 全局基础预设索引
 ├── settings/
 │   └── <name>-settings.json   # 基础预设内容
+├── config.json                # 用户偏好（仅 env 预览、statusline）
 └── last-settings.json         # 各项目 cwd 上次使用的基础预设名
 
 <项目>/.claude/.ccsp/          # 默认整目录 gitignore

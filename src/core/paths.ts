@@ -115,6 +115,10 @@ export function resolveGlobalLastSettingsPath(globalRoot: string): string {
   return join(globalRoot, '.ccsp', 'last-settings.json')
 }
 
+export function resolveCcspConfigPath(globalRoot: string): string {
+  return join(globalRoot, 'config.json')
+}
+
 export function resolveManagedClaudeSettingsDir(): string {
   return '/Library/Application Support/ClaudeCode'
 }

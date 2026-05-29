@@ -70,6 +70,11 @@ export const lastUsedLaunchPresetSchema = z.object({
 
 export const lastSettingsSchema = z.record(z.string(), lastUsedBasePresetSchema)
 
+export const ccspConfigSchema = z.object({
+  globalPresetEnvOnly: z.boolean().default(true),
+  statusLineEnabled: z.boolean().default(true),
+})
+
 const sessionToggleStateSchema = z.object({
   plugins: z.array(z.unknown()),
   skills: z.array(z.unknown()),
@@ -106,6 +111,7 @@ export type LaunchPresetIndex = z.infer<typeof launchPresetIndexSchema>
 export type LastUsedLaunchPreset = z.infer<typeof lastUsedLaunchPresetSchema>
 export type LastUsedBasePreset = z.infer<typeof lastUsedBasePresetSchema>
 export type LastSettings = z.infer<typeof lastSettingsSchema>
+export type CcspConfig = z.infer<typeof ccspConfigSchema>
 export type SessionBinding = z.infer<typeof sessionBindingSchema>
 export type SessionIndex = z.infer<typeof sessionIndexSchema>
 
@@ -115,6 +121,10 @@ export function parseSettings(value: unknown): Settings {
 
 export function parseLaunchPresetSettings(value: unknown): LaunchPresetSettings {
   return launchPresetSettingsSchema.parse(value)
+}
+
+export function parseCcspConfig(value: unknown): CcspConfig {
+  return ccspConfigSchema.parse(value ?? {})
 }
 
 export function createEmptyIndex(): PresetIndex {

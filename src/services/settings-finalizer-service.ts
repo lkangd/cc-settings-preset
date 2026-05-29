@@ -51,9 +51,12 @@ export async function finalizeLaunchSettings(
     context: PathContext
     claudeSources: SettingsSource[]
     stem: string
+    statusLineEnabled: boolean
   },
 ): Promise<Settings> {
   const finalized = finalizeSettings(baseInput, launchInput)
+  if (!options.statusLineEnabled) return finalized
+
   const resolved = await resolveEffectiveStatusLine({
     claudeSources: options.claudeSources,
     baseSettings: baseInput,

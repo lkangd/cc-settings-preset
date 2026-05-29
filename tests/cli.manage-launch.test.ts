@@ -93,6 +93,13 @@ describe('manage launch flow', () => {
         writeLastUsed: vi.fn().mockResolvedValue(undefined),
       }),
     }))
+    vi.doMock('../src/services/ccsp-config-service.js', () => ({
+      createCcspConfigService: () => ({
+        read: vi.fn().mockResolvedValue({ globalPresetEnvOnly: true, statusLineEnabled: true }),
+        write: vi.fn().mockResolvedValue(undefined),
+        setOption: vi.fn().mockResolvedValue(undefined),
+      }),
+    }))
     vi.doMock('../src/services/claude-login-service.js', () => ({
       createClaudeLoginService: () => ({
         isLoggedIn: vi.fn().mockResolvedValue(false),
@@ -238,6 +245,13 @@ describe('manage launch flow', () => {
       createGlobalLastSettingsService: () => ({
         readLastUsed: vi.fn().mockResolvedValue(undefined),
         writeLastUsed: vi.fn().mockResolvedValue(undefined),
+      }),
+    }))
+    vi.doMock('../src/services/ccsp-config-service.js', () => ({
+      createCcspConfigService: () => ({
+        read: vi.fn().mockResolvedValue({ globalPresetEnvOnly: true, statusLineEnabled: true }),
+        write: vi.fn().mockResolvedValue(undefined),
+        setOption: vi.fn().mockResolvedValue(undefined),
       }),
     }))
     vi.doMock('../src/services/claude-login-service.js', () => ({

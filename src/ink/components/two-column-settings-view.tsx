@@ -9,9 +9,19 @@ type Props = {
   help: string
   items: SettingsSelectItem[]
   cursor: number
+  envOnly?: boolean
 }
 
-export function TwoColumnSettingsView({ title, help, items, cursor }: Props) {
+function renderPreview(selected: SettingsSelectItem | undefined, envOnly: boolean) {
+  if (!selected) return <TruncateText dimColor>no settings found</TruncateText>
+  if (!envOnly) return <JsonTreeView value={selected.settings} />
+
+  const env = (selected.settings as { env?: unknown }).env
+  if (env === undefined) return <TruncateText dimColor>no env configured</TruncateText>
+  return <JsonTreeView value={{ env }} />
+}
+
+export function TwoColumnSettingsView({ title, help, items, cursor, envOnly = false }: Props) {
   useInkResizeVersion()
   const { stdout } = useStdout()
   const fallbackColumns = 120
@@ -55,7 +65,7 @@ export function TwoColumnSettingsView({ title, help, items, cursor }: Props) {
           paddingY={0.5}
         >
           <TruncateText bold>{selected?.sourcePath ?? 'No settings selected'}</TruncateText>
-          {selected ? <JsonTreeView value={selected.settings} /> : <TruncateText dimColor>no settings found</TruncateText>}
+          {renderPreview(selected, envOnly)}
         </Box>
       </Box>
     </Box>

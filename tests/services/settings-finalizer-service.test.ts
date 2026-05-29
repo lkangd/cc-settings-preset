@@ -82,6 +82,7 @@ describe('finalizeLaunchSettings', () => {
         context: { homeDir: '/tmp/home', cwd: '/tmp/project' },
         claudeSources,
         stem: 'session-stem',
+        statusLineEnabled: true,
       },
     )
 
@@ -96,5 +97,31 @@ describe('finalizeLaunchSettings', () => {
         toggles,
       },
     }))
+  })
+
+  it('skips statusLine resolution and injection when disabled', async () => {
+    const toggles = { plugins: [], skills: [], mcps: [] }
+
+    const result = await finalizeLaunchSettings(
+      { permissions: { allow: ['Read(*)'] } },
+      { enabledPlugins: { alpha: false } },
+      {
+        globalName: 'work',
+        projectPresetName: 'Detected',
+        toggles,
+        context: { homeDir: '/tmp/home', cwd: '/tmp/project' },
+        claudeSources: [],
+        stem: 'session-stem',
+        statusLineEnabled: false,
+      },
+    )
+
+    expect(resolveEffectiveStatusLineMock).not.toHaveBeenCalled()
+    expect(injectCcspStatusLineMock).not.toHaveBeenCalled()
+    expect(result).not.toHaveProperty('statusLine')
+    expect(result).toEqual({
+      permissions: { allow: ['Read(*)'] },
+      enabledPlugins: { alpha: false },
+    })
   })
 })

@@ -13,6 +13,7 @@ import { readJsonFile } from './core/json.js'
 import { createPathContext, resolveGlobalRoot, resolveUserClaudeSettingsPath } from './core/paths.js'
 import { parseSettings, type PresetMeta, type SessionBinding } from './core/schema.js'
 import { spawnClaude } from './core/spawn.js'
+import { ConfigApp } from './ink/config-app.js'
 import { CreateApp, type CreateResult } from './ink/create-app.js'
 import { GlobalShortcutHandler } from './ink/components/global-shortcut-handler.js'
 import { InkResizeProvider } from './ink/components/resize-context.js'
@@ -23,6 +24,7 @@ import { ProjectLaunchApp, type ProjectLaunchResult } from './ink/project-launch
 import { ProjectManageApp, type ProjectManageResult } from './ink/project-manage-app.js'
 import { SettingsSelectApp, type SettingsSelectResult } from './ink/settings-select-app.js'
 import { applyPluginOverrides, pluginStatesToEnabledPlugins, resolvePluginStates } from './services/plugin-service.js'
+import { createCcspConfigService } from './services/ccsp-config-service.js'
 import { createGlobalLastSettingsService } from './services/global-last-settings-service.js'
 import { createClaudeSessionService } from './services/claude-session-service.js'
 import { createLaunchPresetService } from './services/launch-preset-service.js'
@@ -55,6 +57,7 @@ const globalRoot = resolveGlobalRoot(context.homeDir)
 const presetService = createPresetService(globalRoot)
 const settingsSourceService = createSettingsSourceService(context)
 const globalLastSettingsService = createGlobalLastSettingsService(context.homeDir)
+const ccspConfigService = createCcspConfigService(globalRoot)
 const launchPresetService = createLaunchPresetService(context.cwd)
 const claudeSessionService = createClaudeSessionService(context.homeDir, context.cwd)
 const claudeLoginService = createClaudeLoginService(context)
@@ -90,6 +93,14 @@ export function createProgram(): Command {
         return
       }
       await manageInteractive()
+    })
+
+  program
+    .command('config')
+    .description('Configure ccsp preferences')
+    .action(async () => {
+      printBanner()
+      await configInteractive()
     })
 
   return program
@@ -253,15 +264,35 @@ async function renderCreateApp(): Promise<CreateResult | undefined> {
   return result
 }
 
+async function configInteractive(): Promise<void> {
+  const initialConfig = await ccspConfigService.read()
+  const createNode = () =>
+    h(ConfigApp, {
+      initialConfig,
+      onChange: (config) => {
+        void ccspConfigService.write(config)
+      }
+    })
+  const state = { resizeVersion: 0 }
+  let app: RefreshableInkApp
+  const onShortcut = (input: string, key: ShortcutKey) => {
+    createGlobalShortcutHandler(app, createNode, process.stdout, state, onShortcut)(input, key)
+  }
+  app = render(wrapInkNode(createNode, state.resizeVersion, onShortcut))
+  await waitForInkAppExit(app, createNode, process.stdout, state, onShortcut)
+}
+
 async function renderSettingsSelectApp(
   items: SettingsSelectResult[],
-  initialName?: string
+  initialName?: string,
+  initialEnvOnly?: boolean
 ): Promise<SettingsSelectResult | undefined> {
   let result: SettingsSelectResult | undefined
   const createNode = () =>
     h(SettingsSelectApp, {
       items,
       ...(initialName ? { initialName } : {}),
+      ...(initialEnvOnly !== undefined ? { initialEnvOnly } : {}),
       onSubmit: (value: SettingsSelectResult) => {
         result = value
       }
@@ -308,7 +339,8 @@ async function resolveInteractiveBaseSettings(): Promise<SettingsSelectResult | 
     const rememberedName = await globalLastSettingsService.readLastUsed(context.cwd)
     const initialName =
       rememberedName && presetItems.some(preset => preset.name === rememberedName) ? rememberedName : undefined
-    const selected = await renderSettingsSelectApp(presetItems, initialName)
+    const { globalPresetEnvOnly } = await ccspConfigService.read()
+    const selected = await renderSettingsSelectApp(presetItems, initialName, globalPresetEnvOnly)
     if (selected) await globalLastSettingsService.writeLastUsed(context.cwd, selected.name)
     return selected
   }
@@ -532,6 +564,7 @@ async function launchClaudeWithFinalizedSettings(input: {
   const session = resolveSessionLaunch(input.args)
   const stem = randomUUID()
   const claudeSources = await settingsSourceService.discoverSettingsSources()
+  const { statusLineEnabled } = await ccspConfigService.read()
   const settingsPath = await launchPresetService.writeTempSettings(
     await finalizeLaunchSettings(input.baseSettings, input.launchSettings, {
       globalName: input.globalName,
@@ -540,6 +573,7 @@ async function launchClaudeWithFinalizedSettings(input: {
       context,
       claudeSources,
       stem,
+      statusLineEnabled,
     }),
     stem,
   )
