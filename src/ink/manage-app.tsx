@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Box, Text, useApp, useInput } from 'ink'
 import { createSettingsSelectFlowState, reduceSettingsSelectFlow, type SettingsSelectItem } from '../flows/settings-select-flow.js'
+import type { SettingsDisplayFormat } from '../core/schema.js'
 import { revealInFinder } from '../services/reveal-service.js'
 import { TextInput } from './components/text-input.js'
 import { TwoColumnSettingsView } from './components/two-column-settings-view.js'
@@ -15,11 +16,12 @@ export type ManageResult =
 
 type Props = {
   items: SettingsSelectItem[]
+  displayFormat?: SettingsDisplayFormat
   onSubmit: (result: ManageResult) => void
   onRenameSubmit?: (item: SettingsSelectItem, newName: string) => Promise<string | null>
 }
 
-export function ManageApp({ items, onSubmit, onRenameSubmit }: Props) {
+export function ManageApp({ items, displayFormat = 'yaml', onSubmit, onRenameSubmit }: Props) {
   const { exit } = useApp()
   const [state, setState] = useState(() => createSettingsSelectFlowState({ items }))
   const [mode, setMode] = useState<'browse' | 'rename' | 'delete'>('browse')
@@ -115,6 +117,7 @@ export function ManageApp({ items, onSubmit, onRenameSubmit }: Props) {
         help="↑/k ↓/j navigate · l launch · c create · o open folder · r rename · d delete · q quit"
         items={state.items}
         cursor={state.cursor}
+        displayFormat={displayFormat}
       />
       {message ? <Text color="yellow">{message}</Text> : null}
     </Box>

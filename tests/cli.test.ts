@@ -160,7 +160,7 @@ vi.mock('../src/services/global-last-settings-service.js', () => ({
 
 vi.mock('../src/services/ccsp-config-service.js', () => ({
   createCcspConfigService: () => ({
-    read: vi.fn().mockResolvedValue({ globalPresetEnvOnly: true, statusLineEnabled: true }),
+    read: vi.fn().mockResolvedValue({ globalPresetEnvOnly: true, statusLineEnabled: true, settingsDisplayFormat: 'yaml' }),
     write: vi.fn().mockResolvedValue(undefined),
     setOption: vi.fn().mockResolvedValue(undefined),
   }),

@@ -13,21 +13,35 @@ export async function pathExists(filePath: string): Promise<boolean> {
   }
 }
 
+async function readOptionalTextFile<T>(filePath: string, fallback: T): Promise<string | T> {
+  try {
+    return await fs.readFile(filePath, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return fallback
+    throw error
+  }
+}
+
 async function ensureParentDir(filePath: string): Promise<void> {
   await fs.mkdir(dirname(filePath), { recursive: true })
 }
 
 export async function readJsonFile(filePath: string): Promise<unknown> {
-  let content: string
-  try {
-    content = await fs.readFile(filePath, 'utf8')
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new CliError(`File not found: ${filePath}`)
-    }
-    throw error
-  }
+  return parseJsonFileContent(filePath, await readRequiredTextFile(filePath))
+}
 
+export async function readJsonFileOrDefault(filePath: string, fallback: unknown): Promise<unknown> {
+  const content = await readOptionalTextFile(filePath, undefined)
+  return content === undefined ? fallback : parseJsonFileContent(filePath, content)
+}
+
+async function readRequiredTextFile(filePath: string): Promise<string> {
+  const content = await readOptionalTextFile(filePath, undefined)
+  if (content === undefined) throw new CliError(`File not found: ${filePath}`)
+  return content
+}
+
+function parseJsonFileContent(filePath: string, content: string): unknown {
   try {
     return JSON.parse(content)
   } catch (error) {

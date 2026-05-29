@@ -2,10 +2,21 @@ import type { CcspConfig } from '../core/schema.js'
 
 export type ConfigOptionKey = keyof CcspConfig
 
+export type ConfigValueDisplay = {
+  label: string
+  tone: 'on' | 'off' | 'info'
+}
+
 export type ConfigOption = {
   key: ConfigOptionKey
   label: string
   description: string
+  display: (config: CcspConfig) => ConfigValueDisplay
+  toggle: (config: CcspConfig) => CcspConfig
+}
+
+function booleanDisplay(value: boolean): ConfigValueDisplay {
+  return value ? { label: 'enable', tone: 'on' } : { label: 'disabled', tone: 'off' }
 }
 
 export const CONFIG_OPTIONS: ConfigOption[] = [
@@ -14,12 +25,27 @@ export const CONFIG_OPTIONS: ConfigOption[] = [
     label: 'Global preset env-only',
     description:
       'When enabled, the global preset selection screen previews only the "env" field of the selected preset by default. Press f on that screen to toggle between the env-only view and the full settings view. When disabled, the full settings are shown by default.',
+    display: config => booleanDisplay(config.globalPresetEnvOnly),
+    toggle: config => ({ ...config, globalPresetEnvOnly: !config.globalPresetEnvOnly }),
   },
   {
     key: 'statusLineEnabled',
     label: 'Show statusline',
     description:
       'When enabled, ccsp injects a statusline at the bottom of Claude Code showing the active preset and toggle summary. When disabled, the statusline is not injected and no statusline scripts are generated.',
+    display: config => booleanDisplay(config.statusLineEnabled),
+    toggle: config => ({ ...config, statusLineEnabled: !config.statusLineEnabled }),
+  },
+  {
+    key: 'settingsDisplayFormat',
+    label: 'Settings preview format',
+    description:
+      'How the selected preset settings are rendered on the right of the preset selection (ccsp) and manage (ccsp manage) screens: yaml or json. Both are syntax-highlighted. Press space/enter to switch.',
+    display: config => ({ label: config.settingsDisplayFormat, tone: 'info' }),
+    toggle: config => ({
+      ...config,
+      settingsDisplayFormat: config.settingsDisplayFormat === 'yaml' ? 'json' : 'yaml',
+    }),
   },
 ]
 
@@ -45,10 +71,7 @@ export function reduceConfigFlow(state: ConfigFlowState, event: ConfigFlowEvent)
   if (event.type === 'toggle') {
     const option = CONFIG_OPTIONS[state.cursor]
     if (!option) return state
-    return {
-      ...state,
-      config: { ...state.config, [option.key]: !state.config[option.key] },
-    }
+    return { ...state, config: option.toggle(state.config) }
   }
 
   return state

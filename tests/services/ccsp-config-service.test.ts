@@ -5,13 +5,14 @@ import { describe, expect, it } from 'vitest'
 import { createCcspConfigService } from '../../src/services/ccsp-config-service.js'
 
 describe('ccsp config service', () => {
-  it('returns defaults (both enabled) when no config file exists', async () => {
+  it('returns defaults when no config file exists', async () => {
     const globalRoot = await mkdtemp(join(tmpdir(), 'ccsp-config-'))
     const service = createCcspConfigService(globalRoot)
 
     expect(await service.read()).toEqual({
       globalPresetEnvOnly: true,
       statusLineEnabled: true,
+      settingsDisplayFormat: 'yaml',
     })
   })
 
@@ -19,15 +20,17 @@ describe('ccsp config service', () => {
     const globalRoot = await mkdtemp(join(tmpdir(), 'ccsp-config-'))
     const service = createCcspConfigService(globalRoot)
 
-    await service.write({ globalPresetEnvOnly: false, statusLineEnabled: false })
+    await service.write({ globalPresetEnvOnly: false, statusLineEnabled: false, settingsDisplayFormat: 'json' })
 
     expect(await service.read()).toEqual({
       globalPresetEnvOnly: false,
       statusLineEnabled: false,
+      settingsDisplayFormat: 'json',
     })
     expect(JSON.parse(await readFile(join(globalRoot, 'config.json'), 'utf8'))).toEqual({
       globalPresetEnvOnly: false,
       statusLineEnabled: false,
+      settingsDisplayFormat: 'json',
     })
   })
 
@@ -40,6 +43,7 @@ describe('ccsp config service', () => {
     expect(await service.read()).toEqual({
       globalPresetEnvOnly: true,
       statusLineEnabled: false,
+      settingsDisplayFormat: 'yaml',
     })
   })
 
@@ -52,6 +56,7 @@ describe('ccsp config service', () => {
     expect(await service.read()).toEqual({
       globalPresetEnvOnly: false,
       statusLineEnabled: true,
+      settingsDisplayFormat: 'yaml',
     })
   })
 })

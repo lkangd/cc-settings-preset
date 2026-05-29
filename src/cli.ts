@@ -11,7 +11,7 @@ import { isUuid, resolveSessionLaunch, sanitizeClaudeArgs } from './core/args.js
 import { CliError } from './core/errors.js'
 import { readJsonFile } from './core/json.js'
 import { createPathContext, resolveGlobalRoot, resolveUserClaudeSettingsPath } from './core/paths.js'
-import { parseSettings, type PresetMeta, type SessionBinding } from './core/schema.js'
+import { parseSettings, type CcspConfig, type PresetMeta, type SessionBinding, type SettingsDisplayFormat } from './core/schema.js'
 import { spawnClaude } from './core/spawn.js'
 import { ConfigApp } from './ink/config-app.js'
 import { CreateApp, type CreateResult } from './ink/create-app.js'
@@ -284,15 +284,17 @@ async function configInteractive(): Promise<void> {
 
 async function renderSettingsSelectApp(
   items: SettingsSelectResult[],
-  initialName?: string,
-  initialEnvOnly?: boolean
+  options: {
+    initialName?: string
+    initialEnvOnly?: boolean
+    displayFormat?: SettingsDisplayFormat
+  } = {}
 ): Promise<SettingsSelectResult | undefined> {
   let result: SettingsSelectResult | undefined
   const createNode = () =>
     h(SettingsSelectApp, {
       items,
-      ...(initialName ? { initialName } : {}),
-      ...(initialEnvOnly !== undefined ? { initialEnvOnly } : {}),
+      ...options,
       onSubmit: (value: SettingsSelectResult) => {
         result = value
       }
@@ -332,15 +334,19 @@ async function resolveProjectManageBaseSettings(): Promise<SettingsSelectResult 
   }
 }
 
-async function resolveInteractiveBaseSettings(): Promise<SettingsSelectResult | undefined> {
+async function resolveInteractiveBaseSettings(config?: CcspConfig): Promise<SettingsSelectResult | undefined> {
   const officialItem = await buildClaudeOfficialPresetItem()
   const presetItems = [...(officialItem ? [officialItem] : []), ...(await buildGlobalSettingsPresetItems())]
   if (presetItems.length > 0) {
     const rememberedName = await globalLastSettingsService.readLastUsed(context.cwd)
     const initialName =
       rememberedName && presetItems.some(preset => preset.name === rememberedName) ? rememberedName : undefined
-    const { globalPresetEnvOnly } = await ccspConfigService.read()
-    const selected = await renderSettingsSelectApp(presetItems, initialName, globalPresetEnvOnly)
+    const { globalPresetEnvOnly, settingsDisplayFormat } = config ?? await ccspConfigService.read()
+    const selected = await renderSettingsSelectApp(presetItems, {
+      ...(initialName ? { initialName } : {}),
+      initialEnvOnly: globalPresetEnvOnly,
+      displayFormat: settingsDisplayFormat,
+    })
     if (selected) await globalLastSettingsService.writeLastUsed(context.cwd, selected.name)
     return selected
   }
@@ -515,11 +521,15 @@ function launchResultToSettings(result: { toggles: ProjectLaunchToggleState }): 
   }
 }
 
-async function renderManageApp(items: SettingsSelectResult[]): Promise<ManageResult | undefined> {
+async function renderManageApp(
+  items: SettingsSelectResult[],
+  settingsDisplayFormat: SettingsDisplayFormat
+): Promise<ManageResult | undefined> {
   let result: ManageResult | undefined
   const createNode = () =>
     h(ManageApp, {
       items,
+      displayFormat: settingsDisplayFormat,
       onSubmit: (value: ManageResult) => {
         result = value
       },
@@ -560,11 +570,12 @@ async function launchClaudeWithFinalizedSettings(input: {
   toggles: ProjectLaunchToggleState
   launchSettings: unknown
   args: string[]
+  statusLineEnabled?: boolean
 }): Promise<void> {
   const session = resolveSessionLaunch(input.args)
   const stem = randomUUID()
   const claudeSources = await settingsSourceService.discoverSettingsSources()
-  const { statusLineEnabled } = await ccspConfigService.read()
+  const statusLineEnabled = input.statusLineEnabled ?? (await ccspConfigService.read()).statusLineEnabled
   const settingsPath = await launchPresetService.writeTempSettings(
     await finalizeLaunchSettings(input.baseSettings, input.launchSettings, {
       globalName: input.globalName,
@@ -616,7 +627,8 @@ async function launchClaudeWithFinalizedSettings(input: {
 
 async function launchWithSelectedSettings(
   selectedSettings: SettingsSelectResult,
-  rawClaudeArgs: string[]
+  rawClaudeArgs: string[],
+  config?: CcspConfig
 ): Promise<'back' | 'done' | 'quit'> {
   const sanitized = sanitizeClaudeArgs(rawClaudeArgs)
   if (sanitized.removedSettings) {
@@ -649,14 +661,16 @@ async function launchWithSelectedSettings(
     toggles: launchResult.toggles,
     launchSettings,
     args: sanitized.args,
+    ...(config ? { statusLineEnabled: config.statusLineEnabled } : {}),
   })
   return 'done'
 }
 
 async function runInteractive(rawClaudeArgs: string[], fallbackMode?: 'resume' | 'continue'): Promise<void> {
   printBanner()
+  const config = await ccspConfigService.read()
   while (true) {
-    const selectedSettings = await resolveInteractiveBaseSettings()
+    const selectedSettings = await resolveInteractiveBaseSettings(config)
     if (!selectedSettings) return
 
     const launchArgs =
@@ -666,7 +680,7 @@ async function runInteractive(rawClaudeArgs: string[], fallbackMode?: 'resume' |
           ? rawClaudeArgs
           : rawClaudeArgs
 
-    const outcome = await launchWithSelectedSettings(selectedSettings, launchArgs)
+    const outcome = await launchWithSelectedSettings(selectedSettings, launchArgs, config)
     if (outcome !== 'back') return
     printBanner()
   }
@@ -743,13 +757,14 @@ async function runContinue(extraArgs: string[]): Promise<void> {
 }
 
 async function manageInteractive(): Promise<void> {
+  const config = await ccspConfigService.read()
   while (true) {
     const items = await buildGlobalSettingsPresetItems()
-    const selection = await renderManageApp(items)
+    const selection = await renderManageApp(items, config.settingsDisplayFormat)
     if (!selection || selection.type === 'exit') return
 
     if (selection.type === 'launch') {
-      const outcome = await launchWithSelectedSettings(selection.item, [])
+      const outcome = await launchWithSelectedSettings(selection.item, [], config)
       if (outcome === 'back') continue
       return
     }

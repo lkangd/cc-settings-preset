@@ -73,6 +73,7 @@ export const lastSettingsSchema = z.record(z.string(), lastUsedBasePresetSchema)
 export const ccspConfigSchema = z.object({
   globalPresetEnvOnly: z.boolean().default(true),
   statusLineEnabled: z.boolean().default(true),
+  settingsDisplayFormat: z.enum(['yaml', 'json']).default('yaml'),
 })
 
 const sessionToggleStateSchema = z.object({
@@ -112,6 +113,7 @@ export type LastUsedLaunchPreset = z.infer<typeof lastUsedLaunchPresetSchema>
 export type LastUsedBasePreset = z.infer<typeof lastUsedBasePresetSchema>
 export type LastSettings = z.infer<typeof lastSettingsSchema>
 export type CcspConfig = z.infer<typeof ccspConfigSchema>
+export type SettingsDisplayFormat = CcspConfig['settingsDisplayFormat']
 export type SessionBinding = z.infer<typeof sessionBindingSchema>
 export type SessionIndex = z.infer<typeof sessionIndexSchema>
 

@@ -32,7 +32,7 @@
 </p>
 
 <p align="center">
-  <em>Interactive flow: pick a global base preset (left), preview its JSON (right), then tune plugins / skills / MCP per launch before starting Claude Code.</em>
+  <em>Interactive flow: pick a global base preset (left), preview its settings as YAML or JSON (right), then tune plugins / skills / MCP per launch before starting Claude Code.</em>
 </p>
 
 **English** | [简体中文](README.zh-hans.md)
@@ -282,6 +282,7 @@ After Claude exits, CCSP records the **real** Claude session id (discovered by d
 |--------|---------|--------|
 | **Global preset env-only** | enabled | The base preset selection screen previews only the `env` field of the selected preset by default. Press `f` on that screen to toggle between the env-only view and the full settings view. When disabled, the full settings are shown by default. |
 | **Show statusline** | enabled | ccsp injects a statusline at the bottom of Claude Code showing the active preset and toggle summary (`CCSP: <base>/<launch> | plugins(…) | skills(…) | MCPs(…)`). When disabled, the statusline is not injected and no statusline scripts are generated. |
+| **Settings preview format** | `yaml` | How the selected preset settings are rendered on the right of the preset selection (`ccsp`) and manage (`ccsp manage`) screens — `yaml` or `json`. Both are syntax-highlighted. |
 
 ---
 

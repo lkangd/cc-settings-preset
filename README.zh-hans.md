@@ -32,7 +32,7 @@
 </p>
 
 <p align="center">
-  <em>典型流程：先选全局基础预设（左）并预览 JSON（右），再在项目启动层切换插件 / Skill / MCP，最后启动 Claude Code。</em>
+  <em>典型流程：先选全局基础预设（左）并以 YAML 或 JSON 预览其配置（右），再在项目启动层切换插件 / Skill / MCP，最后启动 Claude Code。</em>
 </p>
 
 [English](README.md) | **简体中文**
@@ -127,7 +127,7 @@ claude --settings ~/.claude/my-api-1.json -- ...
 
 ### 5. 配置管理与预览
 
-- `ccsp manage`：浏览、重命名、删除全局基础预设，预览 JSON 树，并可直接从管理界面启动。
+- `ccsp manage`：浏览、重命名、删除全局基础预设，预览配置（YAML / JSON），并可直接从管理界面启动。
 - `ccsp manage --project`：管理当前仓库下的启动预设（创建 / 保存 / 重命名 / 删除 / 启动）。
 
 ---
@@ -282,6 +282,7 @@ Claude 退出后，CCSP 会**主动发现** Claude 真实分配的 session id（
 |------|------|------|
 | **Global preset env-only** | 开启 | 基础预设选择页默认只预览所选预设的 `env` 字段。在该页面按 `f` 可在「仅 env」与「完整配置」视图间切换；关闭后默认展示完整配置。 |
 | **Show statusline** | 开启 | 在 Claude Code 底部注入 ccsp statusline，显示当前预设与开关概览（`CCSP: <base>/<launch> \| plugins(…) \| skills(…) \| MCPs(…)`）。关闭后不再注入，也不会生成任何 statusline 脚本。 |
+| **Settings preview format** | `yaml` | 基础预设选择页（`ccsp`）与管理页（`ccsp manage`）右侧预览所选预设配置的渲染格式 —— `yaml` 或 `json`，两者都带语法高亮。 |
 
 ---
 

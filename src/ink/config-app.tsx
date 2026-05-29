@@ -9,6 +9,12 @@ import type { CcspConfig } from '../core/schema.js'
 import { useInkResizeVersion } from './components/resize-context.js'
 import { TruncateText } from './components/truncate-text.js'
 
+const VALUE_COLORS = {
+  on: 'green',
+  off: 'gray',
+  info: 'cyan',
+} as const
+
 type Props = {
   initialConfig: CcspConfig
   onChange: (config: CcspConfig) => void
@@ -58,14 +64,14 @@ export function ConfigApp({ initialConfig, onChange }: Props) {
         >
           <TruncateText bold>Config({CONFIG_OPTIONS.length})</TruncateText>
           {CONFIG_OPTIONS.map((option, index) => {
-            const enabled = state.config[option.key]
+            const display = option.display(state.config)
             const isCursor = index === state.cursor
             return (
               <TruncateText key={option.key} {...(isCursor ? { color: 'cyan' as const } : {})}>
                 {isCursor ? '❯ ' : '  '}
                 {option.label}
                 {' '}
-                <Text color={enabled ? 'green' : 'gray'}>[{enabled ? 'enable' : 'disabled'}]</Text>
+                <Text color={VALUE_COLORS[display.tone]}>[{display.label}]</Text>
               </TruncateText>
             )
           })}

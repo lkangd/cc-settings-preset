@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useApp, useInput } from 'ink'
 import { createSettingsSelectFlowState, reduceSettingsSelectFlow, type SettingsSelectItem } from '../flows/settings-select-flow.js'
+import type { SettingsDisplayFormat } from '../core/schema.js'
 import { TwoColumnSettingsView } from './components/two-column-settings-view.js'
 
 export type SettingsSelectResult = SettingsSelectItem
@@ -9,10 +10,11 @@ type Props = {
   items: SettingsSelectItem[]
   initialName?: string
   initialEnvOnly?: boolean
+  displayFormat?: SettingsDisplayFormat
   onSubmit: (result: SettingsSelectResult) => void
 }
 
-export function SettingsSelectApp({ items, initialName, initialEnvOnly = false, onSubmit }: Props) {
+export function SettingsSelectApp({ items, initialName, initialEnvOnly = false, displayFormat = 'yaml', onSubmit }: Props) {
   const { exit } = useApp()
   const [state, setState] = useState(() => createSettingsSelectFlowState({
     items,
@@ -46,6 +48,7 @@ export function SettingsSelectApp({ items, initialName, initialEnvOnly = false, 
       items={state.items}
       cursor={state.cursor}
       envOnly={envOnly}
+      displayFormat={displayFormat}
     />
   )
 }

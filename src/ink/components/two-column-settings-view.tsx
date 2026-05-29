@@ -1,6 +1,8 @@
 import { Box, useStdout } from 'ink'
 import type { SettingsSelectItem } from '../../flows/settings-select-flow.js'
+import type { SettingsDisplayFormat } from '../../core/schema.js'
 import { JsonTreeView } from './json-tree-view.js'
+import { YamlTreeView } from './yaml-tree-view.js'
 import { useInkResizeVersion } from './resize-context.js'
 import { TruncateText } from './truncate-text.js'
 
@@ -10,18 +12,24 @@ type Props = {
   items: SettingsSelectItem[]
   cursor: number
   envOnly?: boolean
+  displayFormat?: SettingsDisplayFormat
 }
 
-function renderPreview(selected: SettingsSelectItem | undefined, envOnly: boolean) {
+function renderPreview(
+  selected: SettingsSelectItem | undefined,
+  envOnly: boolean,
+  displayFormat: SettingsDisplayFormat,
+) {
   if (!selected) return <TruncateText dimColor>no settings found</TruncateText>
-  if (!envOnly) return <JsonTreeView value={selected.settings} />
+  const TreeView = displayFormat === 'json' ? JsonTreeView : YamlTreeView
+  if (!envOnly) return <TreeView value={selected.settings} />
 
   const env = (selected.settings as { env?: unknown }).env
   if (env === undefined) return <TruncateText dimColor>no env configured</TruncateText>
-  return <JsonTreeView value={{ env }} />
+  return <TreeView value={{ env }} />
 }
 
-export function TwoColumnSettingsView({ title, help, items, cursor, envOnly = false }: Props) {
+export function TwoColumnSettingsView({ title, help, items, cursor, envOnly = false, displayFormat = 'yaml' }: Props) {
   useInkResizeVersion()
   const { stdout } = useStdout()
   const fallbackColumns = 120
@@ -65,7 +73,7 @@ export function TwoColumnSettingsView({ title, help, items, cursor, envOnly = fa
           paddingY={0.5}
         >
           <TruncateText bold>{selected?.sourcePath ?? 'No settings selected'}</TruncateText>
-          {renderPreview(selected, envOnly)}
+          {renderPreview(selected, envOnly, displayFormat)}
         </Box>
       </Box>
     </Box>
