@@ -12,8 +12,7 @@ import { ensureProjectCcspStore } from './project-store-service.js'
 import type { ResolvedStatusLine, StatusLineConfig } from './statusline-resolver-service.js'
 
 export type CcspStatusLineMeta = {
-  globalName: string
-  projectPresetName: string
+  presetLabel: string
   toggles: ProjectLaunchToggleState
 }
 
@@ -33,7 +32,7 @@ function formatToggleSummary(toggles: ProjectLaunchToggleState): string {
 }
 
 function formatCcspStatusLine(meta: CcspStatusLineMeta): string {
-  return `CCSP: ${meta.globalName}/${meta.projectPresetName} | ${formatToggleSummary(meta.toggles)}`
+  return `CCSP: ${meta.presetLabel} | ${formatToggleSummary(meta.toggles)}`
 }
 
 function shellQuote(value: string): string {
@@ -81,11 +80,7 @@ function buildInjectedStatusLineConfig(
   }
 
   if (resolved?.config.padding !== undefined) config.padding = resolved.config.padding
-  if (resolved?.config.refreshInterval !== undefined) {
-    config.refreshInterval = resolved.config.refreshInterval
-  } else {
-    config.refreshInterval = 5
-  }
+  config.refreshInterval = resolved?.config.refreshInterval ?? 5
   if (resolved?.config.hideVimModeIndicator !== undefined) {
     config.hideVimModeIndicator = resolved.config.hideVimModeIndicator
   }

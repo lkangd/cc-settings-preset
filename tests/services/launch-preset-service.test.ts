@@ -194,6 +194,7 @@ describe('launch preset service', () => {
       sessionId: 'sess-a',
       globalName: 'work',
       projectPresetName: 'web',
+      presetLabel: 'work/web',
       baseSettings: { permissions: { allow: ['Read(*)'] } },
       launchSettings: { enabledPlugins: { alpha: true } },
       toggles: { plugins: [], skills: [], mcps: [] },
@@ -202,6 +203,7 @@ describe('launch preset service', () => {
     await service.writeSessionBinding(input)
     const first = await service.readSessionBinding('sess-a')
     expect(first?.globalName).toBe('work')
+    expect(first?.presetLabel).toBe('work/web')
     expect(first?.launchSettings).toEqual({ enabledPlugins: { alpha: true } })
     expect(first?.exitedAt).toBeUndefined()
 
@@ -215,12 +217,30 @@ describe('launch preset service', () => {
     expect(reused?.exitedAt).toBeUndefined()
   })
 
+  it('keeps session bindings valid when preset labels are omitted', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ccsp-project-'))
+    const service = createLaunchPresetService(cwd)
+
+    await service.writeSessionBinding({
+      sessionId: 'sess-a',
+      globalName: 'work',
+      projectPresetName: 'web',
+      baseSettings: {},
+      launchSettings: {},
+      toggles: { plugins: [], skills: [], mcps: [] },
+    })
+
+    const binding = await service.readSessionBinding('sess-a')
+    expect(binding?.presetLabel).toBeUndefined()
+  })
+
   it('continues the most recently exited session', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'ccsp-project-'))
     const service = createLaunchPresetService(cwd)
     const base = {
       globalName: 'work',
       projectPresetName: 'web',
+      presetLabel: 'work/web',
       baseSettings: {},
       launchSettings: {},
       toggles: { plugins: [], skills: [], mcps: [] },

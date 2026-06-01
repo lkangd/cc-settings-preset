@@ -76,8 +76,7 @@ describe('finalizeLaunchSettings', () => {
       { permissions: { allow: ['Read(*)'] } },
       { enabledPlugins: { alpha: false } },
       {
-        globalName: 'work',
-        projectPresetName: 'Detected',
+        presetLabel: 'work/Detected',
         toggles,
         context: { homeDir: '/tmp/home', cwd: '/tmp/project' },
         claudeSources,
@@ -92,8 +91,7 @@ describe('finalizeLaunchSettings', () => {
     })
     expect(injectCcspStatusLineMock).toHaveBeenCalledWith(expect.objectContaining({
       meta: {
-        globalName: 'work',
-        projectPresetName: 'Detected',
+        presetLabel: 'work/Detected',
         toggles,
       },
     }))
@@ -106,8 +104,7 @@ describe('finalizeLaunchSettings', () => {
       { permissions: { allow: ['Read(*)'] } },
       { enabledPlugins: { alpha: false } },
       {
-        globalName: 'work',
-        projectPresetName: 'Detected',
+        presetLabel: 'work/Detected',
         toggles,
         context: { homeDir: '/tmp/home', cwd: '/tmp/project' },
         claudeSources: [],

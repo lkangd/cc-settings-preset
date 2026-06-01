@@ -47,6 +47,20 @@ export const CONFIG_OPTIONS: ConfigOption[] = [
       settingsDisplayFormat: config.settingsDisplayFormat === 'yaml' ? 'json' : 'yaml',
     }),
   },
+  {
+    key: 'runMode',
+    label: 'Run mode',
+    description:
+      'Which preset stages ccsp uses when launched: both keeps the current global preset then project preset flow; global-only selects only a global preset and skips project presets; project-only skips global presets and launches from a project preset using the current project settings source as the base.',
+    display: config => ({ label: config.runMode, tone: 'info' }),
+    toggle: config => {
+      let next: CcspConfig['runMode']
+      if (config.runMode === 'both') next = 'global-only'
+      else if (config.runMode === 'global-only') next = 'project-only'
+      else next = 'both'
+      return { ...config, runMode: next }
+    },
+  },
 ]
 
 export type ConfigFlowState = {

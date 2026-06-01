@@ -20,8 +20,7 @@ describe('injectCcspStatusLine', () => {
     const settings = await injectCcspStatusLine({
       settings: { permissions: { allow: ['Read(*)'] } },
       meta: {
-        globalName: 'work',
-        projectPresetName: 'Detected',
+        presetLabel: 'work',
         toggles: {
           plugins: [{ name: 'alpha', enabled: true, source: 'user' }],
           skills: [{ name: 'personal', enabled: false, source: 'user', toggleable: true }],
@@ -41,7 +40,7 @@ describe('injectCcspStatusLine', () => {
       command: wrapperPath,
       refreshInterval: 5,
     })
-    expect(wrapper).toContain("printf '\\033[36m%s\\033[0m\\n' 'CCSP: work/Detected | plugins(1/1) | skills(0/1) | MCPs(1/1)'")
+    expect(wrapper).toContain("printf '\\033[36m%s\\033[0m\\n' 'CCSP: work | plugins(1/1) | skills(0/1) | MCPs(1/1)'")
     await expect(fs.access(join(tmpDir, `ccsp-statusline-underlying-${launchStem}.sh`))).rejects.toMatchObject({
       code: 'ENOENT',
     })
@@ -55,8 +54,7 @@ describe('injectCcspStatusLine', () => {
         config: { type: 'command', command: "echo 'underlying'" },
       },
       meta: {
-        globalName: 'work',
-        projectPresetName: 'web',
+        presetLabel: 'web',
         toggles: {
           plugins: [],
           skills: [],
@@ -76,5 +74,6 @@ describe('injectCcspStatusLine', () => {
     await expect(fs.readFile(commandPath, 'utf8')).resolves.toBe("echo 'underlying'")
     await expect(fs.readFile(underlyingPath, 'utf8')).resolves.toContain(commandPath)
     await expect(fs.readFile(wrapperPath, 'utf8')).resolves.toContain(underlyingPath)
+    await expect(fs.readFile(wrapperPath, 'utf8')).resolves.toContain("CCSP: web | plugins(0/0) | skills(0/0) | MCPs(0/0)")
   })
 })

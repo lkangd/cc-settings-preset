@@ -10,6 +10,7 @@ const defaultConfig: CcspConfig = {
   globalPresetEnvOnly: true,
   statusLineEnabled: true,
   settingsDisplayFormat: 'yaml',
+  runMode: 'both',
 }
 
 describe('config flow', () => {
@@ -57,11 +58,31 @@ describe('config flow', () => {
     expect(backToYaml.config.settingsDisplayFormat).toBe('yaml')
   })
 
+  it('cycles the run mode enum option', () => {
+    const runModeIndex = CONFIG_OPTIONS.findIndex(option => option.key === 'runMode')
+    let state = createConfigFlowState(defaultConfig)
+    for (let i = 0; i < runModeIndex; i += 1) {
+      state = reduceConfigFlow(state, { type: 'down' })
+    }
+
+    const toGlobalOnly = reduceConfigFlow(state, { type: 'toggle' })
+    expect(toGlobalOnly.config.runMode).toBe('global-only')
+
+    const toProjectOnly = reduceConfigFlow(toGlobalOnly, { type: 'toggle' })
+    expect(toProjectOnly.config.runMode).toBe('project-only')
+
+    const backToBoth = reduceConfigFlow(toProjectOnly, { type: 'toggle' })
+    expect(backToBoth.config.runMode).toBe('both')
+  })
+
   it('reports value display per option', () => {
     const [first] = CONFIG_OPTIONS
     expect(first?.display(defaultConfig)).toEqual({ label: 'enable', tone: 'on' })
 
     const formatOption = CONFIG_OPTIONS.find(option => option.key === 'settingsDisplayFormat')
     expect(formatOption?.display(defaultConfig)).toEqual({ label: 'yaml', tone: 'info' })
+
+    const runModeOption = CONFIG_OPTIONS.find(option => option.key === 'runMode')
+    expect(runModeOption?.display(defaultConfig)).toEqual({ label: 'both', tone: 'info' })
   })
 })

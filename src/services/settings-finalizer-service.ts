@@ -45,8 +45,7 @@ export async function finalizeLaunchSettings(
   baseInput: unknown,
   launchInput: unknown,
   options: {
-    globalName: string
-    projectPresetName: string
+    presetLabel: string
     toggles: ProjectLaunchToggleState
     context: PathContext
     claudeSources: SettingsSource[]
@@ -66,8 +65,7 @@ export async function finalizeLaunchSettings(
     settings: finalized,
     ...(resolved ? { resolved } : {}),
     meta: {
-      globalName: options.globalName,
-      projectPresetName: options.projectPresetName,
+      presetLabel: options.presetLabel,
       toggles: options.toggles,
     },
     context: options.context,

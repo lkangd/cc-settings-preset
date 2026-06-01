@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ccspConfigSchema,
   createEmptyLaunchPresetIndex,
   indexSchema,
   lastSettingsSchema,
+  parseCcspConfig,
   parseLaunchPresetSettings,
   parseSettings,
+  sessionIndexSchema,
   settingsSchema,
 } from '../../src/core/schema.js'
 
@@ -85,6 +88,64 @@ describe('lastSettingsSchema', () => {
         updatedAt: '2026-05-20T08:00:00.000Z',
       },
     })
+  })
+})
+
+describe('ccspConfigSchema', () => {
+  it('defaults run mode to both', () => {
+    expect(parseCcspConfig({})).toEqual({
+      globalPresetEnvOnly: true,
+      statusLineEnabled: true,
+      settingsDisplayFormat: 'yaml',
+      runMode: 'both',
+    })
+  })
+
+  it.each(['both', 'global-only', 'project-only'] as const)('accepts run mode %s', runMode => {
+    expect(ccspConfigSchema.parse({ runMode }).runMode).toBe(runMode)
+  })
+
+  it('rejects invalid run modes', () => {
+    expect(() => ccspConfigSchema.parse({ runMode: 'global' })).toThrow()
+  })
+})
+
+describe('sessionIndexSchema', () => {
+  it('accepts optional preset labels for session bindings', () => {
+    expect(sessionIndexSchema.parse({
+      version: 1,
+      sessions: {
+        'sess-a': {
+          sessionId: 'sess-a',
+          globalName: 'project-local',
+          projectPresetName: 'web',
+          presetLabel: 'web',
+          baseSettings: {},
+          launchSettings: {},
+          toggles: { plugins: [], skills: [], mcps: [] },
+          createdAt: '2026-05-20T00:00:00.000Z',
+          lastUsedAt: '2026-05-20T00:00:00.000Z',
+        },
+      },
+    }).sessions['sess-a']?.presetLabel).toBe('web')
+  })
+
+  it('keeps old session bindings valid without preset labels', () => {
+    expect(sessionIndexSchema.parse({
+      version: 1,
+      sessions: {
+        'sess-a': {
+          sessionId: 'sess-a',
+          globalName: 'work',
+          projectPresetName: 'web',
+          baseSettings: {},
+          launchSettings: {},
+          toggles: { plugins: [], skills: [], mcps: [] },
+          createdAt: '2026-05-20T00:00:00.000Z',
+          lastUsedAt: '2026-05-20T00:00:00.000Z',
+        },
+      },
+    }).sessions['sess-a']?.presetLabel).toBeUndefined()
   })
 })
 

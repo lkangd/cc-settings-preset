@@ -42,6 +42,7 @@ export type SessionBindingInput = {
   sessionId: string
   globalName: string
   projectPresetName: string
+  presetLabel?: string
   baseSettings: unknown
   launchSettings: unknown
   toggles: { plugins: unknown[]; skills: unknown[]; mcps: unknown[] }
@@ -286,6 +287,7 @@ export function createLaunchPresetService(cwd: string) {
         sessionId: input.sessionId,
         globalName: input.globalName,
         projectPresetName: input.projectPresetName,
+        ...(input.presetLabel ? { presetLabel: input.presetLabel } : {}),
         baseSettings: input.baseSettings,
         launchSettings: parseLaunchPresetSettings(input.launchSettings),
         toggles: input.toggles,

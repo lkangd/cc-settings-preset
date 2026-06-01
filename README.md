@@ -262,7 +262,7 @@ After Claude exits, CCSP records the **real** Claude session id (discovered by d
 | `ccsp create` | Interactively create a global base preset |
 | `ccsp manage` | Manage global base presets (preview / rename / delete / create / launch) |
 | `ccsp manage --project` | Manage launch presets for the current project |
-| `ccsp config` | Configure ccsp preferences (env-only preview, statusline) |
+| `ccsp config` | Configure ccsp preferences (run mode, env-only preview, statusline, preview format) |
 
 ### TUI shortcuts
 
@@ -280,6 +280,7 @@ After Claude exits, CCSP records the **real** Claude session id (discovered by d
 
 | Option | Default | Effect |
 |--------|---------|--------|
+| **Run mode** | `both` | Controls which launch stages `ccsp` uses: `both` selects a global preset and then a project launch preset; `global-only` selects only a global preset; `project-only` skips the global preset stage and launches from a project launch preset using the current project settings source as the base. |
 | **Global preset env-only** | enabled | The base preset selection screen previews only the `env` field of the selected preset by default. Press `f` on that screen to toggle between the env-only view and the full settings view. When disabled, the full settings are shown by default. |
 | **Show statusline** | enabled | ccsp injects a statusline at the bottom of Claude Code showing the active preset and toggle summary (`CCSP: <base>/<launch> | plugins(…) | skills(…) | MCPs(…)`). When disabled, the statusline is not injected and no statusline scripts are generated. |
 | **Settings preview format** | `yaml` | How the selected preset settings are rendered on the right of the preset selection (`ccsp`) and manage (`ccsp manage`) screens — `yaml` or `json`. Both are syntax-highlighted. |
@@ -293,7 +294,7 @@ After Claude exits, CCSP records the **real** Claude session id (discovered by d
 ├── index.json                 # global base preset index
 ├── settings/
 │   └── <name>-settings.json   # base preset body
-├── config.json                # user preferences (env-only preview, statusline)
+├── config.json                # user preferences (run mode, env-only preview, statusline, preview format)
 └── last-settings.json         # last base preset name per project cwd
 
 <project>/.claude/.ccsp/       # entire dir gitignored by default

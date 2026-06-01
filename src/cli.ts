@@ -11,7 +11,7 @@ import { isUuid, resolveSessionLaunch, sanitizeClaudeArgs } from './core/args.js
 import { CliError } from './core/errors.js'
 import { readJsonFile } from './core/json.js'
 import { createPathContext, resolveGlobalRoot, resolveUserClaudeSettingsPath } from './core/paths.js'
-import { parseSettings, type CcspConfig, type PresetMeta, type SessionBinding, type SettingsDisplayFormat } from './core/schema.js'
+import { parseSettings, type CcspConfig, type PresetMeta, type RunMode, type SessionBinding, type SettingsDisplayFormat } from './core/schema.js'
 import { spawnClaude } from './core/spawn.js'
 import { ConfigApp } from './ink/config-app.js'
 import { CreateApp, type CreateResult } from './ink/create-app.js'
@@ -521,6 +521,25 @@ function launchResultToSettings(result: { toggles: ProjectLaunchToggleState }): 
   }
 }
 
+const EMPTY_TOGGLES: ProjectLaunchToggleState = { plugins: [], skills: [], mcps: [] }
+
+const SETTINGS_FLAG_WARNING = '\x1b[31mWarning: ccsp ignores passthrough --settings because it manages that flag.\x1b[0m\n'
+
+function warnIfSettingsRemoved(sanitized: { removedSettings?: boolean }): void {
+  if (sanitized.removedSettings) {
+    process.stderr.write(SETTINGS_FLAG_WARNING)
+  }
+}
+
+function combinePresetLabel(runMode: RunMode, globalName: string, projectPresetName: string): string {
+  if (runMode === 'global-only') return `${globalName}/Detected`
+  return `${globalName}/${projectPresetName}`
+}
+
+function bindingPresetLabel(binding: SessionBinding): string {
+  return binding.presetLabel ?? `${binding.globalName}/${binding.projectPresetName}`
+}
+
 async function renderManageApp(
   items: SettingsSelectResult[],
   settingsDisplayFormat: SettingsDisplayFormat
@@ -567,6 +586,7 @@ async function launchClaudeWithFinalizedSettings(input: {
   baseSettings: unknown
   globalName: string
   projectPresetName: string
+  presetLabel: string
   toggles: ProjectLaunchToggleState
   launchSettings: unknown
   args: string[]
@@ -578,8 +598,7 @@ async function launchClaudeWithFinalizedSettings(input: {
   const statusLineEnabled = input.statusLineEnabled ?? (await ccspConfigService.read()).statusLineEnabled
   const settingsPath = await launchPresetService.writeTempSettings(
     await finalizeLaunchSettings(input.baseSettings, input.launchSettings, {
-      globalName: input.globalName,
-      projectPresetName: input.projectPresetName,
+      presetLabel: input.presetLabel,
       toggles: input.toggles,
       context,
       claudeSources,
@@ -592,6 +611,7 @@ async function launchClaudeWithFinalizedSettings(input: {
   const bindingInput = {
     globalName: input.globalName,
     projectPresetName: input.projectPresetName,
+    presetLabel: input.presetLabel,
     baseSettings: input.baseSettings,
     launchSettings: input.launchSettings,
     toggles: input.toggles,
@@ -628,12 +648,12 @@ async function launchClaudeWithFinalizedSettings(input: {
 async function launchWithSelectedSettings(
   selectedSettings: SettingsSelectResult,
   rawClaudeArgs: string[],
-  config?: CcspConfig
+  config?: CcspConfig,
+  runMode: RunMode = 'both',
+  globalLabelOverride?: string,
 ): Promise<'back' | 'done' | 'quit'> {
   const sanitized = sanitizeClaudeArgs(rawClaudeArgs)
-  if (sanitized.removedSettings) {
-    process.stderr.write('\x1b[31mWarning: ccsp ignores passthrough --settings because it manages that flag.\x1b[0m\n')
-  }
+  warnIfSettingsRemoved(sanitized)
 
   const launchResult = await renderProjectLaunchApp(selectedSettings)
   if (!launchResult) return 'quit'
@@ -654,10 +674,17 @@ async function launchWithSelectedSettings(
     await launchPresetService.writeLastUsed(launchResult.presetName)
   }
 
+  const projectPresetName = resolveProjectPresetName(launchResult)
+
   await launchClaudeWithFinalizedSettings({
     baseSettings: selectedSettings.settings,
     globalName: selectedSettings.name,
-    projectPresetName: resolveProjectPresetName(launchResult),
+    projectPresetName,
+    presetLabel: combinePresetLabel(
+      runMode,
+      globalLabelOverride ?? (runMode === 'project-only' ? '*Claude Official*' : selectedSettings.name),
+      projectPresetName,
+    ),
     toggles: launchResult.toggles,
     launchSettings,
     args: sanitized.args,
@@ -666,21 +693,55 @@ async function launchWithSelectedSettings(
   return 'done'
 }
 
+async function launchGlobalOnly(
+  selectedSettings: SettingsSelectResult,
+  rawClaudeArgs: string[],
+  config: CcspConfig,
+): Promise<void> {
+  const sanitized = sanitizeClaudeArgs(rawClaudeArgs)
+  warnIfSettingsRemoved(sanitized)
+
+  const { detected } = await buildProjectLaunchInput(selectedSettings)
+
+  await launchClaudeWithFinalizedSettings({
+    baseSettings: selectedSettings.settings,
+    globalName: selectedSettings.name,
+    projectPresetName: 'Detected',
+    presetLabel: combinePresetLabel('global-only', selectedSettings.name, 'Detected'),
+    toggles: detected,
+    launchSettings: selectedSettings.settings,
+    args: sanitized.args,
+    statusLineEnabled: config.statusLineEnabled,
+  })
+}
+
 async function runInteractive(rawClaudeArgs: string[], fallbackMode?: 'resume' | 'continue'): Promise<void> {
   printBanner()
   const config = await ccspConfigService.read()
+  const launchArgs = fallbackMode === 'resume'
+    ? ['--resume', ...rawClaudeArgs]
+    : rawClaudeArgs
+
+  if (config.runMode === 'project-only') {
+    const selectedSettings = await resolveProjectManageBaseSettings()
+    if (!selectedSettings) {
+      process.stderr.write('No project settings sources found for project preset management.\n')
+      return
+    }
+    await launchWithSelectedSettings(selectedSettings, launchArgs, config, 'project-only')
+    return
+  }
+
   while (true) {
     const selectedSettings = await resolveInteractiveBaseSettings(config)
     if (!selectedSettings) return
 
-    const launchArgs =
-      fallbackMode === 'resume'
-        ? ['--resume', ...rawClaudeArgs]
-        : fallbackMode === 'continue'
-          ? rawClaudeArgs
-          : rawClaudeArgs
+    if (config.runMode === 'global-only') {
+      await launchGlobalOnly(selectedSettings, launchArgs, config)
+      return
+    }
 
-    const outcome = await launchWithSelectedSettings(selectedSettings, launchArgs, config)
+    const outcome = await launchWithSelectedSettings(selectedSettings, launchArgs, config, 'both')
     if (outcome !== 'back') return
     printBanner()
   }
@@ -688,11 +749,9 @@ async function runInteractive(rawClaudeArgs: string[], fallbackMode?: 'resume' |
 
 async function launchFromBinding(binding: SessionBinding, extraArgs: string[]): Promise<void> {
   const sanitized = sanitizeClaudeArgs(extraArgs)
-  if (sanitized.removedSettings) {
-    process.stderr.write('\x1b[31mWarning: ccsp ignores passthrough --settings because it manages that flag.\x1b[0m\n')
-  }
+  warnIfSettingsRemoved(sanitized)
   process.stderr.write(
-    `\x1b[2mResuming ${binding.globalName}/${binding.projectPresetName} (session ${binding.sessionId})\x1b[0m\n`,
+    `\x1b[2mResuming ${bindingPresetLabel(binding)} (session ${binding.sessionId})\x1b[0m\n`,
   )
   const filteredArgs = sanitized.args.filter(
     (arg, index, args) =>
@@ -712,6 +771,7 @@ async function launchFromBinding(binding: SessionBinding, extraArgs: string[]): 
     baseSettings: binding.baseSettings,
     globalName: binding.globalName,
     projectPresetName: binding.projectPresetName,
+    presetLabel: bindingPresetLabel(binding),
     toggles: binding.toggles as unknown as ProjectLaunchToggleState,
     launchSettings: binding.launchSettings,
     args: ['--resume', binding.sessionId, ...filteredArgs],
@@ -764,7 +824,18 @@ async function manageInteractive(): Promise<void> {
     if (!selection || selection.type === 'exit') return
 
     if (selection.type === 'launch') {
-      const outcome = await launchWithSelectedSettings(selection.item, [], config)
+      if (config.runMode === 'global-only') {
+        await launchGlobalOnly(selection.item, [], config)
+        return
+      }
+
+      const outcome = await launchWithSelectedSettings(
+        selection.item,
+        [],
+        config,
+        config.runMode,
+        config.runMode === 'project-only' ? selection.item.name : undefined,
+      )
       if (outcome === 'back') continue
       return
     }
@@ -815,10 +886,13 @@ async function manageProjectInteractive(): Promise<void> {
         await launchPresetService.writeLastUsed(result.presetName)
       }
 
+      const projectPresetName = resolveProjectPresetName(result)
+
       await launchClaudeWithFinalizedSettings({
         baseSettings: selectedSettings.settings,
         globalName: selectedSettings.name,
-        projectPresetName: resolveProjectPresetName(result),
+        projectPresetName,
+        presetLabel: projectPresetName,
         toggles: result.toggles,
         launchSettings,
         args: [],

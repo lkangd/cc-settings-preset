@@ -13,6 +13,7 @@ describe('ccsp config service', () => {
       globalPresetEnvOnly: true,
       statusLineEnabled: true,
       settingsDisplayFormat: 'yaml',
+      runMode: 'both',
     })
   })
 
@@ -20,17 +21,24 @@ describe('ccsp config service', () => {
     const globalRoot = await mkdtemp(join(tmpdir(), 'ccsp-config-'))
     const service = createCcspConfigService(globalRoot)
 
-    await service.write({ globalPresetEnvOnly: false, statusLineEnabled: false, settingsDisplayFormat: 'json' })
+    await service.write({
+      globalPresetEnvOnly: false,
+      statusLineEnabled: false,
+      settingsDisplayFormat: 'json',
+      runMode: 'project-only',
+    })
 
     expect(await service.read()).toEqual({
       globalPresetEnvOnly: false,
       statusLineEnabled: false,
       settingsDisplayFormat: 'json',
+      runMode: 'project-only',
     })
     expect(JSON.parse(await readFile(join(globalRoot, 'config.json'), 'utf8'))).toEqual({
       globalPresetEnvOnly: false,
       statusLineEnabled: false,
       settingsDisplayFormat: 'json',
+      runMode: 'project-only',
     })
   })
 
@@ -44,6 +52,7 @@ describe('ccsp config service', () => {
       globalPresetEnvOnly: true,
       statusLineEnabled: false,
       settingsDisplayFormat: 'yaml',
+      runMode: 'both',
     })
   })
 
@@ -57,6 +66,21 @@ describe('ccsp config service', () => {
       globalPresetEnvOnly: false,
       statusLineEnabled: true,
       settingsDisplayFormat: 'yaml',
+      runMode: 'both',
+    })
+  })
+
+  it('updates run mode via setOption', async () => {
+    const globalRoot = await mkdtemp(join(tmpdir(), 'ccsp-config-'))
+    const service = createCcspConfigService(globalRoot)
+
+    await service.setOption('runMode', 'global-only')
+
+    expect(await service.read()).toEqual({
+      globalPresetEnvOnly: true,
+      statusLineEnabled: true,
+      settingsDisplayFormat: 'yaml',
+      runMode: 'global-only',
     })
   })
 })

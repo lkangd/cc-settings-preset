@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 const skillOverrideValueSchema = z.enum(['on', 'name-only', 'user-invocable-only', 'off'])
+const runModeSchema = z.enum(['both', 'global-only', 'project-only'])
 
 const mcpPolicyEntrySchema = z.union([
   z.object({ serverName: z.string().min(1) }).strict(),
@@ -74,6 +75,7 @@ export const ccspConfigSchema = z.object({
   globalPresetEnvOnly: z.boolean().default(true),
   statusLineEnabled: z.boolean().default(true),
   settingsDisplayFormat: z.enum(['yaml', 'json']).default('yaml'),
+  runMode: runModeSchema.default('both'),
 })
 
 const sessionToggleStateSchema = z.object({
@@ -86,6 +88,7 @@ const sessionBindingSchema = z.object({
   sessionId: z.string().min(1),
   globalName: z.string(),
   projectPresetName: z.string(),
+  presetLabel: z.string().min(1).optional(),
   baseSettings: z.unknown(),
   launchSettings: launchPresetSettingsSchema,
   toggles: sessionToggleStateSchema,
@@ -114,6 +117,7 @@ export type LastUsedBasePreset = z.infer<typeof lastUsedBasePresetSchema>
 export type LastSettings = z.infer<typeof lastSettingsSchema>
 export type CcspConfig = z.infer<typeof ccspConfigSchema>
 export type SettingsDisplayFormat = CcspConfig['settingsDisplayFormat']
+export type RunMode = CcspConfig['runMode']
 export type SessionBinding = z.infer<typeof sessionBindingSchema>
 export type SessionIndex = z.infer<typeof sessionIndexSchema>
 
