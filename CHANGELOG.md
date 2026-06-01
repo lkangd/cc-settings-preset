@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.9 (2026-06-01)
+
+### Features
+* add run mode config option to control preset launch stages
+
 ## 1.0.8 (2026-05-29)
 
 ### Features
