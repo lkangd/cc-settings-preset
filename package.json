@@ -45,7 +45,6 @@
   "packageManager": "pnpm@9.5.0",
   "scripts": {
     "generate-version": "node scripts/generate-version.mjs",
-    "postinstall": "pnpm run generate-version",
     "pretypecheck": "pnpm run generate-version",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prebuild": "pnpm run generate-version",
