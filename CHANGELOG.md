@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.10 (2026-06-04)
+
+### Bug Fixes
+* remove postinstall that breaks published installs
+
+### Code Refactoring
+* add structured error codes and async inline validation to create flow
+
 ## 1.0.9 (2026-06-01)
 
 ### Features
