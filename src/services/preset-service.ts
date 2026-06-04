@@ -81,7 +81,7 @@ export function createPresetService(globalRoot: string) {
       const settings = parseSettings(settingsInput)
       const name = normalizePresetName(nameInput)
       const index = await readIndex()
-      if (index.presets[name]) throw new CliError(`Preset already exists: ${name}`)
+      if (index.presets[name]) throw new CliError(`Preset already exists: ${name}`, 1, 'preset_already_exists')
 
       const timestamp = nowIso()
       const meta: BasePresetMeta = {
@@ -142,7 +142,7 @@ export function createPresetService(globalRoot: string) {
       if (newName === name) {
         return { ...meta, updatedAt: nowIso() }
       }
-      if (index.presets[newName]) throw new CliError(`Preset already exists: ${newName}`)
+      if (index.presets[newName]) throw new CliError(`Preset already exists: ${newName}`, 1, 'preset_already_exists')
 
       const updated: PresetMeta = { ...meta, name: newName, fileName: buildSettingsFileName(newName, { preserveCase: true }), updatedAt: nowIso() }
 

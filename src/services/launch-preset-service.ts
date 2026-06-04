@@ -170,7 +170,7 @@ export function createLaunchPresetService(cwd: string) {
     async readPresetSettings(nameInput: string): Promise<LaunchPresetSettings> {
       const index = await readIndex()
       const name = resolvePresetIndexKey(index.presets, nameInput)
-      if (!name) throw new CliError(`Launch preset not found: ${nameInput}`)
+      if (!name) throw new CliError(`Launch preset not found: ${nameInput}`, 1, 'launch_preset_not_found')
       const meta = index.presets[name]
       if (!meta) throw new CliError(`Launch preset not found: ${nameInput}`)
       return parseLaunchPresetSettings(await readJsonFile(getPresetPath(meta)))
@@ -180,7 +180,7 @@ export function createLaunchPresetService(cwd: string) {
       const name = normalizePresetName(nameInput, { preserveCase: true })
       const settings = parseLaunchPresetSettings(settingsInput)
       const index = await readIndex()
-      if (resolvePresetIndexKey(index.presets, name)) throw new CliError(`Launch preset already exists: ${name}`)
+      if (resolvePresetIndexKey(index.presets, name)) throw new CliError(`Launch preset already exists: ${name}`, 1, 'launch_preset_already_exists')
 
       const timestamp = nowIso()
       const meta: LaunchPresetMeta = {
@@ -200,7 +200,7 @@ export function createLaunchPresetService(cwd: string) {
     async writePresetSettings(nameInput: string, settingsInput: unknown): Promise<LaunchPresetMeta> {
       const index = await readIndex()
       const name = resolvePresetIndexKey(index.presets, nameInput)
-      if (!name) throw new CliError(`Launch preset not found: ${nameInput}`)
+      if (!name) throw new CliError(`Launch preset not found: ${nameInput}`, 1, 'launch_preset_not_found')
       const settings = parseLaunchPresetSettings(settingsInput)
       const existing = index.presets[name]
       if (!existing) throw new CliError(`Launch preset not found: ${nameInput}`)
@@ -217,14 +217,14 @@ export function createLaunchPresetService(cwd: string) {
       const newName = normalizePresetName(newNameInput, { preserveCase: true })
       const index = await readIndex()
       const name = resolvePresetIndexKey(index.presets, nameInput)
-      if (!name) throw new CliError(`Launch preset not found: ${nameInput}`)
+      if (!name) throw new CliError(`Launch preset not found: ${nameInput}`, 1, 'launch_preset_not_found')
       const existing = index.presets[name]
       if (!existing) throw new CliError(`Launch preset not found: ${nameInput}`)
       if (newName === name) {
         return { ...existing, updatedAt: nowIso() }
       }
       const conflictingKey = resolvePresetIndexKey(index.presets, newName)
-      if (conflictingKey && conflictingKey !== name) throw new CliError(`Launch preset already exists: ${newName}`)
+      if (conflictingKey && conflictingKey !== name) throw new CliError(`Launch preset already exists: ${newName}`, 1, 'launch_preset_already_exists')
 
       const updated = {
         ...existing,

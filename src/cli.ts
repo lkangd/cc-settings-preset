@@ -14,7 +14,7 @@ import { createPathContext, resolveGlobalRoot, resolveUserClaudeSettingsPath } f
 import { parseSettings, type CcspConfig, type PresetMeta, type RunMode, type SessionBinding, type SettingsDisplayFormat } from './core/schema.js'
 import { spawnClaude } from './core/spawn.js'
 import { ConfigApp } from './ink/config-app.js'
-import { CreateApp, type CreateResult } from './ink/create-app.js'
+import { CreateApp, type CreateResult, type CreateSubmitResult } from './ink/create-app.js'
 import { GlobalShortcutHandler } from './ink/components/global-shortcut-handler.js'
 import { InkResizeProvider } from './ink/components/resize-context.js'
 import type { DisableRemovalMark, ProjectLaunchToggleState } from './flows/project-launch-flow.js'
@@ -241,17 +241,26 @@ export async function waitForInkAppExit(
   }
 }
 
-async function renderCreateApp(): Promise<CreateResult | undefined> {
+async function renderCreateApp(): Promise<PresetMeta | undefined> {
   const sources = (await settingsSourceService.discoverSettingsSources()).map(source => ({
     label: source.scope,
     filePath: source.filePath
   }))
-  let result: CreateResult | undefined
+  let result: PresetMeta | undefined
   const createNode = () =>
     h(CreateApp, {
       sources,
-      onSubmit: (value: CreateResult) => {
-        result = value
+      onSubmit: async (value: CreateResult): Promise<CreateSubmitResult> => {
+        try {
+          result = await presetService.createBasePreset(value.name, await readJsonFile(value.sourcePath))
+          return { ok: true }
+        } catch (error) {
+          const knownError = CliError.is(error, 'preset_already_exists')
+          if (knownError) {
+            return { ok: false, error: knownError }
+          }
+          throw error
+        }
       }
     })
   const state = { resizeVersion: 0 }
@@ -437,9 +446,8 @@ async function renderProjectLaunchApp(
           await launchPresetService.createPreset(saveAs, launchResultToSettings({ toggles }))
           return null
         } catch (error) {
-          if (error instanceof Error && error.message.startsWith('Launch preset already exists: ')) {
-            return error.message
-          }
+          const knownError = CliError.is(error, 'launch_preset_already_exists')
+          if (knownError) return knownError
           throw error
         }
       }
@@ -470,9 +478,8 @@ async function renderProjectManageApp(
           await launchPresetService.writePresetSettings(presetName, launchResultToSettings({ toggles }))
           return null
         } catch (error) {
-          if (error instanceof Error && error.message.startsWith('Launch preset not found: ')) {
-            return error.message
-          }
+          const knownError = CliError.is(error, 'launch_preset_not_found')
+          if (knownError) return knownError
           throw error
         }
       },
@@ -481,9 +488,8 @@ async function renderProjectManageApp(
           await launchPresetService.createPreset(saveAs, launchResultToSettings({ toggles }))
           return null
         } catch (error) {
-          if (error instanceof Error && error.message.startsWith('Launch preset already exists: ')) {
-            return error.message
-          }
+          const knownError = CliError.is(error, 'launch_preset_already_exists')
+          if (knownError) return knownError
           throw error
         }
       },
@@ -492,9 +498,8 @@ async function renderProjectManageApp(
           await launchPresetService.renamePreset(presetName, newName)
           return null
         } catch (error) {
-          if (error instanceof Error && error.message.startsWith('Launch preset already exists: ')) {
-            return error.message
-          }
+          const knownError = CliError.is(error, 'launch_preset_already_exists')
+          if (knownError) return knownError
           throw error
         }
       }
@@ -557,9 +562,8 @@ async function renderManageApp(
           await presetService.renamePreset(item.name, newName)
           return null
         } catch (error) {
-          if (error instanceof Error && error.message.startsWith('Preset already exists: ')) {
-            return error.message
-          }
+          const knownError = CliError.is(error, 'preset_already_exists')
+          if (knownError) return knownError
           throw error
         }
       }
@@ -575,11 +579,7 @@ async function renderManageApp(
 }
 
 async function createPresetInteractive(): Promise<PresetMeta | undefined> {
-  const selection = await renderCreateApp()
-  if (!selection) return undefined
-
-  const settings = parseSettings(await readJsonFile(selection.sourcePath))
-  return presetService.createBasePreset(selection.name, settings)
+  return renderCreateApp()
 }
 
 async function launchClaudeWithFinalizedSettings(input: {

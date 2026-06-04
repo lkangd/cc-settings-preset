@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Box, useApp, useInput } from 'ink'
+import { useRef, useState } from 'react'
+import { Box, Text, useApp, useInput } from 'ink'
 
 import { normalizeInputPath } from '../core/paths.js'
 import { derivePresetNameFromSettingsPath } from '../core/name.js'
@@ -12,14 +12,32 @@ export type CreateResult = {
   name: string
 }
 
+export type CreateSubmitResult =
+  | { ok: true }
+  | { ok: false; error: string }
+
 type Props = {
   sources: CreateSource[]
-  onSubmit: (result: CreateResult) => void
+  onSubmit: (result: CreateResult) => Promise<CreateSubmitResult> | CreateSubmitResult
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  return String(error)
 }
 
 export function CreateApp({ sources, onSubmit }: Props) {
   const { exit } = useApp()
   const [state, setState] = useState(() => createCreateFlowState(sources))
+  const [nameError, setNameError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const submitVersion = useRef(0)
+  const isSubmittingRef = useRef(false)
+
+  const resetSubmitting = () => {
+    isSubmittingRef.current = false
+    setIsSubmitting(false)
+  }
 
   useInput((input, key) => {
     if (state.mode !== 'select-source') return
@@ -56,30 +74,67 @@ export function CreateApp({ sources, onSubmit }: Props) {
         value={state.manualPath}
         placeholder="/path/to/settings.json"
         onChange={value => setState(current => ({ ...current, manualPath: value }))}
-        onCancel={() => setState(current => ({ ...current, mode: 'select-source' }))}
-        onSubmit={() => setState(current => transitionCreateFlowToName(
-          current,
-          normalizeInputPath(current.manualPath),
-        ))}
+        onCancel={() => {
+          setState(current => ({ ...current, mode: 'select-source' }))
+        }}
+        onSubmit={() => {
+          setState(current => transitionCreateFlowToName(
+            current,
+            normalizeInputPath(current.manualPath),
+          ))
+        }}
       />
     )
   }
 
   if (state.mode === 'name' && state.selectedPath) {
-    const defaultName = derivePresetNameFromSettingsPath(state.selectedPath)
+    const selectedPath = state.selectedPath
+    const defaultName = derivePresetNameFromSettingsPath(selectedPath)
     const resolvedName = state.name.trim() || defaultName
     return (
-      <TextInput
-        label="Preset name"
-        value={state.name}
-        placeholder={defaultName}
-        onChange={value => setState(current => ({ ...current, name: value }))}
-        onCancel={() => setState(current => ({ ...current, mode: 'select-source' }))}
-        onSubmit={() => {
-          onSubmit({ sourcePath: state.selectedPath!, name: resolvedName })
-          exit()
-        }}
-      />
+      <Box flexDirection="column">
+        {nameError ? <Text color="red">{nameError}</Text> : null}
+        <TextInput
+          label="Preset name"
+          value={state.name}
+          placeholder={defaultName}
+          isDisabled={isSubmitting}
+          onChange={value => {
+            if (nameError) setNameError(null)
+            setState(current => ({ ...current, name: value }))
+          }}
+          onCancel={() => {
+            submitVersion.current += 1
+            resetSubmitting()
+            setNameError(null)
+            setState(current => ({ ...current, mode: 'select-source' }))
+          }}
+          onSubmit={async () => {
+            if (isSubmittingRef.current) return
+
+            const currentSubmitVersion = submitVersion.current + 1
+            submitVersion.current = currentSubmitVersion
+            isSubmittingRef.current = true
+            setIsSubmitting(true)
+            setNameError(null)
+
+            try {
+              const result = await onSubmit({ sourcePath: selectedPath, name: resolvedName })
+              if (submitVersion.current !== currentSubmitVersion) return
+              if (!result.ok) {
+                resetSubmitting()
+                setNameError(result.error)
+                return
+              }
+              exit()
+            } catch (error) {
+              if (submitVersion.current !== currentSubmitVersion) return
+              resetSubmitting()
+              setNameError(getErrorMessage(error))
+            }
+          }}
+        />
+      </Box>
     )
   }
 

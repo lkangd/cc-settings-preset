@@ -1,6 +1,17 @@
+import React from 'react'
+import TestRenderer, { act } from 'react-test-renderer'
 import { describe, expect, it } from 'vitest'
 
-import { reduceTextInputState } from '../../src/ink/components/use-text-input-state.js'
+import { reduceTextInputState, useTextInputState } from '../../src/ink/components/use-text-input-state.js'
+
+function StateView(props: { value: string; cursorOffset: number }) {
+  return React.createElement('state-view', props)
+}
+
+function StateHarness({ defaultValue }: { defaultValue: string }) {
+  const state = useTextInputState({ defaultValue })
+  return React.createElement(StateView, { value: state.value, cursorOffset: state.cursorOffset })
+}
 
 describe('reduceTextInputState', () => {
   it('deletes from cursor to line start on delete-to-start', () => {
@@ -37,5 +48,26 @@ describe('reduceTextInputState', () => {
     )
     expect(next.value).toBe('hello ')
     expect(next.cursorOffset).toBe(6)
+  })
+})
+
+describe('useTextInputState', () => {
+  it('syncs to a new default value when the parent switches inputs', () => {
+    const manualPath = '/Users/liangkangda/.claude/settings.json'
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(React.createElement(StateHarness, { defaultValue: manualPath }))
+    })
+
+    expect(output!.root.findByType(StateView).props.value).toBe(manualPath)
+    expect(output!.root.findByType(StateView).props.cursorOffset).toBe(manualPath.length)
+
+    act(() => {
+      output!.update(React.createElement(StateHarness, { defaultValue: 'settings' }))
+    })
+
+    expect(output!.root.findByType(StateView).props.value).toBe('settings')
+    expect(output!.root.findByType(StateView).props.cursorOffset).toBe('settings'.length)
   })
 })

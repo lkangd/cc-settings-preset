@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer } from 'react'
+import { useCallback, useEffect, useReducer, useRef } from 'react'
 
 type State = {
   previousValue: string
@@ -16,6 +16,7 @@ type Action =
   | { type: 'delete-to-start' }
   | { type: 'delete-to-end' }
   | { type: 'delete-word-backward' }
+  | { type: 'sync-external-value'; value: string }
 
 export const reduceTextInputState = (state: State, action: Action): State => {
   switch (action.type) {
@@ -74,6 +75,12 @@ export const reduceTextInputState = (state: State, action: Action): State => {
         cursorOffset: index,
       }
     }
+    case 'sync-external-value':
+      return {
+        previousValue: action.value,
+        value: action.value,
+        cursorOffset: action.value.length,
+      }
   }
 }
 
@@ -106,6 +113,7 @@ export function useTextInputState({
     value: defaultValue,
     cursorOffset: defaultValue.length,
   })
+  const previousDefaultValue = useRef(defaultValue)
 
   const moveCursorLeft = useCallback(() => dispatch({ type: 'move-cursor-left' }), [])
   const moveCursorRight = useCallback(() => dispatch({ type: 'move-cursor-right' }), [])
@@ -117,6 +125,13 @@ export function useTextInputState({
   const deleteToEnd = useCallback(() => dispatch({ type: 'delete-to-end' }), [])
   const deleteWordBackward = useCallback(() => dispatch({ type: 'delete-word-backward' }), [])
   const submit = useCallback(() => onSubmit?.(), [onSubmit])
+
+  useEffect(() => {
+    if (previousDefaultValue.current === defaultValue) return
+    previousDefaultValue.current = defaultValue
+
+    dispatch({ type: 'sync-external-value', value: defaultValue })
+  }, [defaultValue])
 
   useEffect(() => {
     if (state.value !== state.previousValue) {

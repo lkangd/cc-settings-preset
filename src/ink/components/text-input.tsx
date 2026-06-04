@@ -8,12 +8,13 @@ type Props = {
   label: string
   value: string
   placeholder?: string
+  isDisabled?: boolean
   onChange: (value: string) => void
   onSubmit: () => void | Promise<void>
   onCancel: () => void
 }
 
-export function TextInput({ label, value, placeholder, onChange, onSubmit, onCancel }: Props) {
+export function TextInput({ label, value, placeholder, isDisabled = false, onChange, onSubmit, onCancel }: Props) {
   const state = useTextInputState({
     defaultValue: value,
     onChange,
@@ -22,7 +23,7 @@ export function TextInput({ label, value, placeholder, onChange, onSubmit, onCan
     },
   })
 
-  const inputValue = useTextInput({ state, placeholder: placeholder ?? '' })
+  const inputValue = useTextInput({ state, placeholder: placeholder ?? '', isDisabled })
 
   useInput((_input, key) => {
     if (key.escape) {
