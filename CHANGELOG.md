@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0 (2026-06-05)
+
+### Features
+* add headless direct run mode with --global-preset/--project-preset CLI flags
+
 ## 1.0.10 (2026-06-04)
 
 ### Bug Fixes
