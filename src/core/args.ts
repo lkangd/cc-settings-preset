@@ -1,3 +1,6 @@
+import { isCcspParseStopToken } from './commands.js'
+import { CliError } from './errors.js'
+
 export type SanitizedClaudeArgs = {
   args: string[]
   removedSettings: boolean
@@ -58,6 +61,90 @@ export function resolveSessionLaunch(args: string[]): SessionLaunch {
   }
 
   return { args, mode: 'launch' }
+}
+
+export type DirectRunOptions = {
+  isDirectRun: boolean
+  globalPreset?: string
+  projectPreset?: string
+  dryRun: boolean
+  remainingArgs: string[]
+}
+
+function readNamedFlag(
+  args: string[],
+  index: number,
+  flags: readonly string[],
+  label: string,
+): { value: string; consumed: number } | undefined {
+  const arg = args[index]
+  if (!arg) return undefined
+
+  for (const flag of flags) {
+    if (arg === flag) {
+      const next = args[index + 1]
+      if (next === undefined || next.startsWith('-')) {
+        throw new CliError(`Missing value for ${label}`)
+      }
+      return { value: next, consumed: 2 }
+    }
+    if (arg.startsWith(`${flag}=`)) {
+      const value = arg.slice(flag.length + 1)
+      if (!value) throw new CliError(`Missing value for ${label}`)
+      return { value, consumed: 1 }
+    }
+  }
+
+  return undefined
+}
+
+export function parseDirectRunOptions(args: string[]): DirectRunOptions {
+  let globalPreset: string | undefined
+  let projectPreset: string | undefined
+  let dryRun = false
+  const remainingArgs: string[] = []
+
+  let index = 0
+  while (index < args.length) {
+    const arg = args[index]
+    if (!arg) break
+
+    if (isCcspParseStopToken(arg)) {
+      remainingArgs.push(...args.slice(index))
+      break
+    }
+
+    if (arg === '--dry-run') {
+      dryRun = true
+      index += 1
+      continue
+    }
+
+    const global = readNamedFlag(args, index, ['-g', '--global-preset'], '--global-preset')
+    if (global) {
+      globalPreset = global.value
+      index += global.consumed
+      continue
+    }
+
+    const project = readNamedFlag(args, index, ['-p', '--project-preset'], '--project-preset')
+    if (project) {
+      projectPreset = project.value
+      index += project.consumed
+      continue
+    }
+
+    remainingArgs.push(arg)
+    index += 1
+  }
+
+  return {
+    isDirectRun: globalPreset !== undefined || projectPreset !== undefined,
+    ...(globalPreset !== undefined ? { globalPreset } : {}),
+    ...(projectPreset !== undefined ? { projectPreset } : {}),
+    dryRun,
+    remainingArgs,
+  }
 }
 
 export function sanitizeClaudeArgs(args: string[]): SanitizedClaudeArgs {

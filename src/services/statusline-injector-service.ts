@@ -8,6 +8,7 @@ import {
 } from '../core/paths.js'
 import type { Settings } from '../core/schema.js'
 import type { ProjectLaunchToggleState } from '../flows/project-launch-flow.js'
+import { enabledToggleCount } from '../flows/toggle-utils.js'
 import { ensureProjectCcspStore } from './project-store-service.js'
 import type { ResolvedStatusLine, StatusLineConfig } from './statusline-resolver-service.js'
 
@@ -16,14 +17,10 @@ export type CcspStatusLineMeta = {
   toggles: ProjectLaunchToggleState
 }
 
-function enabledCount(items: Array<{ enabled: boolean }>): number {
-  return items.filter(item => item.enabled).length
-}
-
 function formatToggleSummary(toggles: ProjectLaunchToggleState): string {
-  const pluginsEnabled = enabledCount(toggles.plugins)
-  const skillsEnabled = enabledCount(toggles.skills)
-  const mcpsEnabled = enabledCount(toggles.mcps)
+  const pluginsEnabled = enabledToggleCount(toggles.plugins)
+  const skillsEnabled = enabledToggleCount(toggles.skills)
+  const mcpsEnabled = enabledToggleCount(toggles.mcps)
   return [
     `plugins(${pluginsEnabled}/${toggles.plugins.length})`,
     `skills(${skillsEnabled}/${toggles.skills.length})`,

@@ -72,6 +72,11 @@ ccsp
 ccsp claude --help
 ccsp claude -p "review this PR"
 
+# 直接运行：跳过 TUI，按名称指定预设，其余参数透传给 claude
+ccsp -g work -p web
+ccsp -g glm-5.1 -p Chore claude -p "汇总未关闭的 issue"
+ccsp --global-preset work --project-preset web --dry-run   # 预览合并结果，不启动
+
 # 恢复本项目最近退出的会话，并复用其原始预设 / 启动配置
 ccsp --continue
 
@@ -129,6 +134,35 @@ claude --settings ~/.claude/my-api-1.json -- ...
 
 - `ccsp manage`：浏览、重命名、删除全局基础预设，预览配置（YAML / JSON），并可直接从管理界面启动。
 - `ccsp manage --project`：管理当前仓库下的启动预设（创建 / 保存 / 重命名 / 删除 / 启动）。
+
+### 6. 无头自动化 — 直接运行 + `claude -p`（亮点）
+
+CCSP 现已支持**非交互式直接启动**：在命令行指定预设、合并 settings 后直接 spawn `claude`，无需打开 TUI。这与 Claude Code 的 **print / agent 模式**（`claude -p "…"`）天然契合，适合脚本、cron、GitHub Actions 等自动化场景。
+
+```bash
+# 一行搞定：全局基础预设 + 项目启动预设 + 非交互 prompt
+ccsp -g my-gateway-api -p ci-minimal claude -p "运行测试套件并汇总失败原因"
+
+# 预览即将启动的配置（全局两栏 + 启动层四栏）
+ccsp -g my-gateway-api -p ci-minimal --dry-run
+```
+
+**为什么现在值得重视：** 自 **2026 年 6 月 15 日起**，[Anthropic 将 Agent SDK / `claude -p` 的用量从订阅套餐的交互额度中分离](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan)。终端里的交互式 Claude Code 仍占用套餐额度；**`claude -p` 改走独立的 Agent SDK 月度额度**（Pro / Max / Team / Enterprise 可领取）。这意味着非交互自动化有了更便宜的专用通道——前提是仍能按任务切换 API 后端，并按需开关 plugins / skills / MCP。
+
+**CCSP 的价值：** 用全局预设指向**第三方 API**（`ANTHROPIC_BASE_URL`、`env` 里的 Key、默认模型等），用启动预设只打开该任务需要的 plugins / skills / MCP。直接运行会合并两层配置，并把剩余 argv 交给 `claude`：
+
+| 参数 | 简写 | 作用 |
+|------|------|------|
+| `--global-preset` | `-g` | 全局基础预设名（`~/.ccsp/settings/`） |
+| `--project-preset` | `-p` | 项目启动预设名，或 `Detected` 表示自动发现的基线 |
+| `--dry-run` | — | 打印解析后的全局 + 启动预览，不启动 `claude` |
+
+说明：
+
+- 至少提供 **`-g` 或 `-p` 之一** 才会进入直接运行；否则仍为交互式 TUI。
+- 透传参数时，**CCSP 的 flag 写在 `claude` 之前**；`claude` 之后的 `-p` 是 Claude 的 prompt 参数，不是 CCSP 的项目预设。
+- **仅 `-p`** 时，全局基础回退到上次使用的预设或项目 settings 来源（与 project-manage 启动一致）。
+- **仅 `-g`** 时，启动层使用 **Detected** 基线（无需已保存的启动预设）。
 
 ---
 
@@ -222,6 +256,7 @@ claude --settings <临时文件> [你传入的其它参数]
 - **非破坏性启动**：通过临时 settings 文件注入配置，不强制覆盖你的主 settings 文件。
 - **两层分离**：全局「基础环境」与项目「启动差异」解耦，适合多仓库并行开发。
 - **可视化开关**：在终端 TUI 中浏览 JSON、切换插件 / Skill / MCP，比手改数组更不易出错。
+- **直接运行**：`-g` / `-p` / `--dry-run` 供脚本与 CI 使用；配合 `claude -p` 做无头 agent 任务。
 - **记忆上次选择**：按项目目录记住上次使用的基础预设与启动预设。
 - **可恢复会话**：每次启动都会把会话与所用预设 / 启动配置绑定，`ccsp --continue` 与 `ccsp --resume <id>` 可一键恢复原配置并续上对应 Claude 会话。
 - **安全默认值**：`.claude/.ccsp/` 初始化时写入 `.gitignore`（忽略全部），降低临时文件与本地预设误提交概率。
@@ -243,7 +278,7 @@ Claude 退出后，CCSP 会**主动发现** Claude 真实分配的 session id（
 | **接管 `--settings`** | 传入的 `--settings` 会被忽略并提示警告；路径由 CCSP 生成。 |
 | **启动层字段有限** | Launch Preset 只覆盖 `enabledPlugins`、`skillOverrides`、`deniedMcpServers`；其它字段（如 `env`）来自基础预设。 |
 | **不能通过 UI 新增 MCP Server** | 仅支持基于已发现 MCP 的**禁用**（`deniedMcpServers`），不能创建新 server 配置。 |
-| **无无头 / CI 模式** | 主流程为 Ink 交互界面；`create` / `manage` 亦为 TUI，不适合纯脚本无人值守选型（除非自行读写 JSON）。 |
+| **create / manage 仍以 TUI 为主** | 创建与管理预设需交互界面；无头启动请用直接运行或自行编辑 JSON。 |
 | **Derived 预设** | 数据模型支持 `derived` 类型，但当前 CLI 未暴露创建/管理衍生预设的完整流程。 |
 | **项目存储默认本地** | `launch-presets`、`tmp` 与 `sessions.json` 都在 `.claude/.ccsp/` 下，默认不进 Git；团队共享需另行约定导出方式。 |
 | **临时文件有上限** | `tmp` 中的 settings 文件按 lastUsedAt 淘汰，最多保留 50 份；statusline 脚本每次退出都会清理。 |
@@ -256,6 +291,11 @@ Claude 退出后，CCSP 会**主动发现** Claude 真实分配的 session id（
 | 命令 | 说明 |
 |------|------|
 | `ccsp` | 默认流程：选基础预设 → 配置启动层 → 启动 `claude` |
+| `ccsp -g <name>` | 直接运行：仅指定全局基础预设（启动层 = Detected） |
+| `ccsp -p <name>` | 直接运行：仅指定项目启动预设（全局基础 = 上次使用或项目 settings） |
+| `ccsp -g <global> -p <launch>` | 直接运行：两层都指定，然后启动 `claude` |
+| `ccsp … --dry-run` | 配合 `-g` / `-p`：预览解析结果，不 spawn |
+| `ccsp … claude [args…]` | 直接或交互均可；CCSP 参数写在 `claude` 前，Claude 参数写在后 |
 | `ccsp claude [args...]` | 同上，并将 `args` 传给 `claude`（不含 `--settings`） |
 | `ccsp --continue` | 恢复本项目最近退出的 ccsp 会话，复用原始预设 / 启动配置 |
 | `ccsp --resume <uuid>` | 按 session id 精确恢复某个会话，复用启动时所用的预设 / 启动配置（未知绑定时回退到交互式选择） |

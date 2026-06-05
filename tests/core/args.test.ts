@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { resolveSessionLaunch, sanitizeClaudeArgs } from '../../src/core/args.js'
+import { parseDirectRunOptions, resolveSessionLaunch, sanitizeClaudeArgs } from '../../src/core/args.js'
+import { CliError } from '../../src/core/errors.js'
 
 const UUID = '11111111-1111-4111-8111-111111111111'
 
@@ -15,6 +16,62 @@ describe('sanitizeClaudeArgs', () => {
   it('reports whether settings was removed', () => {
     expect(sanitizeClaudeArgs(['--settings', 'ignored.json']).removedSettings).toBe(true)
     expect(sanitizeClaudeArgs(['--resume', 'abc']).removedSettings).toBe(false)
+  })
+})
+
+describe('parseDirectRunOptions', () => {
+  it('extracts global and project preset flags and leaves claude passthrough args intact', () => {
+    expect(parseDirectRunOptions(['-g', 'work', '-p', 'web', 'claude', '-p', 'prompt'])).toEqual({
+      isDirectRun: true,
+      globalPreset: 'work',
+      projectPreset: 'web',
+      dryRun: false,
+      remainingArgs: ['claude', '-p', 'prompt'],
+    })
+  })
+
+  it('supports long-form preset flags and dry-run', () => {
+    expect(parseDirectRunOptions(['--global-preset=work', '--project-preset=web', '--dry-run'])).toEqual({
+      isDirectRun: true,
+      globalPreset: 'work',
+      projectPreset: 'web',
+      dryRun: true,
+      remainingArgs: [],
+    })
+  })
+
+  it('does not treat dry-run alone as direct execution', () => {
+    expect(parseDirectRunOptions(['--dry-run', '--model', 'opus'])).toEqual({
+      isDirectRun: false,
+      dryRun: true,
+      remainingArgs: ['--model', 'opus'],
+    })
+  })
+
+  it('stops parsing before subcommands', () => {
+    expect(parseDirectRunOptions(['-g', 'work', 'manage', '--project'])).toEqual({
+      isDirectRun: true,
+      globalPreset: 'work',
+      dryRun: false,
+      remainingArgs: ['manage', '--project'],
+    })
+  })
+
+  it('throws when project preset flag has no value', () => {
+    expect(() => parseDirectRunOptions(['-p'])).toThrow('Missing value for --project-preset')
+  })
+
+  it('throws when a preset flag is missing its value', () => {
+    expect(() => parseDirectRunOptions(['-g', '-p', 'web'])).toThrow(CliError)
+    expect(() => parseDirectRunOptions(['-g', '-p', 'web'])).toThrow('Missing value for --global-preset')
+  })
+
+  it('does not treat bare -d as ccsp dry-run', () => {
+    expect(parseDirectRunOptions(['-d', 'claude'])).toEqual({
+      isDirectRun: false,
+      dryRun: false,
+      remainingArgs: ['-d', 'claude'],
+    })
   })
 })
 

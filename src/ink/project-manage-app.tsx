@@ -27,9 +27,7 @@ export type ProjectManageResult =
   | { type: 'delete'; presetName: string }
   | { type: 'refresh' }
 
-function enabledCount(items: Array<{ enabled: boolean }>): number {
-  return items.filter(item => item.enabled).length
-}
+import { enabledToggleCount } from '../flows/toggle-utils.js'
 
 function syncProjectPresetRename(state: ProjectLaunchFlowState, fromName: string, toName: string): ProjectLaunchFlowState {
   const presetItems = state.presetItems.map(item => item.type === 'preset' && item.name === fromName ? { ...item, name: toName, preset: { ...item.preset, name: toName } } : item)
@@ -323,11 +321,11 @@ export function ProjectManageApp({ presets, detected, statesByPreset, disableLoc
           ))}
         </Box>
         <Box width={1} />
-        <ToggleColumn title={`Plugins(${enabledCount(state.plugins)}/${state.plugins.length})`} focused={state.focus === 'plugins'} items={pluginItems} cursor={state.pluginCursor} width={detailWidth} />
+        <ToggleColumn title={`Plugins(${enabledToggleCount(state.plugins)}/${state.plugins.length})`} focused={state.focus === 'plugins'} items={pluginItems} cursor={state.pluginCursor} width={detailWidth} />
         <Box width={1} />
-        <ToggleColumn title={`Skills(${enabledCount(state.skills)}/${state.skills.length})`} focused={state.focus === 'skills'} items={skillItems} cursor={state.skillCursor} width={detailWidth} />
+        <ToggleColumn title={`Skills(${enabledToggleCount(state.skills)}/${state.skills.length})`} focused={state.focus === 'skills'} items={skillItems} cursor={state.skillCursor} width={detailWidth} />
         <Box width={1} />
-        <ToggleColumn title={`MCPs(${enabledCount(state.mcps)}/${state.mcps.length})`} focused={state.focus === 'mcps'} items={mcpItems} cursor={state.mcpCursor} width={mcpWidth} />
+        <ToggleColumn title={`MCPs(${enabledToggleCount(state.mcps)}/${state.mcps.length})`} focused={state.focus === 'mcps'} items={mcpItems} cursor={state.mcpCursor} width={mcpWidth} />
       </Box>
       {state.toggleMessage ? <Text color="yellow">{state.toggleMessage}</Text> : message ? <Text color={message.color}>{message.text}</Text> : null}
     </Box>

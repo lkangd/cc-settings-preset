@@ -7,7 +7,9 @@ import { render, Text, type Instance } from 'ink'
 import figlet from 'figlet'
 
 import { randomUUID } from 'node:crypto'
-import { isUuid, resolveSessionLaunch, sanitizeClaudeArgs } from './core/args.js'
+import { isUuid, parseDirectRunOptions, resolveSessionLaunch, sanitizeClaudeArgs, type DirectRunOptions } from './core/args.js'
+import { isCcspCommanderSubcommand } from './core/commands.js'
+import { resolvePresetIndexKey } from './core/name.js'
 import { CliError } from './core/errors.js'
 import { readJsonFile } from './core/json.js'
 import { createPathContext, resolveGlobalRoot, resolveUserClaudeSettingsPath } from './core/paths.js'
@@ -22,6 +24,7 @@ import { applyDisableRemovals } from './services/disable-lock-service.js'
 import { ManageApp, type ManageResult } from './ink/manage-app.js'
 import { ProjectLaunchApp, type ProjectLaunchResult } from './ink/project-launch-app.js'
 import { ProjectManageApp, type ProjectManageResult } from './ink/project-manage-app.js'
+import { DirectRunPreviewApp } from './ink/direct-run-preview-app.js'
 import { SettingsSelectApp, type SettingsSelectResult } from './ink/settings-select-app.js'
 import { applyPluginOverrides, pluginStatesToEnabledPlugins, resolvePluginStates } from './services/plugin-service.js'
 import { createCcspConfigService } from './services/ccsp-config-service.js'
@@ -36,7 +39,7 @@ import {
   resolveDeniedMcpServers
 } from './services/mcp-service.js'
 import { createClaudeLoginService } from './services/claude-login-service.js'
-import { createPresetService } from './services/preset-service.js'
+import { CLAUDE_OFFICIAL_PRESET_NAME, createPresetService } from './services/preset-service.js'
 import { createSettingsSourceService, type SettingsSource } from './services/settings-source-service.js'
 import {
   finalizeLaunchSettings,
@@ -758,10 +761,10 @@ async function launchFromBinding(binding: SessionBinding, extraArgs: string[]): 
       arg !== '--continue' &&
       arg !== '-c' &&
       !arg.startsWith('--continue=') &&
-      !arg.startsWith('--resume=') &&
+      arg !== '--resume' &&
       arg !== '-r' &&
-      !(arg === '--resume') &&
-      !(arg === '--session-id') &&
+      !arg.startsWith('--resume=') &&
+      arg !== '--session-id' &&
       !arg.startsWith('--session-id=') &&
       !((args[index - 1] === '--resume' || args[index - 1] === '-r' || args[index - 1] === '--session-id') &&
         !arg.startsWith('-')),
@@ -861,6 +864,191 @@ async function manageInteractive(): Promise<void> {
   }
 }
 
+async function resolveDirectGlobalSettings(globalPreset: string): Promise<SettingsSelectResult> {
+  if (globalPreset === CLAUDE_OFFICIAL_PRESET_NAME) {
+    const official = await buildClaudeOfficialPresetItem()
+    if (!official) throw new CliError(`Preset not found: ${globalPreset}`)
+    return official
+  }
+
+  const index = await presetService.readIndex()
+  const name = resolvePresetIndexKey(index.presets, globalPreset)
+  if (!name) throw new CliError(`Preset not found: ${globalPreset}`)
+  const meta = index.presets[name]!
+  if (meta.type !== 'base') throw new CliError(`Preset not found: ${globalPreset}`)
+
+  return {
+    name: meta.name,
+    sourcePath: await presetService.getPresetPath(meta.name),
+    settings: await presetService.readPresetSettings(meta.name),
+  }
+}
+
+async function resolveDirectGlobalSettingsFallback(): Promise<SettingsSelectResult> {
+  const rememberedName = await globalLastSettingsService.readLastUsed(context.cwd)
+  if (rememberedName) {
+    try {
+      return await resolveDirectGlobalSettings(rememberedName)
+    } catch {
+      // Ignore stale last-used entries and fall back to project settings.
+    }
+  }
+
+  const projectBase = await resolveProjectManageBaseSettings()
+  if (!projectBase) {
+    throw new CliError('No project settings sources found for direct launch.')
+  }
+  return projectBase
+}
+
+async function buildGlobalPreviewItems(selectedName: string): Promise<{ items: SettingsSelectResult[]; cursor: number }> {
+  const officialItem = await buildClaudeOfficialPresetItem()
+  const items = [...(officialItem ? [officialItem] : []), ...(await buildGlobalSettingsPresetItems())]
+  const cursor = items.findIndex(item => item.name.toLowerCase() === selectedName.toLowerCase())
+  if (cursor < 0) throw new CliError(`Preset not found: ${selectedName}`)
+  return { items, cursor }
+}
+
+async function resolveDirectProjectLaunch(
+  selectedSettings: SettingsSelectResult,
+  projectPreset?: string,
+): Promise<{
+  toggles: ProjectLaunchToggleState
+  projectPresetName: string
+  launchInput: Awaited<ReturnType<typeof buildProjectLaunchInput>>
+}> {
+  const launchInput = await buildProjectLaunchInput(selectedSettings)
+
+  if (!projectPreset || projectPreset.toLowerCase() === 'detected') {
+    return {
+      toggles: launchInput.detected,
+      projectPresetName: 'Detected',
+      launchInput,
+    }
+  }
+
+  const name = resolvePresetIndexKey(
+    Object.fromEntries(launchInput.presets.map(preset => [preset.name, preset])),
+    projectPreset,
+  )
+  const toggles = name ? launchInput.statesByPreset[name] : undefined
+  if (!name || !toggles) {
+    throw new CliError(`Launch preset not found: ${projectPreset}`, 1, 'launch_preset_not_found')
+  }
+
+  return {
+    toggles,
+    projectPresetName: name,
+    launchInput,
+  }
+}
+
+function resolveDirectClaudeArgs(remainingArgs: string[]): string[] {
+  return remainingArgs[0] === 'claude' ? remainingArgs.slice(1) : remainingArgs
+}
+
+async function renderDirectRunPreview(input: {
+  config: CcspConfig
+  globalPreset?: string
+  globalPreview?: { items: SettingsSelectResult[]; cursor: number }
+  projectPreset?: string
+  projectPresetName: string
+  toggles: ProjectLaunchToggleState
+  launchInput: Awaited<ReturnType<typeof buildProjectLaunchInput>>
+}): Promise<void> {
+  const global = input.globalPreset && input.globalPreview
+    ? {
+        ...input.globalPreview,
+        envOnly: input.config.globalPresetEnvOnly,
+        displayFormat: input.config.settingsDisplayFormat,
+      }
+    : undefined
+
+  const project = input.projectPreset
+    ? {
+        presets: input.launchInput.presets,
+        detected: input.launchInput.detected,
+        statesByPreset: input.launchInput.statesByPreset,
+        selectedPresetName: input.projectPresetName,
+        toggles: input.toggles,
+        disableLockSources: input.launchInput.disableLockSources,
+      }
+    : undefined
+
+  const createNode = () => h(DirectRunPreviewApp, { ...(global ? { global } : {}), ...(project ? { project } : {}) })
+  const app = render(createNode())
+  await new Promise<void>(resolve => setImmediate(resolve))
+  app.unmount()
+}
+
+function directRunPresetLabel(
+  options: Pick<DirectRunOptions, 'globalPreset'>,
+  globalName: string,
+  projectPresetName: string,
+): string {
+  if (!options.globalPreset) return projectPresetName
+  return combinePresetLabel('both', globalName, projectPresetName)
+}
+
+async function runDirect(options: DirectRunOptions): Promise<void> {
+  const config = await ccspConfigService.read()
+  const claudeArgs = resolveDirectClaudeArgs(options.remainingArgs)
+  const sanitized = sanitizeClaudeArgs(claudeArgs)
+  warnIfSettingsRemoved(sanitized)
+
+  let selectedSettings: SettingsSelectResult
+  let globalPreview: Awaited<ReturnType<typeof buildGlobalPreviewItems>> | undefined
+
+  if (options.globalPreset) {
+    if (options.dryRun) {
+      globalPreview = await buildGlobalPreviewItems(options.globalPreset)
+      selectedSettings = globalPreview.items[globalPreview.cursor]!
+    } else {
+      selectedSettings = await resolveDirectGlobalSettings(options.globalPreset)
+    }
+  } else {
+    selectedSettings = await resolveDirectGlobalSettingsFallback()
+  }
+
+  const { toggles, projectPresetName, launchInput } = await resolveDirectProjectLaunch(
+    selectedSettings,
+    options.projectPreset,
+  )
+  const launchSettings = launchResultToSettings({ toggles })
+
+  if (options.dryRun) {
+    await renderDirectRunPreview({
+      config,
+      ...(options.globalPreset ? { globalPreset: options.globalPreset } : {}),
+      ...(globalPreview ? { globalPreview } : {}),
+      ...(options.projectPreset ? { projectPreset: options.projectPreset } : {}),
+      projectPresetName,
+      toggles,
+      launchInput,
+    })
+    return
+  }
+
+  if (options.globalPreset) {
+    await globalLastSettingsService.writeLastUsed(context.cwd, selectedSettings.name)
+  }
+
+  if (options.projectPreset && projectPresetName !== 'Detected') {
+    await launchPresetService.writeLastUsed(projectPresetName)
+  }
+
+  await launchClaudeWithFinalizedSettings({
+    baseSettings: selectedSettings.settings,
+    globalName: selectedSettings.name,
+    projectPresetName,
+    presetLabel: directRunPresetLabel(options, selectedSettings.name, projectPresetName),
+    toggles,
+    launchSettings,
+    args: sanitized.args,
+    statusLineEnabled: config.statusLineEnabled,
+  })
+}
+
 async function manageProjectInteractive(): Promise<void> {
   const selectedSettings = await resolveProjectManageBaseSettings()
   if (!selectedSettings) {
@@ -924,6 +1112,15 @@ async function manageProjectInteractive(): Promise<void> {
   }
 }
 
+function isDirectRunRoute(remainingArgs: string[]): boolean {
+  const first = remainingArgs[0]
+  return first === undefined || !isCcspCommanderSubcommand(first)
+}
+
+function buildProgramArgv(argv: string[], runArgs: string[]): string[] {
+  return [argv[0] ?? 'node', argv[1] ?? 'cli', ...runArgs]
+}
+
 export async function main(argv = process.argv): Promise<void> {
   const args = argv.slice(2)
   if (args.length === 0) {
@@ -956,8 +1153,20 @@ export async function main(argv = process.argv): Promise<void> {
     return
   }
 
-  if (args[0] === 'claude') {
-    const claudeArgs = args.slice(1)
+  const directOptions = parseDirectRunOptions(args)
+  if (directOptions.isDirectRun && isDirectRunRoute(directOptions.remainingArgs)) {
+    await runDirect(directOptions)
+    return
+  }
+
+  const runArgs = directOptions.remainingArgs
+  if (runArgs.length === 0) {
+    await runInteractive([])
+    return
+  }
+
+  if (runArgs[0] === 'claude') {
+    const claudeArgs = runArgs.slice(1)
     if (claudeArgs[0] === '--continue' || claudeArgs[0] === '-c') {
       await runContinue(claudeArgs.slice(1))
       return
@@ -980,7 +1189,7 @@ export async function main(argv = process.argv): Promise<void> {
     return
   }
 
-  await createProgram().parseAsync(argv)
+  await createProgram().parseAsync(buildProgramArgv(argv, runArgs))
 }
 
 export function isCliDirectExecution(argv: string[], moduleUrl: string | URL = import.meta.url): boolean {

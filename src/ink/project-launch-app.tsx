@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Box, Text, useApp, useInput, useStdout } from 'ink'
+import { Box, useApp, useInput } from 'ink'
 import { TruncateText } from './components/truncate-text.js'
 import type { LaunchPresetMeta } from '../core/schema.js'
 import type { DisableRemovalMark } from '../flows/project-launch-flow.js'
@@ -14,7 +14,7 @@ import {
 } from '../flows/project-launch-flow.js'
 import type { DisableLockSource } from '../services/disable-lock-service.js'
 import { ConfirmEnableUnlock } from './components/confirm-enable-unlock.js'
-import { ToggleColumn } from './components/toggle-column.js'
+import { ProjectLaunchColumnsView } from './components/project-launch-columns-view.js'
 import { useInkResizeVersion } from './components/resize-context.js'
 import { TextInput } from './components/text-input.js'
 import { normalizePresetName } from '../core/name.js'
@@ -36,21 +36,9 @@ export type ProjectLaunchAppProps = {
   onCreateSubmit?: (saveAs: string, toggles: ProjectLaunchToggleState) => Promise<string | null>
 }
 
-function enabledCount(items: Array<{ enabled: boolean }>): number {
-  return items.filter(item => item.enabled).length
-}
-
 export function ProjectLaunchApp({ presets, detected, statesByPreset, disableLockSources = [], lastUsedName, onSubmit, onCreateSubmit }: ProjectLaunchAppProps) {
   useInkResizeVersion()
   const { exit } = useApp()
-  const { stdout } = useStdout()
-  const fallbackColumns = 120
-  const innerWidth = stdout.columns ?? fallbackColumns
-  const gapWidth = 3
-  const contentWidth = innerWidth - gapWidth
-  const presetWidth = Math.max(22, Math.floor(contentWidth * 0.22))
-  const detailWidth = Math.max(24, Math.floor((contentWidth - presetWidth) / 3))
-  const mcpWidth = contentWidth - presetWidth - detailWidth - detailWidth
   const [state, setState] = useState(() =>
     createProjectLaunchFlowState({
       presets,
@@ -203,56 +191,21 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, disableLoc
   const mcpItems = annotateToggleItems(state, detectedBaseline, 'mcps', state.mcps)
 
   return (
-    <Box flexDirection="column">
-      <TruncateText bold color="cyan">Select project launch preset</TruncateText>
-      <TruncateText dimColor>←/→ switch column · p plugins · s skills · m mcps · t sort · space toggle · enter launch · esc presets/back · q quit</TruncateText>
-      <Box marginTop={0.5} width={innerWidth}>
-        <Box
-          flexDirection="column"
-          width={presetWidth}
-          borderStyle="round"
-          borderColor={state.focus === 'presets' ? 'cyan' : 'gray'}
-          paddingX={0.5}
-          paddingY={0.5}
-        >
-          <TruncateText bold>Presets({state.presetItems.length})</TruncateText>
-          {state.presetItems.map((item, index) => (
-            <TruncateText
-              key={item.name}
-              {...(index === state.presetCursor ? { color: 'cyan' as const } : {})}
-            >
-              {state.focus === 'presets' && index === state.presetCursor ? '❯ ' : '  '}
-              {item.name}
-            </TruncateText>
-          ))}
-        </Box>
-        <Box width={1} />
-        <ToggleColumn
-          title={`Plugins(${enabledCount(state.plugins)}/${state.plugins.length})`}
-          focused={state.focus === 'plugins'}
-          items={pluginItems}
-          cursor={state.pluginCursor}
-          width={detailWidth}
-        />
-        <Box width={1} />
-        <ToggleColumn
-          title={`Skills(${enabledCount(state.skills)}/${state.skills.length})`}
-          focused={state.focus === 'skills'}
-          items={skillItems}
-          cursor={state.skillCursor}
-          width={detailWidth}
-        />
-        <Box width={1} />
-        <ToggleColumn
-          title={`MCPs(${enabledCount(state.mcps)}/${state.mcps.length})`}
-          focused={state.focus === 'mcps'}
-          items={mcpItems}
-          cursor={state.mcpCursor}
-          width={mcpWidth}
-        />
-      </Box>
-      {state.toggleMessage ? <TruncateText color="yellow">{state.toggleMessage}</TruncateText> : null}
-    </Box>
+    <ProjectLaunchColumnsView
+      presetItems={state.presetItems}
+      presetCursor={state.presetCursor}
+      focus={state.focus}
+      plugins={state.plugins}
+      pluginItems={pluginItems}
+      pluginCursor={state.pluginCursor}
+      skills={state.skills}
+      skillItems={skillItems}
+      skillCursor={state.skillCursor}
+      mcps={state.mcps}
+      mcpItems={mcpItems}
+      mcpCursor={state.mcpCursor}
+      {...(state.toggleMessage ? { toggleMessage: state.toggleMessage } : {})}
+    />
   )
 }
 
