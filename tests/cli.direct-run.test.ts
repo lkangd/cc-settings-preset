@@ -229,6 +229,34 @@ describe('cli direct run', () => {
     expect(element.props.project).toBeUndefined()
   })
 
+  it('uses remembered global preset ordering in dry-run preview', async () => {
+    const unmountMock = vi.fn()
+    renderMock.mockReturnValue({ unmount: unmountMock })
+
+    const otherPreset = {
+      type: 'base' as const,
+      name: 'alpha',
+      fileName: 'alpha-settings.json',
+      createdAt: '2026-05-16T00:00:00.000Z',
+      updatedAt: '2026-05-16T00:00:00.000Z',
+    }
+
+    listPresetsMock.mockResolvedValue([otherPreset, basePreset])
+    getPresetPathMock.mockImplementation(async (name: string) => `/tmp/.ccsp/settings/${name}-settings.json`)
+    readPresetSettingsMock.mockImplementation(async (name: string) => ({ source: name }))
+    readLastUsedGlobalSettingsMock.mockResolvedValue('work')
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli', '-g', 'alpha', '--dry-run'])
+
+    const element = renderMock.mock.calls[0]?.[0] as React.ReactElement<{
+      global?: { items: Array<{ name: string }>; cursor: number }
+    }>
+    expect(element.props.global?.items.map(item => item.name)).toEqual(['work', 'alpha'])
+    expect(element.props.global?.cursor).toBe(1)
+    expect(unmountMock).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps interactive flow when only dry-run is provided', async () => {
     renderMock.mockReturnValue({ waitUntilExit: async () => undefined, clear: vi.fn(), rerender: vi.fn() })
 

@@ -27,7 +27,7 @@ vi.mock('ink', () => ({
 }))
 
 vi.mock('../../src/ink/components/two-column-settings-view.js', () => ({
-  TwoColumnSettingsView: ({ title, help }: { title: string; help: string }) => React.createElement('two-column-settings-view', { title, help }),
+  TwoColumnSettingsView: (props: Record<string, unknown>) => React.createElement('two-column-settings-view', props),
 }))
 
 vi.mock('../../src/ink/components/text-input.js', () => ({
@@ -50,6 +50,59 @@ describe('ManageApp interactions', () => {
     inputHandlers.length = 0
     textInputProps.length = 0
     exitMock.mockReset()
+  })
+
+  it('exits on esc in browse mode', () => {
+    const onSubmit = vi.fn()
+
+    act(() => {
+      TestRenderer.create(
+        <ManageApp
+          items={[{ name: 'base', sourcePath: '/tmp/base.json', settings: {} }]}
+          onSubmit={onSubmit}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('', { escape: true })
+    })
+
+    expect(onSubmit).toHaveBeenCalledWith({ type: 'exit' })
+    expect(exitMock).toHaveBeenCalledOnce()
+  })
+
+  it('cycles sort mode on t and shows the active sort at the bottom', () => {
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <ManageApp
+          items={[
+            { name: 'gamma', sourcePath: '/tmp/gamma.json', settings: {}, updatedAt: '2026-06-01T00:00:00.000Z', isLastUsed: true },
+            { name: 'alpha', sourcePath: '/tmp/alpha.json', settings: {}, updatedAt: '2026-06-02T00:00:00.000Z' },
+            { name: 'beta', sourcePath: '/tmp/beta.json', settings: {}, updatedAt: '2026-06-03T00:00:00.000Z' },
+          ]}
+          onSubmit={vi.fn()}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('t', {})
+    })
+
+    let view = output!.root.findByType('two-column-settings-view' as unknown as React.ComponentType)
+    expect(view.props.items.map((item: { name: string }) => item.name)).toEqual(['alpha', 'beta', 'gamma'])
+    expect(JSON.stringify(output!.toJSON())).toContain('Sorted by name')
+
+    act(() => {
+      latestInputHandler()?.('t', {})
+    })
+
+    view = output!.root.findByType('two-column-settings-view' as unknown as React.ComponentType)
+    expect(view.props.items.map((item: { name: string }) => item.name)).toEqual(['beta', 'alpha', 'gamma'])
+    expect(JSON.stringify(output!.toJSON())).toContain('Sorted by updated')
   })
 
   it('does not launch the active preset on enter', () => {
@@ -189,5 +242,43 @@ describe('ManageApp interactions', () => {
     expect(exitMock).not.toHaveBeenCalled()
     expect(output!.toJSON() && JSON.stringify(output!.toJSON())).toContain('renamed')
     expect(output!.toJSON() && JSON.stringify(output!.toJSON())).toContain('Preset renamed successfully')
+  })
+
+  it('keeps the renamed item in flow state when sorting afterward', async () => {
+    const onRenameSubmit = vi.fn().mockResolvedValue(null)
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <ManageApp
+          items={[
+            { name: 'base', sourcePath: '/tmp/base.json', settings: {}, updatedAt: '2026-06-01T00:00:00.000Z' },
+            { name: 'work', sourcePath: '/tmp/work.json', settings: {}, updatedAt: '2026-06-02T00:00:00.000Z' },
+          ]}
+          onSubmit={vi.fn()}
+          onRenameSubmit={onRenameSubmit}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('r', {})
+    })
+
+    act(() => {
+      textInputProps.at(-1)?.onChange('renamed')
+    })
+
+    await act(async () => {
+      await textInputProps.at(-1)?.onSubmit()
+    })
+
+    act(() => {
+      latestInputHandler()?.('t', {})
+    })
+
+    const view = output!.root.findByType('two-column-settings-view' as unknown as React.ComponentType)
+    expect(view.props.items.map((item: { name: string }) => item.name)).toContain('renamed')
+    expect(view.props.items.map((item: { name: string }) => item.name)).not.toContain('base')
   })
 })

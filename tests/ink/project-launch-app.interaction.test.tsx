@@ -3,7 +3,7 @@ import TestRenderer, { act } from 'react-test-renderer'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ProjectLaunchApp } from '../../src/ink/project-launch-app.js'
 
-type InputHandler = (input: string, key: { return?: boolean; escape?: boolean }) => void
+type InputHandler = (input: string, key: { return?: boolean; escape?: boolean; rightArrow?: boolean }) => void
 
 type TextInputProps = {
   label: string
@@ -72,7 +72,7 @@ describe('ProjectLaunchApp interactions', () => {
     })
 
     act(() => {
-      latestInputHandler()?.('p', {})
+      latestInputHandler()?.('', { rightArrow: true })
     })
 
     act(() => {
@@ -133,7 +133,7 @@ describe('ProjectLaunchApp interactions', () => {
     })
 
     act(() => {
-      latestInputHandler()?.('p', {})
+      latestInputHandler()?.('', { rightArrow: true })
     })
 
     expect(flattenJson(output!.toJSON())).not.toMatch(/❯\s+Detected/)
@@ -167,7 +167,7 @@ describe('ProjectLaunchApp interactions', () => {
     })
 
     act(() => {
-      latestInputHandler()?.('p', {})
+      latestInputHandler()?.('', { rightArrow: true })
     })
 
     act(() => {
@@ -224,7 +224,7 @@ describe('ProjectLaunchApp interactions', () => {
     })
 
     act(() => {
-      latestInputHandler()?.('p', {})
+      latestInputHandler()?.('', { rightArrow: true })
     })
 
     act(() => {
@@ -270,7 +270,7 @@ describe('ProjectLaunchApp interactions', () => {
     })
 
     act(() => {
-      latestInputHandler()?.('p', {})
+      latestInputHandler()?.('', { rightArrow: true })
     })
 
     act(() => {
@@ -309,7 +309,7 @@ describe('ProjectLaunchApp interactions', () => {
     })
 
     act(() => {
-      latestInputHandler()?.('p', {})
+      latestInputHandler()?.('', { rightArrow: true })
     })
 
     act(() => {
@@ -322,6 +322,37 @@ describe('ProjectLaunchApp interactions', () => {
 
     expect(flattenJson(output!.toJSON())).not.toContain('Remove this disable entry? (y/N)')
     expect(flattenJson(output!.toJSON())).toMatch(/Plugins\(0\/1\)/)
+  })
+
+  it('shows the active sort mode when t is pressed', () => {
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <ProjectLaunchApp
+          presets={[]}
+          detected={{
+            plugins: [{ name: 'alpha', enabled: true, source: 'user' }],
+            skills: [],
+            mcps: [],
+          }}
+          statesByPreset={{}}
+          onSubmit={vi.fn()}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('t', {})
+    })
+
+    expect(flattenJson(output!.toJSON())).toContain('Sorted by name')
+
+    act(() => {
+      latestInputHandler()?.('', { rightArrow: true })
+    })
+
+    expect(flattenJson(output!.toJSON())).not.toContain('Sorted by name')
   })
 
   it('does not submit when the new preset name is empty', () => {
@@ -343,7 +374,7 @@ describe('ProjectLaunchApp interactions', () => {
     })
 
     act(() => {
-      latestInputHandler()?.('p', {})
+      latestInputHandler()?.('', { rightArrow: true })
     })
 
     act(() => {

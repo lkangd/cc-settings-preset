@@ -25,6 +25,7 @@ import { ManageApp, type ManageResult } from './ink/manage-app.js'
 import { ProjectLaunchApp, type ProjectLaunchResult } from './ink/project-launch-app.js'
 import { ProjectManageApp, type ProjectManageResult } from './ink/project-manage-app.js'
 import { DirectRunPreviewApp } from './ink/direct-run-preview-app.js'
+import { createSettingsSelectFlowState } from './flows/settings-select-flow.js'
 import { SettingsSelectApp, type SettingsSelectResult } from './ink/settings-select-app.js'
 import { applyPluginOverrides, pluginStatesToEnabledPlugins, resolvePluginStates } from './services/plugin-service.js'
 import { createCcspConfigService } from './services/ccsp-config-service.js'
@@ -321,14 +322,16 @@ async function renderSettingsSelectApp(
   return result
 }
 
-async function buildGlobalSettingsPresetItems(): Promise<SettingsSelectResult[]> {
+async function buildGlobalSettingsPresetItems(lastUsedName?: string): Promise<SettingsSelectResult[]> {
   const presets = (await presetService.listPresets()).filter(preset => preset.type === 'base')
   const items: SettingsSelectResult[] = []
   for (const preset of presets) {
     items.push({
       name: preset.name,
       sourcePath: await presetService.getPresetPath(preset.name),
-      settings: await presetService.readPresetSettings(preset.name)
+      settings: await presetService.readPresetSettings(preset.name),
+      updatedAt: preset.updatedAt,
+      isLastUsed: preset.name === lastUsedName,
     })
   }
   return items
@@ -348,9 +351,9 @@ async function resolveProjectManageBaseSettings(): Promise<SettingsSelectResult 
 
 async function resolveInteractiveBaseSettings(config?: CcspConfig): Promise<SettingsSelectResult | undefined> {
   const officialItem = await buildClaudeOfficialPresetItem()
-  const presetItems = [...(officialItem ? [officialItem] : []), ...(await buildGlobalSettingsPresetItems())]
+  const rememberedName = await globalLastSettingsService.readLastUsed(context.cwd)
+  const presetItems = [...(officialItem ? [officialItem] : []), ...(await buildGlobalSettingsPresetItems(rememberedName))]
   if (presetItems.length > 0) {
-    const rememberedName = await globalLastSettingsService.readLastUsed(context.cwd)
     const initialName =
       rememberedName && presetItems.some(preset => preset.name === rememberedName) ? rememberedName : undefined
     const { globalPresetEnvOnly, settingsDisplayFormat } = config ?? await ccspConfigService.read()
@@ -822,7 +825,8 @@ async function runContinue(extraArgs: string[]): Promise<void> {
 async function manageInteractive(): Promise<void> {
   const config = await ccspConfigService.read()
   while (true) {
-    const items = await buildGlobalSettingsPresetItems()
+    const rememberedName = await globalLastSettingsService.readLastUsed(context.cwd)
+    const items = await buildGlobalSettingsPresetItems(rememberedName)
     const selection = await renderManageApp(items, config.settingsDisplayFormat)
     if (!selection || selection.type === 'exit') return
 
@@ -903,10 +907,12 @@ async function resolveDirectGlobalSettingsFallback(): Promise<SettingsSelectResu
 
 async function buildGlobalPreviewItems(selectedName: string): Promise<{ items: SettingsSelectResult[]; cursor: number }> {
   const officialItem = await buildClaudeOfficialPresetItem()
-  const items = [...(officialItem ? [officialItem] : []), ...(await buildGlobalSettingsPresetItems())]
-  const cursor = items.findIndex(item => item.name.toLowerCase() === selectedName.toLowerCase())
+  const rememberedName = await globalLastSettingsService.readLastUsed(context.cwd)
+  const rawItems = [...(officialItem ? [officialItem] : []), ...(await buildGlobalSettingsPresetItems(rememberedName))]
+  const previewState = createSettingsSelectFlowState({ items: rawItems, initialName: selectedName })
+  const cursor = previewState.items.findIndex(item => item.name.toLowerCase() === selectedName.toLowerCase())
   if (cursor < 0) throw new CliError(`Preset not found: ${selectedName}`)
-  return { items, cursor }
+  return { items: previewState.items, cursor }
 }
 
 async function resolveDirectProjectLaunch(

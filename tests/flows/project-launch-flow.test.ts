@@ -4,6 +4,7 @@ import {
   createProjectLaunchFlowState,
   getPendingDisableRemovals,
   reduceProjectLaunchFlow,
+  shouldBubbleProjectLaunchEscape,
 } from '../../src/flows/project-launch-flow.js'
 
 const input = {
@@ -29,6 +30,19 @@ describe('project launch flow', () => {
 
   it('falls back to Detected when last-used is missing', () => {
     expect(createProjectLaunchFlowState({ ...input, lastUsedName: 'missing' }).presetCursor).toBe(0)
+  })
+
+  it('returns to presets on escape before bubbling', () => {
+    const state = reduceProjectLaunchFlow(createProjectLaunchFlowState(input), { type: 'focus-right' })
+
+    expect(shouldBubbleProjectLaunchEscape(state)).toBe(false)
+    expect(reduceProjectLaunchFlow(state, { type: 'escape' }).focus).toBe('presets')
+  })
+
+  it('bubbles escape when already focused on presets', () => {
+    const state = createProjectLaunchFlowState(input)
+
+    expect(shouldBubbleProjectLaunchEscape(state)).toBe(true)
   })
 
   it('toggles MCP state and marks the flow dirty', () => {

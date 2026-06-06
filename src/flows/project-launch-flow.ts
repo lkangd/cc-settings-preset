@@ -1,4 +1,5 @@
 import type { LaunchPresetMeta } from '../core/schema.js'
+import { escapeColumnFocus, moveColumnFocus } from './column-navigation-flow.js'
 import {
   resolveDisableLockLocation,
   type DisableLockSource,
@@ -61,12 +62,17 @@ export type ProjectLaunchFlowEvent =
   | { type: 'focus-mcps' }
   | { type: 'focus-left' }
   | { type: 'focus-right' }
+  | { type: 'escape' }
   | { type: 'up' }
   | { type: 'down' }
   | { type: 'toggle-current' }
   | { type: 'toggle-sort-mode' }
   | { type: 'confirm-enable-unlock' }
   | { type: 'cancel-enable-unlock' }
+
+export function formatProjectLaunchSortMode(sortMode: ProjectLaunchSortMode): string {
+  return sortMode === 'name' ? 'Sorted by name' : 'Sorted by status'
+}
 
 function clamp(value: number, length: number): number {
   return Math.max(0, Math.min(value, Math.max(0, length - 1)))
@@ -331,10 +337,14 @@ export function createProjectLaunchFlowState(input: {
   })
 }
 
+const PROJECT_LAUNCH_FOCUSES: readonly ProjectLaunchFocus[] = ['presets', 'plugins', 'skills', 'mcps']
+
 function moveFocus(state: ProjectLaunchFlowState, direction: -1 | 1): ProjectLaunchFlowState {
-  const focuses: ProjectLaunchFocus[] = ['presets', 'plugins', 'skills', 'mcps']
-  const index = focuses.indexOf(state.focus)
-  return { ...state, focus: focuses[clamp(index + direction, focuses.length)] ?? state.focus }
+  return { ...state, focus: moveColumnFocus(PROJECT_LAUNCH_FOCUSES, state.focus, direction) }
+}
+
+export function shouldBubbleProjectLaunchEscape(state: ProjectLaunchFlowState): boolean {
+  return escapeColumnFocus(state.focus, 'presets').bubbled
 }
 
 function writeDraft(state: ProjectLaunchFlowState, draft: ProjectLaunchToggleState): ProjectLaunchFlowState {
@@ -353,6 +363,10 @@ export function reduceProjectLaunchFlow(state: ProjectLaunchFlowState, event: Pr
   if (event.type === 'focus-mcps') return clearToggleMessage({ ...state, focus: 'mcps' })
   if (event.type === 'focus-left') return clearToggleMessage(moveFocus(state, -1))
   if (event.type === 'focus-right') return clearToggleMessage(moveFocus(state, 1))
+  if (event.type === 'escape') {
+    const escaped = escapeColumnFocus(state.focus, 'presets')
+    return clearToggleMessage({ ...state, focus: escaped.focus })
+  }
 
   if (event.type === 'up') {
     if (state.focus === 'plugins') return clearToggleMessage({ ...state, pluginCursor: clamp(state.pluginCursor - 1, state.plugins.length) })

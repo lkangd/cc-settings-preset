@@ -6,10 +6,12 @@ import type { DisableRemovalMark } from '../flows/project-launch-flow.js'
 import {
   annotateToggleItems,
   createProjectLaunchFlowState,
+  formatProjectLaunchSortMode,
   getActiveProjectLaunchItem,
   getActiveProjectLaunchState,
   getPendingDisableRemovals,
   reduceProjectLaunchFlow,
+  shouldBubbleProjectLaunchEscape,
   type ProjectLaunchToggleState,
 } from '../flows/project-launch-flow.js'
 import type { DisableLockSource } from '../services/disable-lock-service.js'
@@ -51,6 +53,7 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, disableLoc
   const [saveChoice, setSaveChoice] = useState<SaveChoice>('none')
   const [newName, setNewName] = useState('')
   const [createError, setCreateError] = useState<string | null>(null)
+  const [sortMessage, setSortMessage] = useState<string | null>(null)
 
   function disableRemovalsFromState() {
     const removals = getPendingDisableRemovals(state)
@@ -75,6 +78,7 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, disableLoc
 
   useInput((input, key) => {
     if (saveChoice !== 'none' || state.pendingEnableUnlock) return
+    if (input !== 't' && sortMessage) setSortMessage(null)
     if (input === 'q') {
       exit()
       return
@@ -83,18 +87,19 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, disableLoc
     if (key.rightArrow || (input === 'l' && !key.ctrl && !key.meta)) setState(current => reduceProjectLaunchFlow(current, { type: 'focus-right' }))
     if (key.upArrow || input === 'k') setState(current => reduceProjectLaunchFlow(current, { type: 'up' }))
     if (key.downArrow || input === 'j') setState(current => reduceProjectLaunchFlow(current, { type: 'down' }))
-    if (input === 'p') setState(current => reduceProjectLaunchFlow(current, { type: 'focus-plugins' }))
-    if (input === 's') setState(current => reduceProjectLaunchFlow(current, { type: 'focus-skills' }))
-    if (input === 'm') setState(current => reduceProjectLaunchFlow(current, { type: 'focus-mcps' }))
     if (key.escape) {
-      if (state.focus === 'presets') {
+      if (shouldBubbleProjectLaunchEscape(state)) {
         onSubmit({ type: 'back' })
         exit()
         return
       }
-      setState(current => reduceProjectLaunchFlow(current, { type: 'focus-presets' }))
+      setState(current => reduceProjectLaunchFlow(current, { type: 'escape' }))
     }
-    if (input === 't') setState(current => reduceProjectLaunchFlow(current, { type: 'toggle-sort-mode' }))
+    if (input === 't') {
+      const nextState = reduceProjectLaunchFlow(state, { type: 'toggle-sort-mode' })
+      setState(nextState)
+      setSortMessage(formatProjectLaunchSortMode(nextState.sortMode))
+    }
     if (input === ' ') setState(current => reduceProjectLaunchFlow(current, { type: 'toggle-current' }))
     if (key.return) {
       if (state.dirty) {
@@ -190,6 +195,8 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, disableLoc
   const skillItems = annotateToggleItems(state, detectedBaseline, 'skills', state.skills)
   const mcpItems = annotateToggleItems(state, detectedBaseline, 'mcps', state.mcps)
 
+  const message = state.toggleMessage ?? sortMessage
+
   return (
     <ProjectLaunchColumnsView
       presetItems={state.presetItems}
@@ -204,7 +211,7 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, disableLoc
       mcps={state.mcps}
       mcpItems={mcpItems}
       mcpCursor={state.mcpCursor}
-      {...(state.toggleMessage ? { toggleMessage: state.toggleMessage } : {})}
+      {...(message ? { toggleMessage: message } : {})}
     />
   )
 }

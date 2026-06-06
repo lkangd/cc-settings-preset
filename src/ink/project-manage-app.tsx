@@ -5,10 +5,12 @@ import {
   annotateToggleItems,
   createProjectLaunchFlowState,
   focusProjectLaunchPreset,
+  formatProjectLaunchSortMode,
   getActiveProjectLaunchItem,
   getActiveProjectLaunchState,
   getPendingDisableRemovals,
   reduceProjectLaunchFlow,
+  shouldBubbleProjectLaunchEscape,
   type ProjectLaunchFlowState,
 } from '../flows/project-launch-flow.js'
 import type { DisableLockSource } from '../services/disable-lock-service.js'
@@ -94,6 +96,7 @@ export function ProjectManageApp({ presets, detected, statesByPreset, disableLoc
 
   useInput((input, key) => {
     if (mode !== 'browse' || saveMode !== 'none' || state.pendingEnableUnlock) return
+    if (input !== 't' && message?.text.startsWith('Sorted by ')) setMessage(null)
     if (input === 'q') {
       exit()
       return
@@ -102,11 +105,19 @@ export function ProjectManageApp({ presets, detected, statesByPreset, disableLoc
     if (key.rightArrow) setState(current => reduceProjectLaunchFlow(current, { type: 'focus-right' }))
     if (key.upArrow || input === 'k') setState(current => reduceProjectLaunchFlow(current, { type: 'up' }))
     if (key.downArrow || input === 'j') setState(current => reduceProjectLaunchFlow(current, { type: 'down' }))
-    if (input === 'p') setState(current => reduceProjectLaunchFlow(current, { type: 'focus-plugins' }))
-    if (input === 's') setState(current => reduceProjectLaunchFlow(current, { type: 'focus-skills' }))
-    if (input === 'm') setState(current => reduceProjectLaunchFlow(current, { type: 'focus-mcps' }))
-    if (key.escape) setState(current => reduceProjectLaunchFlow(current, { type: 'focus-presets' }))
-    if (input === 't') setState(current => reduceProjectLaunchFlow(current, { type: 'toggle-sort-mode' }))
+    if (key.escape) {
+      if (shouldBubbleProjectLaunchEscape(state)) {
+        exit()
+        return
+      }
+      setState(current => reduceProjectLaunchFlow(current, { type: 'escape' }))
+      return
+    }
+    if (input === 't') {
+      const nextState = reduceProjectLaunchFlow(state, { type: 'toggle-sort-mode' })
+      setState(nextState)
+      setMessage({ text: formatProjectLaunchSortMode(nextState.sortMode), color: 'yellow' })
+    }
     if (input === ' ') {
       const item = getActiveProjectLaunchItem(state)
       setState(current => reduceProjectLaunchFlow(current, { type: 'toggle-current' }))
@@ -310,7 +321,7 @@ export function ProjectManageApp({ presets, detected, statesByPreset, disableLoc
   return (
     <Box flexDirection="column">
       <Text bold color="cyan">Manage project launch presets</Text>
-      <Text dimColor>←/→ switch column · p plugins · s skills · m mcps · t sort · space toggle · enter save · r rename · d delete · l launch · esc presets · q quit</Text>
+      <Text dimColor>←/→ switch column · h/j/k navigate · t sort · space toggle · enter save · r rename · d delete · l launch · esc presets/quit · q quit</Text>
       <Box marginTop={1} width={innerWidth}>
         <Box flexDirection="column" width={presetWidth} borderStyle="round" borderColor={state.focus === 'presets' ? 'cyan' : 'gray'} paddingX={0.5} paddingY={0.5}>
           <Text bold>Presets({state.presetItems.length})</Text>

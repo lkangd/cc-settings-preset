@@ -1,6 +1,12 @@
 import { useState } from 'react'
 import { Box, Text, useApp, useInput } from 'ink'
-import { createSettingsSelectFlowState, reduceSettingsSelectFlow, type SettingsSelectItem } from '../flows/settings-select-flow.js'
+import {
+  createSettingsSelectFlowState,
+  formatSettingsSortMode,
+  renameSettingsSelectItem,
+  reduceSettingsSelectFlow,
+  type SettingsSelectItem,
+} from '../flows/settings-select-flow.js'
 import type { SettingsDisplayFormat } from '../core/schema.js'
 import { revealInFinder } from '../services/reveal-service.js'
 import { TextInput } from './components/text-input.js'
@@ -32,9 +38,16 @@ export function ManageApp({ items, displayFormat = 'yaml', onSubmit, onRenameSub
 
   useInput((input, key) => {
     if (mode !== 'browse') return
-    if (input === 'q') {
+    if (input !== 't' && message?.startsWith('Sorted by ')) setMessage(null)
+    if (input === 'q' || key.escape) {
       onSubmit({ type: 'exit' })
       exit()
+      return
+    }
+    if (input === 't') {
+      const nextState = reduceSettingsSelectFlow(state, { type: 'toggle-sort-mode' })
+      setState(nextState)
+      setMessage(formatSettingsSortMode(nextState.sortMode))
       return
     }
     if (key.upArrow || input === 'k') setState(current => reduceSettingsSelectFlow(current, { type: 'up' }))
@@ -77,10 +90,7 @@ export function ManageApp({ items, displayFormat = 'yaml', onSubmit, onRenameSub
                 setRenameError(error)
                 return
               }
-              setState(current => ({
-                ...current,
-                items: current.items.map(item => item.name === active.name ? { ...item, name: newName } : item),
-              }))
+              setState(current => renameSettingsSelectItem(current, active.name, newName))
               setMessage('Preset renamed successfully')
               setMode('browse')
               return
@@ -114,7 +124,7 @@ export function ManageApp({ items, displayFormat = 'yaml', onSubmit, onRenameSub
     <Box flexDirection="column">
       <TwoColumnSettingsView
         title="Manage settings presets"
-        help="↑/k ↓/j navigate · l launch · c create · o open folder · r rename · d delete · q quit"
+        help="↑/k ↓/j navigate · t sort · l launch · c create · o open folder · r rename · d delete · esc/q quit"
         items={state.items}
         cursor={state.cursor}
         displayFormat={displayFormat}

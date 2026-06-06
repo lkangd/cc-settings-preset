@@ -50,7 +50,7 @@ export function ProjectLaunchColumnsView({
   mcpItems,
   mcpCursor,
   title = 'Select project launch preset',
-  help = '←/→ switch column · p plugins · s skills · m mcps · t sort · space toggle · enter launch · esc presets/back · q quit',
+  help = '←/→ switch column · h/j/k/l navigate · t sort · space toggle · enter launch · esc presets/back · q quit',
   toggleMessage,
 }: ProjectLaunchColumnsViewProps) {
   useInkResizeVersion()

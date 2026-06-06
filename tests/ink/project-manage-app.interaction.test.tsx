@@ -282,7 +282,7 @@ describe('ProjectManageApp interactions', () => {
     })
 
     act(() => {
-      latestInputHandler()?.('p', {})
+      latestInputHandler()?.('', { rightArrow: true })
     })
 
     expect(flattenJson(output!.toJSON())).not.toMatch(/❯\s+Detected/)
@@ -292,6 +292,26 @@ describe('ProjectManageApp interactions', () => {
     })
 
     expect(flattenJson(output!.toJSON())).toMatch(/❯\s+Detected/)
+    expect(exitMock).not.toHaveBeenCalled()
+  })
+
+  it('exits the management screen when esc is pressed from the presets column', () => {
+    act(() => {
+      TestRenderer.create(
+        <ProjectManageApp
+          presets={[]}
+          detected={{ plugins: [{ name: 'alpha', enabled: true, source: 'user' }], skills: [], mcps: [] }}
+          statesByPreset={{}}
+          onSubmit={vi.fn()}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('', { escape: true })
+    })
+
+    expect(exitMock).toHaveBeenCalledOnce()
   })
 
   it('returns focus to presets when esc leaves rename mode', () => {
@@ -321,6 +341,33 @@ describe('ProjectManageApp interactions', () => {
     expect(flattenJson(output!.toJSON())).toContain('Manage project launch presets')
     expect(flattenJson(output!.toJSON())).toContain('Detected')
     expect(flattenJson(output!.toJSON())).toContain('web')
+  })
+
+  it('shows the active sort mode when t is pressed', () => {
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <ProjectManageApp
+          presets={[]}
+          detected={{ plugins: [{ name: 'alpha', enabled: true, source: 'user' }], skills: [], mcps: [] }}
+          statesByPreset={{}}
+          onSubmit={vi.fn()}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('t', {})
+    })
+
+    expect(flattenJson(output!.toJSON())).toContain('Sorted by name')
+
+    act(() => {
+      latestInputHandler()?.('', { rightArrow: true })
+    })
+
+    expect(flattenJson(output!.toJSON())).not.toContain('Sorted by name')
   })
 
   it('shows detected save guidance after toggling detected state', () => {
