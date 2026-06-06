@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.1 (2026-06-07)
+
+### Features
+* enhance settings and project launch flows with sorting and navigation improvements
+
 ## 1.1.0 (2026-06-05)
 
 ### Features
