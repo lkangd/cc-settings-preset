@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.2 (2026-06-12)
+
+### Features
+* implement graceful termination handling for child processes
+
 ## 1.1.1 (2026-06-07)
 
 ### Features
