@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.3 (2026-06-18)
+
+### Code Refactoring
+* update testing and preset management functionality
+
 ## 1.1.2 (2026-06-12)
 
 ### Features
