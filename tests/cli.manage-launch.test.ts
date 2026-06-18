@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const selectedItem = {
   name: 'global-base',
+  fileName: 'global-base-settings.json',
   sourcePath: '/presets/global-base.json',
   settings: { env: { FOO: 'bar' } },
 }
@@ -62,14 +63,24 @@ describe('manage launch flow', () => {
     vi.doMock('gradient-string', () => ({
       default: () => (text: string) => text,
     }))
-    vi.doMock('../src/core/paths.js', () => ({
-      createPathContext: () => ({ homeDir: '/Users/test', cwd: '/repo/project' }),
-      resolveGlobalRoot: () => '/Users/test/.ccsp',
-    }))
+    vi.doMock('../src/core/paths.js', async () => {
+      const actual = await vi.importActual<typeof import('../src/core/paths.js')>('../src/core/paths.js')
+      return {
+        ...actual,
+        createPathContext: () => ({ homeDir: '/Users/test', cwd: '/repo/project' }),
+        resolveGlobalRoot: () => '/Users/test/.ccsp',
+      }
+    })
     vi.doMock('../src/services/preset-service.js', () => ({
       createPresetService: () => ({
-        listPresets: vi.fn().mockResolvedValue([{ name: selectedItem.name, type: 'base' }]),
+        listPresets: vi.fn().mockResolvedValue([{ name: selectedItem.name, fileName: selectedItem.fileName, type: 'base' }]),
         getPresetPath: vi.fn().mockResolvedValue(selectedItem.sourcePath),
+        readIndex: vi.fn().mockResolvedValue({
+          version: 1,
+          presets: {
+            [selectedItem.name]: { name: selectedItem.name, fileName: selectedItem.fileName, type: 'base' },
+          },
+        }),
         readPresetSettings: vi.fn().mockResolvedValue(selectedItem.settings),
         renamePreset: vi.fn(),
         deletePreset: vi.fn(),
@@ -219,10 +230,14 @@ describe('manage launch flow', () => {
     vi.doMock('gradient-string', () => ({
       default: () => (text: string) => text,
     }))
-    vi.doMock('../src/core/paths.js', () => ({
-      createPathContext: () => ({ homeDir: '/Users/test', cwd: '/repo/project' }),
-      resolveGlobalRoot: () => '/Users/test/.ccsp',
-    }))
+    vi.doMock('../src/core/paths.js', async () => {
+      const actual = await vi.importActual<typeof import('../src/core/paths.js')>('../src/core/paths.js')
+      return {
+        ...actual,
+        createPathContext: () => ({ homeDir: '/Users/test', cwd: '/repo/project' }),
+        resolveGlobalRoot: () => '/Users/test/.ccsp',
+      }
+    })
     vi.doMock('../src/services/preset-service.js', () => ({
       createPresetService: () => ({
         listPresets: vi.fn().mockResolvedValue([]),
@@ -371,15 +386,25 @@ describe('manage launch flow', () => {
 
     vi.doMock('figlet', () => ({ default: { textSync: () => 'CCSP' } }))
     vi.doMock('gradient-string', () => ({ default: () => (text: string) => text }))
-    vi.doMock('../src/core/paths.js', () => ({
-      createPathContext: () => ({ homeDir: '/Users/test', cwd: '/repo/project' }),
-      resolveGlobalRoot: () => '/Users/test/.ccsp',
-      resolveUserClaudeSettingsPath: () => '/Users/test/.claude/settings.json',
-    }))
+    vi.doMock('../src/core/paths.js', async () => {
+      const actual = await vi.importActual<typeof import('../src/core/paths.js')>('../src/core/paths.js')
+      return {
+        ...actual,
+        createPathContext: () => ({ homeDir: '/Users/test', cwd: '/repo/project' }),
+        resolveGlobalRoot: () => '/Users/test/.ccsp',
+        resolveUserClaudeSettingsPath: () => '/Users/test/.claude/settings.json',
+      }
+    })
     vi.doMock('../src/services/preset-service.js', () => ({
       createPresetService: () => ({
-        listPresets: vi.fn().mockResolvedValue([{ name: selectedItem.name, type: 'base' }]),
+        listPresets: vi.fn().mockResolvedValue([{ name: selectedItem.name, fileName: selectedItem.fileName, type: 'base' }]),
         getPresetPath: vi.fn().mockResolvedValue(selectedItem.sourcePath),
+        readIndex: vi.fn().mockResolvedValue({
+          version: 1,
+          presets: {
+            [selectedItem.name]: { name: selectedItem.name, fileName: selectedItem.fileName, type: 'base' },
+          },
+        }),
         readPresetSettings: vi.fn().mockResolvedValue(selectedItem.settings),
         buildClaudeOfficialItem: vi.fn(),
         renamePreset: vi.fn(),
@@ -533,11 +558,15 @@ describe('manage launch flow', () => {
 
     vi.doMock('figlet', () => ({ default: { textSync: () => 'CCSP' } }))
     vi.doMock('gradient-string', () => ({ default: () => (text: string) => text }))
-    vi.doMock('../src/core/paths.js', () => ({
-      createPathContext: () => ({ homeDir: '/Users/test', cwd: '/repo/project' }),
-      resolveGlobalRoot: () => '/Users/test/.ccsp',
-      resolveUserClaudeSettingsPath: () => '/Users/test/.claude/settings.json',
-    }))
+    vi.doMock('../src/core/paths.js', async () => {
+      const actual = await vi.importActual<typeof import('../src/core/paths.js')>('../src/core/paths.js')
+      return {
+        ...actual,
+        createPathContext: () => ({ homeDir: '/Users/test', cwd: '/repo/project' }),
+        resolveGlobalRoot: () => '/Users/test/.ccsp',
+        resolveUserClaudeSettingsPath: () => '/Users/test/.claude/settings.json',
+      }
+    })
     vi.doMock('../src/services/preset-service.js', () => ({
       createPresetService: () => ({
         listPresets: vi.fn(),
@@ -677,14 +706,24 @@ describe('manage launch flow', () => {
 
     vi.doMock('figlet', () => ({ default: { textSync: () => 'CCSP' } }))
     vi.doMock('gradient-string', () => ({ default: () => (text: string) => text }))
-    vi.doMock('../src/core/paths.js', () => ({
-      createPathContext: () => ({ homeDir: '/Users/test', cwd: '/repo/project' }),
-      resolveGlobalRoot: () => '/Users/test/.ccsp',
-    }))
+    vi.doMock('../src/core/paths.js', async () => {
+      const actual = await vi.importActual<typeof import('../src/core/paths.js')>('../src/core/paths.js')
+      return {
+        ...actual,
+        createPathContext: () => ({ homeDir: '/Users/test', cwd: '/repo/project' }),
+        resolveGlobalRoot: () => '/Users/test/.ccsp',
+      }
+    })
     vi.doMock('../src/services/preset-service.js', () => ({
       createPresetService: () => ({
-        listPresets: vi.fn().mockResolvedValue([{ name: selectedItem.name, type: 'base' }]),
+        listPresets: vi.fn().mockResolvedValue([{ name: selectedItem.name, fileName: selectedItem.fileName, type: 'base' }]),
         getPresetPath: vi.fn().mockResolvedValue(selectedItem.sourcePath),
+        readIndex: vi.fn().mockResolvedValue({
+          version: 1,
+          presets: {
+            [selectedItem.name]: { name: selectedItem.name, fileName: selectedItem.fileName, type: 'base' },
+          },
+        }),
         readPresetSettings: vi.fn().mockResolvedValue(selectedItem.settings),
         renamePreset: vi.fn(),
         deletePreset: vi.fn(),
@@ -805,14 +844,24 @@ describe('manage launch flow', () => {
 
     vi.doMock('figlet', () => ({ default: { textSync: () => 'CCSP' } }))
     vi.doMock('gradient-string', () => ({ default: () => (text: string) => text }))
-    vi.doMock('../src/core/paths.js', () => ({
-      createPathContext: () => ({ homeDir: '/Users/test', cwd: '/repo/project' }),
-      resolveGlobalRoot: () => '/Users/test/.ccsp',
-    }))
+    vi.doMock('../src/core/paths.js', async () => {
+      const actual = await vi.importActual<typeof import('../src/core/paths.js')>('../src/core/paths.js')
+      return {
+        ...actual,
+        createPathContext: () => ({ homeDir: '/Users/test', cwd: '/repo/project' }),
+        resolveGlobalRoot: () => '/Users/test/.ccsp',
+      }
+    })
     vi.doMock('../src/services/preset-service.js', () => ({
       createPresetService: () => ({
-        listPresets: vi.fn().mockResolvedValue([{ name: selectedItem.name, type: 'base' }]),
+        listPresets: vi.fn().mockResolvedValue([{ name: selectedItem.name, fileName: selectedItem.fileName, type: 'base' }]),
         getPresetPath: vi.fn().mockResolvedValue(selectedItem.sourcePath),
+        readIndex: vi.fn().mockResolvedValue({
+          version: 1,
+          presets: {
+            [selectedItem.name]: { name: selectedItem.name, fileName: selectedItem.fileName, type: 'base' },
+          },
+        }),
         readPresetSettings: vi.fn().mockResolvedValue(selectedItem.settings),
         renamePreset: vi.fn(),
         deletePreset: vi.fn(),

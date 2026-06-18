@@ -1,0 +1,1 @@
+When tasks involve Claude Code documentation (features, configuration, hooks, skills, MCP, permissions, plugins, etc.), use the `/docs` command to look up current docs before answering from memory or searching the web. Only fall back to other sources when `/docs` does not cover the question.

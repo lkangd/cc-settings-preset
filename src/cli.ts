@@ -12,8 +12,8 @@ import { isCcspCommanderSubcommand } from './core/commands.js'
 import { resolvePresetIndexKey } from './core/name.js'
 import { CliError } from './core/errors.js'
 import { readJsonFile } from './core/json.js'
-import { createPathContext, resolveGlobalRoot, resolveUserClaudeSettingsPath } from './core/paths.js'
-import { parseSettings, type CcspConfig, type PresetMeta, type RunMode, type SessionBinding, type SettingsDisplayFormat } from './core/schema.js'
+import { createPathContext, resolveGlobalRoot, resolvePresetPath, resolveUserClaudeSettingsPath } from './core/paths.js'
+import { parseSettings, type BasePresetMeta, type CcspConfig, type RunMode, type SessionBinding, type SettingsDisplayFormat } from './core/schema.js'
 import { spawnClaude } from './core/spawn.js'
 import { ConfigApp } from './ink/config-app.js'
 import { CreateApp, type CreateResult, type CreateSubmitResult } from './ink/create-app.js'
@@ -245,12 +245,12 @@ export async function waitForInkAppExit(
   }
 }
 
-async function renderCreateApp(): Promise<PresetMeta | undefined> {
+async function renderCreateApp(): Promise<BasePresetMeta | undefined> {
   const sources = (await settingsSourceService.discoverSettingsSources()).map(source => ({
     label: source.scope,
     filePath: source.filePath
   }))
-  let result: PresetMeta | undefined
+  let result: BasePresetMeta | undefined
   const createNode = () =>
     h(CreateApp, {
       sources,
@@ -328,7 +328,7 @@ async function buildGlobalSettingsPresetItems(lastUsedName?: string): Promise<Se
   for (const preset of presets) {
     items.push({
       name: preset.name,
-      sourcePath: await presetService.getPresetPath(preset.name),
+      sourcePath: resolvePresetPath(globalRoot, preset.fileName),
       settings: await presetService.readPresetSettings(preset.name),
       updatedAt: preset.updatedAt,
       isLastUsed: preset.name === lastUsedName,
@@ -584,7 +584,7 @@ async function renderManageApp(
   return result
 }
 
-async function createPresetInteractive(): Promise<PresetMeta | undefined> {
+async function createPresetInteractive(): Promise<BasePresetMeta | undefined> {
   return renderCreateApp()
 }
 
@@ -878,13 +878,11 @@ async function resolveDirectGlobalSettings(globalPreset: string): Promise<Settin
   const index = await presetService.readIndex()
   const name = resolvePresetIndexKey(index.presets, globalPreset)
   if (!name) throw new CliError(`Preset not found: ${globalPreset}`)
-  const meta = index.presets[name]!
-  if (meta.type !== 'base') throw new CliError(`Preset not found: ${globalPreset}`)
 
   return {
-    name: meta.name,
-    sourcePath: await presetService.getPresetPath(meta.name),
-    settings: await presetService.readPresetSettings(meta.name),
+    name,
+    sourcePath: await presetService.getPresetPath(name),
+    settings: await presetService.readPresetSettings(name),
   }
 }
 

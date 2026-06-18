@@ -1,6 +1,8 @@
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, readdir, readFile, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+
+import { resolvePresetMetadataPath, resolvePresetPath } from '../../src/core/paths.js'
 import { describe, expect, it } from 'vitest'
 import { CLAUDE_OFFICIAL_PRESET_NAME, createPresetService } from '../../src/services/preset-service.js'
 
@@ -87,5 +89,92 @@ describe('preset service', () => {
       settings: {},
       temporary: true,
     })
+  })
+
+  it('discovers presets by scanning the settings directory', async () => {
+    const { root, service } = await createService()
+    const settingsDir = join(root, 'settings')
+    await mkdir(settingsDir, { recursive: true })
+    await writeFile(join(settingsDir, '.DS_Store'), 'ignored', 'utf8')
+    await writeFile(join(settingsDir, 'alpha-settings.json'), JSON.stringify({ model: 'opus' }), 'utf8')
+    await writeFile(join(settingsDir, 'Beta-settings.json'), JSON.stringify({ model: 'sonnet' }), 'utf8')
+    await writeFile(join(settingsDir, 'glm-mix.json'), JSON.stringify({ model: 'mix' }), 'utf8')
+
+    expect((await service.listPresets()).map(preset => preset.name)).toEqual(['alpha', 'Beta', 'glm-mix'])
+    expect(await service.readPresetSettings('beta')).toEqual({ model: 'sonnet' })
+    expect(await service.readPresetSettings('glm-mix')).toEqual({ model: 'mix' })
+    expect(await service.readIndex()).toMatchObject({
+      version: 1,
+      presets: {
+        alpha: expect.objectContaining({ name: 'alpha', fileName: 'alpha-settings.json' }),
+        Beta: expect.objectContaining({ name: 'Beta', fileName: 'Beta-settings.json' }),
+        'glm-mix': expect.objectContaining({ name: 'glm-mix', fileName: 'glm-mix.json' }),
+      },
+    })
+    expect((await readdir(settingsDir)).sort()).toEqual([
+      '.DS_Store',
+      '.ccsp-presets.json',
+      'Beta-settings.json',
+      'alpha-settings.json',
+      'glm-mix.json',
+    ])
+  })
+
+  it('persists metadata timestamps independently from filesystem mtimes', async () => {
+    const { root, service } = await createService()
+
+    const created = await service.createBasePreset('work', { model: 'opus' })
+    const settingsPath = resolvePresetPath(root, created.fileName)
+    const oldTime = new Date('2020-01-01T00:00:00.000Z')
+    await utimes(settingsPath, oldTime, oldTime)
+
+    const listed = await service.listPresets()
+    expect(listed[0]).toMatchObject({
+      name: 'work',
+      createdAt: created.createdAt,
+      updatedAt: created.updatedAt,
+    })
+
+    const metadataPath = resolvePresetMetadataPath(root)
+    const metadata = JSON.parse(await readFile(metadataPath, 'utf8')) as {
+      presets: Record<string, { createdAt: string; updatedAt: string }>
+    }
+    expect(metadata.presets.work).toMatchObject({
+      createdAt: created.createdAt,
+      updatedAt: created.updatedAt,
+    })
+  })
+
+  it('updates persisted metadata when preset settings change', async () => {
+    const { root, service } = await createService()
+
+    const created = await service.createBasePreset('work', { model: 'opus' })
+    const updated = await service.writePresetSettingsByName('work', { model: 'sonnet' })
+
+    expect(updated.createdAt).toBe(created.createdAt)
+    expect(updated.updatedAt > created.updatedAt).toBe(true)
+
+    const metadataPath = resolvePresetMetadataPath(root)
+    const metadata = JSON.parse(await readFile(metadataPath, 'utf8')) as {
+      presets: Record<string, { createdAt: string; updatedAt: string }>
+    }
+    expect(metadata.presets.work?.updatedAt).toBe(updated.updatedAt)
+  })
+
+  it('discovers symlinked preset files', async () => {
+    const { root, service } = await createService()
+    const settingsDir = join(root, 'settings')
+    const sharedDir = join(root, 'shared')
+    await mkdir(settingsDir, { recursive: true })
+    await mkdir(sharedDir, { recursive: true })
+
+    const sharedPath = join(sharedDir, 'team-settings.json')
+    const linkPath = join(settingsDir, 'team-settings.json')
+    await writeFile(sharedPath, JSON.stringify({ model: 'opus' }), 'utf8')
+    await symlink(sharedPath, linkPath)
+
+    expect((await lstat(linkPath)).isSymbolicLink()).toBe(true)
+    expect((await service.listPresets()).map(preset => preset.name)).toEqual(['team'])
+    expect(await service.readPresetSettings('team')).toEqual({ model: 'opus' })
   })
 })

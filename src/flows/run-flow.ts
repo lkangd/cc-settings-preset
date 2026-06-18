@@ -1,8 +1,8 @@
-import type { PresetMeta } from '../core/schema.js'
+import type { BasePresetMeta } from '../core/schema.js'
 import { sortPluginStates, type PluginState } from '../services/plugin-service.js'
 import { sortSkillStatesByStatus, type SkillState } from '../services/skill-service.js'
 
-export type RunFlowFocus = 'settings' | 'plugins' | 'skills' | 'derived'
+export type RunFlowFocus = 'settings' | 'plugins' | 'skills'
 
 export type RunFlowSortMode = 'status' | 'name'
 
@@ -12,7 +12,7 @@ export type RunFlowDraft = {
 }
 
 export type RunFlowState = {
-  presets: PresetMeta[]
+  presets: BasePresetMeta[]
   plugins: PluginState[]
   skills: SkillState[]
   pluginsByPreset: Record<string, PluginState[]>
@@ -22,7 +22,6 @@ export type RunFlowState = {
   settingsCursor: number
   pluginCursor: number
   skillCursor: number
-  derivedCursor: number
   dirty: boolean
   sortMode: RunFlowSortMode
 }
@@ -39,7 +38,7 @@ export type RunFlowEvent =
   | { type: 'toggle-sort-mode' }
 
 export function createRunFlowState(input: {
-  presets: PresetMeta[]
+  presets: BasePresetMeta[]
   plugins?: PluginState[]
   skills?: SkillState[]
   pluginsByPreset?: Record<string, PluginState[]>
@@ -63,7 +62,6 @@ export function createRunFlowState(input: {
     settingsCursor: 0,
     pluginCursor: 0,
     skillCursor: 0,
-    derivedCursor: 0,
     dirty: false,
     sortMode: 'status',
   }
@@ -77,15 +75,15 @@ function sortByName<T extends { name: string }>(items: T[]): T[] {
   return [...items].sort((a, b) => a.name.localeCompare(b.name))
 }
 
-function getOrderedFocuses(state: RunFlowState): RunFlowFocus[] {
-  return state.dirty ? ['settings', 'plugins', 'skills', 'derived'] : ['settings', 'plugins', 'skills']
+function getOrderedFocuses(_state: RunFlowState): RunFlowFocus[] {
+  return ['settings', 'plugins', 'skills']
 }
 
 function activePresetName(state: RunFlowState): string | undefined {
   return state.presets[state.settingsCursor]?.name
 }
 
-function activePreset(state: RunFlowState): PresetMeta | undefined {
+function activePreset(state: RunFlowState): BasePresetMeta | undefined {
   return state.presets[state.settingsCursor]
 }
 
@@ -132,7 +130,7 @@ function moveFocus(state: RunFlowState, direction: -1 | 1): RunFlowState {
 
 export function shouldShowDerivedHint(state: RunFlowState): boolean {
   const preset = activePreset(state)
-  if (!preset || preset.type !== 'base') return false
+  if (!preset) return false
   return Boolean(state.draftsByPreset[preset.name])
 }
 
@@ -146,14 +144,12 @@ export function reduceRunFlow(state: RunFlowState, event: RunFlowEvent): RunFlow
   if (event.type === 'up') {
     if (state.focus === 'plugins') return { ...state, pluginCursor: clamp(state.pluginCursor - 1, state.plugins.length) }
     if (state.focus === 'skills') return { ...state, skillCursor: clamp(state.skillCursor - 1, state.skills.length) }
-    if (state.focus === 'derived') return { ...state, derivedCursor: clamp(state.derivedCursor - 1, state.presets.length) }
     return syncResolvedState({ ...state, settingsCursor: clamp(state.settingsCursor - 1, state.presets.length) })
   }
 
   if (event.type === 'down') {
     if (state.focus === 'plugins') return { ...state, pluginCursor: clamp(state.pluginCursor + 1, state.plugins.length) }
     if (state.focus === 'skills') return { ...state, skillCursor: clamp(state.skillCursor + 1, state.skills.length) }
-    if (state.focus === 'derived') return { ...state, derivedCursor: clamp(state.derivedCursor + 1, state.presets.length) }
     return syncResolvedState({ ...state, settingsCursor: clamp(state.settingsCursor + 1, state.presets.length) })
   }
 

@@ -1,0 +1,1 @@
+Write user-facing content (explanations, plans, docs, etc.) in Simplified Chinese. Use English only for terms where it reads more naturally (product names, APIs, identifiers). Keep code and identifiers as-is in the codebase.

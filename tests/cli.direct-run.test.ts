@@ -190,8 +190,8 @@ describe('cli direct run', () => {
     discoverMcpStatesMock.mockReset()
     discoverMcpStatesMock.mockResolvedValue([])
 
-    readIndexMock.mockResolvedValue({ version: 1, presets: { work: basePreset } })
     listPresetsMock.mockResolvedValue([basePreset])
+    readIndexMock.mockResolvedValue({ version: 1, presets: { work: basePreset } })
     getPresetPathMock.mockResolvedValue(selectedSettings.sourcePath)
     readPresetSettingsMock.mockResolvedValue(selectedSettings.settings)
     listLaunchPresetsMock.mockResolvedValue([
@@ -290,8 +290,8 @@ describe('cli direct run', () => {
   })
 
   it('throws when the requested global preset does not exist', async () => {
-    readIndexMock.mockResolvedValue({ version: 1, presets: {} })
     listPresetsMock.mockResolvedValue([])
+    readIndexMock.mockResolvedValue({ version: 1, presets: {} })
 
     const { main } = await import('../src/cli.js')
     await expect(main(['node', 'cli', '-g', 'missing'])).rejects.toMatchObject({

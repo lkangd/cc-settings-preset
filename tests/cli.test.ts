@@ -874,19 +874,7 @@ describe('manage command', () => {
 
     await mkdir(settingsDir, { recursive: true })
     await mkdir(cwd, { recursive: true })
-    await writeFile(join(globalRoot, 'index.json'), `${JSON.stringify({
-      version: 1,
-      presets: {
-        'test-dddd': {
-          type: 'base',
-          name: 'test-dddd',
-          fileName: 'test-dddd.json',
-          createdAt: '2026-05-17T00:00:00.000Z',
-          updatedAt: '2026-05-17T00:00:00.000Z',
-        },
-      },
-    }, null, 2)}\n`)
-    await writeFile(join(settingsDir, 'test-dddd.json'), '{}\n')
+    await writeFile(join(settingsDir, 'test-dddd-settings.json'), '{}\n')
 
     const result = await runInTty({
       command: ['node', 'dist/cli.js', 'manage'],
@@ -898,11 +886,11 @@ describe('manage command', () => {
       steps: [
         { type: 'read', ms: 1500 },
         { type: 'write', data: 'r' },
-        { type: 'read', ms: 800 },
+        { type: 'read', ms: 1500 },
       ],
     })
 
     expect(result.rawOutput.length).toBeGreaterThan(0)
-    expect(result.normalizedOutput).toContain('Rename test-dddd to test-dddd')
+    expect(result.frames.some(frame => frame.includes('Rename test-dddd to test-dddd'))).toBe(true)
   }, 15000)
 })

@@ -150,27 +150,31 @@ describe('run flow', () => {
     expect(movedToB.plugins.find(plugin => plugin.name === 'zeta')?.enabled).toBe(false)
   })
 
-  it('only shows the derived hint for a base preset with an active draft', () => {
+  it('only shows the draft hint when the active preset has an unsaved draft', () => {
     const state = createRunFlowState({
       presets: [
         { type: 'base', name: 'base', fileName: 'base.json', createdAt: '2026-05-17T00:00:00.000Z', updatedAt: '2026-05-17T00:00:00.000Z' },
-        { type: 'derived', name: 'base-work', parentName: 'base', fileName: 'base-work.json', createdAt: '2026-05-17T00:00:00.000Z', updatedAt: '2026-05-17T00:00:00.000Z' },
+        { type: 'base', name: 'work', fileName: 'work.json', createdAt: '2026-05-17T00:00:00.000Z', updatedAt: '2026-05-17T00:00:00.000Z' },
       ],
       pluginsByPreset: {
         base: [{ name: 'alpha', enabled: true, source: 'user' }],
-        'base-work': [{ name: 'alpha', enabled: false, source: 'project' }],
+        work: [{ name: 'alpha', enabled: false, source: 'project' }],
       },
       skillsByPreset: {
         base: [{ name: 'personal', enabled: true, source: 'user', toggleable: true }],
-        'base-work': [{ name: 'personal', enabled: false, source: 'user', toggleable: true }],
+        work: [{ name: 'personal', enabled: false, source: 'user', toggleable: true }],
       },
     })
 
-    const selectedDerived = reduceRunFlow(state, { type: 'down' })
-    const focusedPlugins = reduceRunFlow({ ...selectedDerived, focus: 'settings' }, { type: 'focus-right' })
-    const editedDerived = reduceRunFlow(focusedPlugins, { type: 'toggle-current' })
+    expect(shouldShowDerivedHint(state)).toBe(false)
 
-    expect(shouldShowDerivedHint(editedDerived)).toBe(false)
+    const focusedPlugins = reduceRunFlow(state, { type: 'focus-right' })
+    const editedBase = reduceRunFlow(focusedPlugins, { type: 'toggle-current' })
+    const switchedToWork = reduceRunFlow(reduceRunFlow({ ...editedBase, focus: 'settings' }, { type: 'down' }), { type: 'focus-right' })
+    const editedWork = reduceRunFlow(switchedToWork, { type: 'toggle-current' })
+
+    expect(shouldShowDerivedHint(editedBase)).toBe(true)
+    expect(shouldShowDerivedHint(editedWork)).toBe(true)
   })
 
   it('uses preset overrides for enabled state without losing plugin ownership source', () => {

@@ -2,15 +2,19 @@ import { promises as fs } from 'node:fs'
 
 import { CliError } from '../core/errors.js'
 import { pathExists, readJsonFile, writeJsonFile } from '../core/json.js'
-import { buildSettingsFileName, derivePresetNameFromSettingsPath, normalizePresetName, resolvePresetIndexKey } from '../core/name.js'
-import { resolveIndexPath, resolvePresetPath } from '../core/paths.js'
 import {
-  createEmptyIndex,
-  indexSchema,
+  buildSettingsFileName,
+  derivePresetNameFromSettingsPath,
+  normalizePresetName,
+  parseSettingsFileName,
+  resolvePresetIndexKey,
+} from '../core/name.js'
+import { resolvePresetMetadataPath, resolvePresetPath, resolveSettingsDir } from '../core/paths.js'
+import {
   parseSettings,
+  presetIndexSchema,
   type BasePresetMeta,
   type PresetIndex,
-  type PresetMeta,
   type Settings,
 } from '../core/schema.js'
 
@@ -23,151 +27,274 @@ export type ClaudeOfficialPresetItem = {
   temporary: true
 }
 
-function nowIso(): string {
-  return new Date().toISOString()
+type PresetMetadataState = {
+  version: 1
+  presets: Record<string, BasePresetMeta>
+}
+
+type PresetLookup = {
+  list: BasePresetMeta[]
+  byName: Record<string, BasePresetMeta>
+}
+
+function nowIso(date = new Date()): string {
+  return date.toISOString()
+}
+
+function createEmptyMetadataState(): PresetMetadataState {
+  return { version: 1, presets: {} }
+}
+
+function sanitizePresetMeta(meta: BasePresetMeta): BasePresetMeta {
+  return {
+    type: 'base',
+    name: meta.name,
+    fileName: meta.fileName,
+    createdAt: meta.createdAt,
+    updatedAt: meta.updatedAt,
+  }
+}
+
+function buildLookup(presets: BasePresetMeta[]): PresetLookup {
+  const list = [...presets].sort((a, b) => a.name.localeCompare(b.name))
+  return {
+    list,
+    byName: Object.fromEntries(list.map(preset => [preset.name, preset])),
+  }
 }
 
 export function createPresetService(globalRoot: string) {
-  const indexPath = resolveIndexPath(globalRoot)
+  const settingsDir = resolveSettingsDir(globalRoot)
+  const metadataPath = resolvePresetMetadataPath(globalRoot)
+
+  async function readStoredMetadata(): Promise<PresetMetadataState> {
+    if (!(await pathExists(metadataPath))) return createEmptyMetadataState()
+
+    const raw = await readJsonFile(metadataPath)
+    const parsed = presetIndexSchema.safeParse(raw)
+    if (!parsed.success) return createEmptyMetadataState()
+
+    const version = parsed.data.version
+    const rawPresets = parsed.data.presets
+
+    const presets = Object.fromEntries(
+      Object.entries(rawPresets).flatMap(([key, value]) => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return []
+        const preset = value as Partial<BasePresetMeta>
+        if (preset.type !== 'base') return []
+        if (typeof preset.name !== 'string' || typeof preset.fileName !== 'string') return []
+        if (typeof preset.createdAt !== 'string' || typeof preset.updatedAt !== 'string') return []
+        return [[key, sanitizePresetMeta(preset as BasePresetMeta)]]
+      }),
+    )
+
+    return { version, presets }
+  }
+
+  async function writeStoredMetadata(state: PresetMetadataState): Promise<void> {
+    await writeJsonFile(metadataPath, {
+      version: 1,
+      presets: Object.fromEntries(
+        Object.entries(state.presets).map(([key, meta]) => [key, sanitizePresetMeta(meta)]),
+      ),
+    })
+  }
+
+  async function readPresetLookup(): Promise<PresetLookup> {
+    let entries: Array<{ name: string; isFile(): boolean; isSymbolicLink(): boolean }>
+    try {
+      entries = await fs.readdir(settingsDir, { withFileTypes: true, encoding: 'utf8' })
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return buildLookup([])
+      throw error
+    }
+
+    const stored = await readStoredMetadata()
+    const discovered: BasePresetMeta[] = []
+    let metadataChanged = false
+    const liveNames = new Set<string>()
+
+    for (const entry of entries) {
+      if (!entry.isFile() && !entry.isSymbolicLink()) continue
+      const parsed = parseSettingsFileName(entry.name)
+      if (!parsed) continue
+
+      const filePath = resolvePresetPath(globalRoot, entry.name)
+      let stats: Awaited<ReturnType<typeof fs.stat>>
+      try {
+        stats = await fs.stat(filePath)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue
+        throw error
+      }
+
+      const existing = stored.presets[parsed.name]
+      const updatedAt = nowIso(stats.mtime)
+      const meta: BasePresetMeta = sanitizePresetMeta({
+        type: 'base',
+        name: parsed.name,
+        fileName: entry.name,
+        createdAt: existing?.fileName === entry.name ? existing.createdAt : updatedAt,
+        updatedAt: existing?.fileName === entry.name ? existing.updatedAt : updatedAt,
+      })
+
+      if (!existing || existing.fileName !== meta.fileName) {
+        stored.presets[meta.name] = meta
+        metadataChanged = true
+      }
+
+      liveNames.add(meta.name)
+      discovered.push(stored.presets[meta.name] ?? meta)
+    }
+
+    for (const name of Object.keys(stored.presets)) {
+      if (liveNames.has(name)) continue
+      delete stored.presets[name]
+      metadataChanged = true
+    }
+
+    if (metadataChanged) {
+      await writeStoredMetadata(stored)
+    }
+
+    return buildLookup(discovered.map(meta => stored.presets[meta.name] ?? meta))
+  }
 
   async function readIndex(): Promise<PresetIndex> {
-    if (!(await pathExists(indexPath))) return createEmptyIndex()
-    return indexSchema.parse(await readJsonFile(indexPath))
+    const lookup = await readPresetLookup()
+    return {
+      version: 1,
+      presets: lookup.byName,
+    }
   }
 
-  async function writeIndex(index: PresetIndex): Promise<void> {
-    await writeJsonFile(indexPath, indexSchema.parse(index))
+  function getPresetPath(fileName: string): string {
+    return resolvePresetPath(globalRoot, fileName)
   }
 
-  function getPresetPath(meta: PresetMeta): string {
-    return resolvePresetPath(globalRoot, meta.fileName)
+  async function readPresetMeta(nameInput: string): Promise<BasePresetMeta | undefined> {
+    const lookup = await readPresetLookup()
+    const name = resolvePresetIndexKey(lookup.byName, nameInput)
+    return name ? lookup.byName[name] : undefined
   }
 
-  async function readPresetSettings(name: string): Promise<Settings> {
-    const index = await readIndex()
-    const meta = index.presets[name]
-    if (!meta) throw new CliError(`Preset not found: ${name}`)
-    return parseSettings(await readJsonFile(getPresetPath(meta)))
+  async function writeBasePresetMetadata(meta: BasePresetMeta): Promise<BasePresetMeta> {
+    const state = await readStoredMetadata()
+    state.presets[meta.name] = sanitizePresetMeta(meta)
+    await writeStoredMetadata(state)
+    return state.presets[meta.name]!
   }
 
-  async function writePresetSettings(meta: PresetMeta, settings: Settings): Promise<void> {
-    await writeJsonFile(getPresetPath(meta), parseSettings(settings))
+  async function deleteBasePresetMetadata(nameInput: string): Promise<void> {
+    const state = await readStoredMetadata()
+    const name = resolvePresetIndexKey(state.presets, nameInput)
+    if (!name) return
+    delete state.presets[name]
+    await writeStoredMetadata(state)
+  }
+
+  async function writePresetSettings(fileName: string, settings: Settings): Promise<void> {
+    await writeJsonFile(getPresetPath(fileName), parseSettings(settings))
+  }
+
+  async function updateBasePreset(
+    nameInput: string,
+    settingsInput: unknown,
+    notFoundMessage: (name: string) => string,
+  ): Promise<BasePresetMeta> {
+    const settings = parseSettings(settingsInput)
+    const existing = await readPresetMeta(nameInput)
+    if (!existing) throw new CliError(notFoundMessage(nameInput))
+
+    await writePresetSettings(existing.fileName, settings)
+    const updated = sanitizePresetMeta({ ...existing, updatedAt: nowIso() })
+    return writeBasePresetMetadata(updated)
   }
 
   const service = {
-    async getPresetPath(name: string): Promise<string> {
-      const index = await readIndex()
-      const meta = index.presets[name]
-      if (!meta) throw new CliError(`Preset not found: ${name}`)
-      return getPresetPath(meta)
+    async getPresetPath(nameInput: string): Promise<string> {
+      const meta = await readPresetMeta(nameInput)
+      if (!meta) throw new CliError(`Preset not found: ${nameInput}`)
+      return getPresetPath(meta.fileName)
     },
 
     async readIndex(): Promise<PresetIndex> {
       return readIndex()
     },
 
-    async listPresets(): Promise<PresetMeta[]> {
-      const index = await readIndex()
-      return Object.values(index.presets)
-        .filter((preset): preset is BasePresetMeta => preset.type === 'base')
-        .sort((a, b) => a.name.localeCompare(b.name))
+    async listPresets(): Promise<BasePresetMeta[]> {
+      return (await readPresetLookup()).list
     },
 
-    async readPresetSettings(name: string): Promise<Settings> {
-      return readPresetSettings(name)
+    async readPresetSettings(nameInput: string): Promise<Settings> {
+      const meta = await readPresetMeta(nameInput)
+      if (!meta) throw new CliError(`Preset not found: ${nameInput}`)
+      return parseSettings(await readJsonFile(getPresetPath(meta.fileName)))
     },
 
     async createBasePreset(nameInput: string, settingsInput: unknown): Promise<BasePresetMeta> {
       const settings = parseSettings(settingsInput)
       const name = normalizePresetName(nameInput)
-      const index = await readIndex()
-      if (index.presets[name]) throw new CliError(`Preset already exists: ${name}`, 1, 'preset_already_exists')
+      if (await readPresetMeta(name)) throw new CliError(`Preset already exists: ${name}`, 1, 'preset_already_exists')
 
       const timestamp = nowIso()
-      const meta: BasePresetMeta = {
+      const meta = await writeBasePresetMetadata({
         type: 'base',
         name,
         fileName: buildSettingsFileName(name),
         createdAt: timestamp,
         updatedAt: timestamp,
-      }
+      })
 
-      index.presets[name] = meta
-      await writePresetSettings(meta, settings)
-      await writeIndex(index)
+      await writePresetSettings(meta.fileName, settings)
       return meta
     },
 
     async writeBasePreset(nameInput: string, settingsInput: unknown): Promise<BasePresetMeta> {
-      const settings = parseSettings(settingsInput)
-      const index = await readIndex()
-      const name = resolvePresetIndexKey(index.presets, nameInput)
-      if (!name) throw new CliError(`Base preset not found: ${nameInput}`)
-      const existing = index.presets[name]
-      if (!existing || existing.type !== 'base') throw new CliError(`Base preset not found: ${nameInput}`)
-
-      const updated: BasePresetMeta = { ...existing, updatedAt: nowIso() }
-      index.presets[name] = updated
-      await writePresetSettings(updated, settings)
-      await writeIndex(index)
-      return updated
+      return updateBasePreset(nameInput, settingsInput, name => `Base preset not found: ${name}`)
     },
 
-    async writePresetSettingsByName(nameInput: string, settingsInput: unknown): Promise<PresetMeta> {
-      const settings = parseSettings(settingsInput)
-      const index = await readIndex()
-      const name = resolvePresetIndexKey(index.presets, nameInput)
-      if (!name) throw new CliError(`Preset not found: ${nameInput}`)
-      const existing = index.presets[name]
+    async writePresetSettingsByName(nameInput: string, settingsInput: unknown): Promise<BasePresetMeta> {
+      return updateBasePreset(nameInput, settingsInput, name => `Preset not found: ${name}`)
+    },
+
+    async renamePreset(nameInput: string, newNameInput: string): Promise<BasePresetMeta> {
+      const requestedName = normalizePresetName(newNameInput, { preserveCase: true })
+      const existing = await readPresetMeta(nameInput)
       if (!existing) throw new CliError(`Preset not found: ${nameInput}`)
 
-      const updated: PresetMeta = { ...existing, updatedAt: nowIso() }
-      index.presets[name] = updated
-      await writePresetSettings(updated, settings)
-      await writeIndex(index)
-      return updated
-    },
-
-
-    async renamePreset(nameInput: string, newNameInput: string): Promise<PresetMeta> {
-      const requestedName = normalizePresetName(newNameInput, { preserveCase: true })
-      const index = await readIndex()
-      const name = resolvePresetIndexKey(index.presets, nameInput)
-      if (!name) throw new CliError(`Preset not found: ${nameInput}`)
-      const meta = index.presets[name]
-      if (!meta) throw new CliError(`Preset not found: ${nameInput}`)
-
-      if (meta.type !== 'base') throw new CliError(`Base preset not found: ${nameInput}`)
-      const newName = requestedName
-      if (newName === name) {
-        return { ...meta, updatedAt: nowIso() }
+      if (requestedName === existing.name) {
+        return existing
       }
-      if (index.presets[newName]) throw new CliError(`Preset already exists: ${newName}`, 1, 'preset_already_exists')
 
-      const updated: PresetMeta = { ...meta, name: newName, fileName: buildSettingsFileName(newName, { preserveCase: true }), updatedAt: nowIso() }
+      const conflicting = await readPresetMeta(requestedName)
+      if (conflicting && conflicting.name !== existing.name) {
+        throw new CliError(`Preset already exists: ${requestedName}`, 1, 'preset_already_exists')
+      }
 
-      await fs.rename(getPresetPath(meta), resolvePresetPath(globalRoot, updated.fileName))
-      delete index.presets[name]
-      index.presets[newName] = updated
+      const updated = sanitizePresetMeta({
+        ...existing,
+        name: requestedName,
+        fileName: buildSettingsFileName(requestedName, { preserveCase: true }),
+        updatedAt: nowIso(),
+      })
 
-      await writeIndex(index)
-      return updated
+      await fs.rename(getPresetPath(existing.fileName), getPresetPath(updated.fileName))
+      await deleteBasePresetMetadata(existing.name)
+      return writeBasePresetMetadata(updated)
     },
 
     async deletePreset(nameInput: string): Promise<void> {
-      const index = await readIndex()
-      const name = resolvePresetIndexKey(index.presets, nameInput)
-      if (!name) return
-      const meta = index.presets[name]
-      if (!meta) return
+      const existing = await readPresetMeta(nameInput)
+      if (!existing) return
 
       try {
-        await fs.unlink(getPresetPath(meta))
+        await fs.unlink(getPresetPath(existing.fileName))
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
       }
-      delete index.presets[name]
-      await writeIndex(index)
+
+      await deleteBasePresetMetadata(existing.name)
     },
 
     async importExistingSettingsFile(filePath: string, nameInput?: string): Promise<BasePresetMeta> {

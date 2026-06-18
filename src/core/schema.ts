@@ -31,15 +31,6 @@ const basePresetMetaSchema = z.object({
   updatedAt: timestampSchema,
 })
 
-const derivedPresetMetaSchema = z.object({
-  type: z.literal('derived'),
-  name: z.string().min(1),
-  parentName: z.string().min(1),
-  fileName: z.string().min(1),
-  createdAt: timestampSchema,
-  updatedAt: timestampSchema,
-})
-
 const launchPresetMetaSchema = z.object({
   name: z.string().min(1),
   fileName: z.string().min(1),
@@ -52,11 +43,9 @@ const lastUsedBasePresetSchema = z.object({
   updatedAt: timestampSchema,
 })
 
-const presetMetaSchema = z.discriminatedUnion('type', [basePresetMetaSchema, derivedPresetMetaSchema])
-
-export const indexSchema = z.object({
+export const presetIndexSchema = z.object({
   version: z.literal(1),
-  presets: z.record(z.string(), presetMetaSchema),
+  presets: z.record(z.string(), basePresetMetaSchema),
 })
 
 export const launchPresetIndexSchema = z.object({
@@ -106,10 +95,9 @@ export type McpPolicyEntry = z.infer<typeof mcpPolicyEntrySchema>
 export type Settings = z.infer<typeof settingsSchema>
 export type LaunchPresetSettings = z.infer<typeof launchPresetSettingsSchema>
 export type SkillOverrideValue = z.infer<typeof skillOverrideValueSchema>
-export type PresetMeta = z.infer<typeof presetMetaSchema>
 export type BasePresetMeta = z.infer<typeof basePresetMetaSchema>
-export type DerivedPresetMeta = z.infer<typeof derivedPresetMetaSchema>
-export type PresetIndex = z.infer<typeof indexSchema>
+export type PresetMeta = BasePresetMeta
+export type PresetIndex = z.infer<typeof presetIndexSchema>
 export type LaunchPresetMeta = z.infer<typeof launchPresetMetaSchema>
 export type LaunchPresetIndex = z.infer<typeof launchPresetIndexSchema>
 export type LastUsedLaunchPreset = z.infer<typeof lastUsedLaunchPresetSchema>
@@ -131,10 +119,6 @@ export function parseLaunchPresetSettings(value: unknown): LaunchPresetSettings 
 
 export function parseCcspConfig(value: unknown): CcspConfig {
   return ccspConfigSchema.parse(value ?? {})
-}
-
-export function createEmptyIndex(): PresetIndex {
-  return { version: 1, presets: {} }
 }
 
 export function createEmptyLaunchPresetIndex(): LaunchPresetIndex {

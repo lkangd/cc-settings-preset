@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildDerivedFileName,
   buildLaunchPresetFileName,
   buildSettingsFileName,
   buildTempSettingsFileName,
@@ -42,15 +41,15 @@ describe('derivePresetNameFromSettingsPath', () => {
 })
 
 describe('file names', () => {
-  it('builds base and derived settings file names', () => {
+  it('builds base settings file names', () => {
     expect(buildSettingsFileName('base')).toBe('base-settings.json')
-    expect(buildDerivedFileName('base', 'work')).toBe('base-work-settings.json')
   })
 
   it('parses settings file names', () => {
     expect(parseSettingsFileName('base-settings.json')).toEqual({ name: 'base' })
     expect(parseSettingsFileName('base-work-settings.json')).toEqual({ name: 'base-work' })
-    expect(parseSettingsFileName('notes.json')).toBeUndefined()
+    expect(parseSettingsFileName('glm-mix.json')).toEqual({ name: 'glm-mix' })
+    expect(parseSettingsFileName('.DS_Store')).toBeUndefined()
   })
 })
 

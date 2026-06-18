@@ -27,12 +27,12 @@ export function resolveGlobalRoot(homeDir = process.env.HOME ?? process.cwd()): 
   return join(homeDir, '.ccsp')
 }
 
-function resolveSettingsDir(globalRoot: string): string {
+export function resolveSettingsDir(globalRoot: string): string {
   return join(globalRoot, 'settings')
 }
 
-export function resolveIndexPath(globalRoot: string): string {
-  return join(globalRoot, 'index.json')
+export function resolvePresetMetadataPath(globalRoot: string): string {
+  return join(resolveSettingsDir(globalRoot), '.ccsp-presets.json')
 }
 
 export function resolvePresetPath(globalRoot: string, fileName: string): string {

@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   ccspConfigSchema,
   createEmptyLaunchPresetIndex,
-  indexSchema,
   lastSettingsSchema,
   parseCcspConfig,
   parseLaunchPresetSettings,
   parseSettings,
+  presetIndexSchema,
   sessionIndexSchema,
   settingsSchema,
 } from '../../src/core/schema.js'
@@ -149,9 +149,9 @@ describe('sessionIndexSchema', () => {
   })
 })
 
-describe('indexSchema', () => {
-  it('accepts first-level and derived preset metadata', () => {
-    const parsed = indexSchema.parse({
+describe('presetIndexSchema', () => {
+  it('accepts first-level preset metadata', () => {
+    const parsed = presetIndexSchema.parse({
       version: 1,
       presets: {
         base: {
@@ -161,18 +161,9 @@ describe('indexSchema', () => {
           createdAt: '2026-05-17T00:00:00.000Z',
           updatedAt: '2026-05-17T00:00:00.000Z',
         },
-        'base-work': {
-          type: 'derived',
-          name: 'base-work',
-          parentName: 'base',
-          fileName: 'base-work-settings.json',
-          createdAt: '2026-05-17T00:00:00.000Z',
-          updatedAt: '2026-05-17T00:00:00.000Z',
-        },
       },
     })
 
     expect(parsed.presets.base?.type).toBe('base')
-    expect(parsed.presets['base-work']?.type).toBe('derived')
   })
 })

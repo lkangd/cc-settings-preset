@@ -54,10 +54,6 @@ export function buildSettingsFileName(name: string, options?: Pick<NormalizePres
   return `${normalizePresetName(name, options)}-settings.json`
 }
 
-export function buildDerivedFileName(parentName: string, derivedName: string): string {
-  return `${normalizePresetName(parentName)}-${normalizePresetName(derivedName)}-settings.json`
-}
-
 export function buildLaunchPresetFileName(name: string, options?: Pick<NormalizePresetNameOptions, 'preserveCase'>): string {
   return `${normalizePresetName(name, options)}-launch.json`
 }
@@ -77,7 +73,11 @@ export function parseTempSettingsStem(fileName: string): string | undefined {
 }
 
 export function parseSettingsFileName(fileName: string): { name: string } | undefined {
-  if (!fileName.endsWith('-settings.json')) return undefined
-  const name = fileName.slice(0, -'-settings.json'.length)
+  if (fileName.startsWith('.') || !fileName.endsWith('.json')) return undefined
+
+  const name = fileName.endsWith('-settings.json')
+    ? fileName.slice(0, -'-settings.json'.length)
+    : fileName.slice(0, -'.json'.length)
+
   return name ? { name } : undefined
 }

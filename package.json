@@ -54,7 +54,7 @@
     "postbuild": "chmod +x dist/cli.js",
     "prepack": "pnpm run build",
     "dev": "tsx src/cli.ts",
-    "test": "vitest run",
+    "test": "vitest run --reporter=dot --silent=passed-only",
     "check": "pnpm run typecheck && pnpm run build && pnpm run test",
     "test:coverage": "vitest run --coverage"
   },
