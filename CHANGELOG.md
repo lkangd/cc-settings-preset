@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.4 (2026-06-21)
+
+### Code Refactoring
+* extract project launch browser controller into reusable hook
+
 ## 1.1.3 (2026-06-18)
 
 ### Code Refactoring
