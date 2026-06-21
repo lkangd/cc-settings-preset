@@ -1,22 +1,14 @@
 import { useState } from 'react'
-import { Box, Text, useApp, useInput, useStdout } from 'ink'
+import { Box, Text, useApp, useInput } from 'ink'
 import type { DisableRemovalMark } from '../flows/project-launch-flow.js'
 import {
-  annotateToggleItems,
-  createProjectLaunchFlowState,
   focusProjectLaunchPreset,
-  formatProjectLaunchSortMode,
-  getActiveProjectLaunchItem,
-  getActiveProjectLaunchState,
-  getPendingDisableRemovals,
-  reduceProjectLaunchFlow,
-  shouldBubbleProjectLaunchEscape,
   type ProjectLaunchFlowState,
 } from '../flows/project-launch-flow.js'
 import type { DisableLockSource } from '../services/disable-lock-service.js'
 import { ConfirmEnableUnlock } from './components/confirm-enable-unlock.js'
 import { TextInput } from './components/text-input.js'
-import { ToggleColumn } from './components/toggle-column.js'
+import { ProjectLaunchColumnsView } from './components/project-launch-columns-view.js'
 import type { ProjectLaunchAppProps, ProjectLaunchResult } from './project-launch-app.js'
 import type { ProjectLaunchToggleState } from '../flows/project-launch-flow.js'
 import { buildLaunchPresetFileName, normalizePresetName } from '../core/name.js'
@@ -29,7 +21,7 @@ export type ProjectManageResult =
   | { type: 'delete'; presetName: string }
   | { type: 'refresh' }
 
-import { enabledToggleCount } from '../flows/toggle-utils.js'
+import { useProjectLaunchBrowserController } from './use-project-launch-browser-controller.js'
 
 function syncProjectPresetRename(state: ProjectLaunchFlowState, fromName: string, toName: string): ProjectLaunchFlowState {
   const presetItems = state.presetItems.map(item => item.type === 'preset' && item.name === fromName ? { ...item, name: toName, preset: { ...item.preset, name: toName } } : item)
@@ -69,25 +61,17 @@ type Props = Omit<ProjectLaunchAppProps, 'onSubmit'> & {
 
 export function ProjectManageApp({ presets, detected, statesByPreset, disableLockSources = [], lastUsedName, onSubmit, onSaveSubmit, onCreateSubmit, onRenameSubmit }: Props) {
   const { exit } = useApp()
-  const { stdout } = useStdout()
-  const fallbackColumns = 120
-  const innerWidth = Math.max(90, stdout.columns ?? fallbackColumns)
-  const gapWidth = 3
-  const contentWidth = innerWidth - gapWidth
-  const presetWidth = Math.max(22, Math.floor(contentWidth * 0.22))
-  const detailWidth = Math.max(24, Math.floor((contentWidth - presetWidth) / 3))
-  const mcpWidth = contentWidth - presetWidth - detailWidth - detailWidth
-  const [state, setState] = useState(() => createProjectLaunchFlowState({
+  const controller = useProjectLaunchBrowserController({
     presets,
     detected,
     statesByPreset,
     disableLockSources,
     ...(lastUsedName ? { lastUsedName } : {}),
-  }))
-  function disableRemovalsFromState() {
-    const removals = getPendingDisableRemovals(state)
-    return removals.length > 0 ? { disableRemovals: removals } : {}
-  }
+    moveRightWithL: false,
+    title: 'Manage project launch presets',
+    help: '←/→ switch column · h/j/k navigate · t sort · space toggle · enter save · r rename · d delete · l launch · esc presets/quit · q quit',
+  })
+  const { state, activeItem, activeToggleState, columnsProps } = controller
   const [mode, setMode] = useState<'browse' | 'rename' | 'delete'>('browse')
   const [saveMode, setSaveMode] = useState<SaveMode>('none')
   const [message, setMessage] = useState<{ text: string; color: 'yellow' | 'red' } | null>(null)
@@ -96,49 +80,34 @@ export function ProjectManageApp({ presets, detected, statesByPreset, disableLoc
 
   useInput((input, key) => {
     if (mode !== 'browse' || saveMode !== 'none' || state.pendingEnableUnlock) return
-    if (input !== 't' && message?.text.startsWith('Sorted by ')) setMessage(null)
     if (input === 'q') {
       exit()
       return
     }
-    if (key.leftArrow || input === 'h') setState(current => reduceProjectLaunchFlow(current, { type: 'focus-left' }))
-    if (key.rightArrow) setState(current => reduceProjectLaunchFlow(current, { type: 'focus-right' }))
-    if (key.upArrow || input === 'k') setState(current => reduceProjectLaunchFlow(current, { type: 'up' }))
-    if (key.downArrow || input === 'j') setState(current => reduceProjectLaunchFlow(current, { type: 'down' }))
-    if (key.escape) {
-      if (shouldBubbleProjectLaunchEscape(state)) {
-        exit()
-        return
-      }
-      setState(current => reduceProjectLaunchFlow(current, { type: 'escape' }))
+
+    const browserResult = controller.dispatchBrowserKey(input, key)
+    if (browserResult.bubbledEscape) {
+      exit()
       return
     }
-    if (input === 't') {
-      const nextState = reduceProjectLaunchFlow(state, { type: 'toggle-sort-mode' })
-      setState(nextState)
-      setMessage({ text: formatProjectLaunchSortMode(nextState.sortMode), color: 'yellow' })
+    if (input === 't' && browserResult.handled) setMessage(null)
+    if (browserResult.toggledDetected) {
+      setMessage({ text: 'Press enter to create a new preset from Detected', color: 'yellow' })
     }
-    if (input === ' ') {
-      const item = getActiveProjectLaunchItem(state)
-      setState(current => reduceProjectLaunchFlow(current, { type: 'toggle-current' }))
-      if (item?.type === 'detected') {
-        setMessage({ text: 'Press enter to create a new preset from Detected', color: 'yellow' })
-      }
-    }
+    if (browserResult.handled) return
+
     if (input === 'r') {
-      const item = getActiveProjectLaunchItem(state)
-      if (item?.type !== 'preset') {
+      if (activeItem?.type !== 'preset') {
         setMessage({ text: 'Detected cannot be renamed', color: 'yellow' })
         return
       }
       setRenameError(null)
-      setNewName(item.name)
+      setNewName(activeItem.name)
       setMode('rename')
       return
     }
     if (input === 'd') {
-      const item = getActiveProjectLaunchItem(state)
-      if (item?.type !== 'preset') {
+      if (activeItem?.type !== 'preset') {
         setMessage({ text: 'Detected cannot be deleted', color: 'yellow' })
         return
       }
@@ -146,23 +115,21 @@ export function ProjectManageApp({ presets, detected, statesByPreset, disableLoc
       return
     }
     if (input === 'l' && !key.ctrl && !key.meta) {
-      const item = getActiveProjectLaunchItem(state)
-      const toggles = getActiveProjectLaunchState(state)
       if (state.dirty) {
-        if (item?.type === 'preset') {
+        if (activeItem?.type === 'preset') {
           if (onSaveSubmit) {
             void (async () => {
-              const error = await onSaveSubmit(item.name, toggles)
+              const error = await onSaveSubmit(activeItem.name, activeToggleState)
               if (error) {
                 setMessage({ text: error, color: 'red' })
                 return
               }
-              onSubmit({ type: 'launch', presetName: item.name, toggles, ...disableRemovalsFromState() })
+              onSubmit({ type: 'launch', presetName: activeItem.name, toggles: activeToggleState, ...controller.disableRemovalsProps() })
               exit()
             })()
             return
           }
-          onSubmit({ type: 'launch', presetName: item.name, toggles, ...disableRemovalsFromState() })
+          onSubmit({ type: 'launch', presetName: activeItem.name, toggles: activeToggleState, ...controller.disableRemovalsProps() })
           exit()
           return
         }
@@ -173,21 +140,19 @@ export function ProjectManageApp({ presets, detected, statesByPreset, disableLoc
       }
       onSubmit({
         type: 'launch',
-        toggles,
-        ...disableRemovalsFromState(),
-        ...(item?.type === 'preset' ? { presetName: item.name } : {}),
+        toggles: activeToggleState,
+        ...controller.disableRemovalsProps(),
+        ...(activeItem?.type === 'preset' ? { presetName: activeItem.name } : {}),
       })
       exit()
       return
     }
     if (key.return) {
       if (!state.dirty) return
-      const item = getActiveProjectLaunchItem(state)
-      const toggles = getActiveProjectLaunchState(state)
-      if (item?.type === 'preset') {
+      if (activeItem?.type === 'preset') {
         if (onSaveSubmit) {
           void (async () => {
-            const error = await onSaveSubmit(item.name, toggles)
+            const error = await onSaveSubmit(activeItem.name, activeToggleState)
             if (error) {
               setMessage({ text: error, color: 'red' })
               return
@@ -196,7 +161,7 @@ export function ProjectManageApp({ presets, detected, statesByPreset, disableLoc
           })()
           return
         }
-        onSubmit({ type: 'save', presetName: item.name, toggles, ...disableRemovalsFromState() })
+        onSubmit({ type: 'save', presetName: activeItem.name, toggles: activeToggleState, ...controller.disableRemovalsProps() })
         exit()
         return
       }
@@ -206,12 +171,6 @@ export function ProjectManageApp({ presets, detected, statesByPreset, disableLoc
     }
   })
 
-  const activeItem = getActiveProjectLaunchItem(state)
-  const detectedBaseline = state.statesByPreset.Detected ?? detected
-  const pluginItems = annotateToggleItems(state, detectedBaseline, 'plugins', state.plugins)
-  const skillItems = annotateToggleItems(state, detectedBaseline, 'skills', state.skills)
-  const mcpItems = annotateToggleItems(state, detectedBaseline, 'mcps', state.mcps)
-
   if (state.pendingEnableUnlock) {
     return (
       <Box flexDirection="column">
@@ -219,8 +178,8 @@ export function ProjectManageApp({ presets, detected, statesByPreset, disableLoc
           itemName={state.pendingEnableUnlock.name}
           {...(state.pendingEnableUnlock.filePath ? { filePath: state.pendingEnableUnlock.filePath } : {})}
           {...(state.pendingEnableUnlock.requiredPlugin ? { requiredPlugin: state.pendingEnableUnlock.requiredPlugin } : {})}
-          onConfirm={() => setState(current => reduceProjectLaunchFlow(current, { type: 'confirm-enable-unlock' }))}
-          onCancel={() => setState(current => reduceProjectLaunchFlow(current, { type: 'cancel-enable-unlock' }))}
+          onConfirm={controller.confirmEnableUnlock}
+          onCancel={controller.cancelEnableUnlock}
         />
       </Box>
     )
@@ -244,12 +203,12 @@ export function ProjectManageApp({ presets, detected, statesByPreset, disableLoc
             const saveAs = newName.trim()
             if (!saveAs) return
             if (onCreateSubmit) {
-              const error = await onCreateSubmit(saveAs, getActiveProjectLaunchState(state))
+              const error = await onCreateSubmit(saveAs, activeToggleState)
               if (error) {
                 setMessage({ text: error, color: 'red' })
                 return
               }
-              setState(current => syncProjectPresetCreate(current, saveAs))
+              controller.syncPresetState(current => syncProjectPresetCreate(current, saveAs))
               setMessage({ text: 'Preset created successfully', color: 'yellow' })
               setSaveMode('none')
               setNewName('')
@@ -257,9 +216,9 @@ export function ProjectManageApp({ presets, detected, statesByPreset, disableLoc
             }
             onSubmit({
               type: 'create',
-              toggles: getActiveProjectLaunchState(state),
+              toggles: activeToggleState,
               saveAs,
-              ...disableRemovalsFromState(),
+              ...controller.disableRemovalsProps(),
             })
             exit()
           }}
@@ -288,7 +247,7 @@ export function ProjectManageApp({ presets, detected, statesByPreset, disableLoc
                 setRenameError(error)
                 return
               }
-              setState(current => syncProjectPresetRename(current, activeItem.name, newName.trim() || activeItem.name))
+              controller.syncPresetState(current => syncProjectPresetRename(current, activeItem.name, newName.trim() || activeItem.name))
               setMessage({ text: 'Preset renamed successfully', color: 'yellow' })
               setMode('browse')
               return
@@ -320,25 +279,8 @@ export function ProjectManageApp({ presets, detected, statesByPreset, disableLoc
 
   return (
     <Box flexDirection="column">
-      <Text bold color="cyan">Manage project launch presets</Text>
-      <Text dimColor>←/→ switch column · h/j/k navigate · t sort · space toggle · enter save · r rename · d delete · l launch · esc presets/quit · q quit</Text>
-      <Box marginTop={1} width={innerWidth}>
-        <Box flexDirection="column" width={presetWidth} borderStyle="round" borderColor={state.focus === 'presets' ? 'cyan' : 'gray'} paddingX={0.5} paddingY={0.5}>
-          <Text bold>Presets({state.presetItems.length})</Text>
-          {state.presetItems.map((item, index) => (
-            <Text key={item.name} wrap="truncate-end" {...(index === state.presetCursor ? { color: 'cyan' as const } : {})}>
-              {state.focus === 'presets' && index === state.presetCursor ? '❯ ' : '  '}{item.name}
-            </Text>
-          ))}
-        </Box>
-        <Box width={1} />
-        <ToggleColumn title={`Plugins(${enabledToggleCount(state.plugins)}/${state.plugins.length})`} focused={state.focus === 'plugins'} items={pluginItems} cursor={state.pluginCursor} width={detailWidth} />
-        <Box width={1} />
-        <ToggleColumn title={`Skills(${enabledToggleCount(state.skills)}/${state.skills.length})`} focused={state.focus === 'skills'} items={skillItems} cursor={state.skillCursor} width={detailWidth} />
-        <Box width={1} />
-        <ToggleColumn title={`MCPs(${enabledToggleCount(state.mcps)}/${state.mcps.length})`} focused={state.focus === 'mcps'} items={mcpItems} cursor={state.mcpCursor} width={mcpWidth} />
-      </Box>
-      {state.toggleMessage ? <Text color="yellow">{state.toggleMessage}</Text> : message ? <Text color={message.color}>{message.text}</Text> : null}
+      <ProjectLaunchColumnsView {...columnsProps} minWidth={90} />
+      {!columnsProps.toggleMessage && message ? <Text color={message.color}>{message.text}</Text> : null}
     </Box>
   )
 }

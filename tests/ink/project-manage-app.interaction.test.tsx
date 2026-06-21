@@ -19,7 +19,7 @@ const textInputProps: TextInputProps[] = []
 
 vi.mock('ink', () => ({
   Box: ({ children }: { children?: React.ReactNode }) => React.createElement('box', null, children),
-  Text: ({ children }: { children?: React.ReactNode }) => React.createElement('text', null, children),
+  Text: ({ children, ...props }: { children?: React.ReactNode; color?: string }) => React.createElement('text', props, children),
   useApp: () => ({ exit: exitMock }),
   useInput: (handler: InputHandler) => {
     inputHandlers.push(handler)
@@ -94,6 +94,63 @@ describe('ProjectManageApp interactions', () => {
     expect(onSubmit).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'save' }))
     expect(exitMock).not.toHaveBeenCalled()
     expect(flattenJson(output!.toJSON())).toContain('Preset saved successfully')
+
+    act(() => {
+      latestInputHandler()?.('t', {})
+    })
+
+    expect(flattenJson(output!.toJSON())).toContain('Sorted by name')
+    expect(flattenJson(output!.toJSON())).not.toContain('Preset saved successfully')
+
+    act(() => {
+      latestInputHandler()?.('', { rightArrow: true })
+    })
+
+    expect(flattenJson(output!.toJSON())).not.toContain('Sorted by name')
+    expect(flattenJson(output!.toJSON())).not.toContain('Preset saved successfully')
+  })
+
+
+  it('renders save errors with the app-specific red message color in browse mode', async () => {
+    const onSubmit = vi.fn()
+    const onSaveSubmit = vi.fn().mockResolvedValue('Save failed: permission denied')
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <ProjectManageApp
+          presets={[{ name: 'web', fileName: 'web-launch.json', createdAt: '2026-05-19T00:00:00.000Z', updatedAt: '2026-05-19T00:00:00.000Z' }]}
+          detected={{ plugins: [{ name: 'alpha', enabled: true, source: 'user' }], skills: [], mcps: [] }}
+          statesByPreset={{ web: { plugins: [{ name: 'alpha', enabled: true, source: 'user' }], skills: [], mcps: [] } }}
+          lastUsedName="web"
+          onSubmit={onSubmit}
+          onSaveSubmit={onSaveSubmit}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('', { rightArrow: true })
+    })
+
+    act(() => {
+      latestInputHandler()?.(' ', {})
+    })
+
+    act(() => {
+      latestInputHandler()?.('', { return: true })
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    const redTextNodes = output!.root.findAll(
+      node => node.type === 'text' && node.props.color === 'red',
+    )
+    expect(redTextNodes.some(node => node.children.includes('Save failed: permission denied'))).toBe(true)
+    expect(flattenJson(output!.toJSON())).toContain('Save failed: permission denied')
+    expect(exitMock).not.toHaveBeenCalled()
   })
 
   it('creates a new preset from detected on enter after toggling', async () => {
@@ -370,7 +427,28 @@ describe('ProjectManageApp interactions', () => {
     expect(flattenJson(output!.toJSON())).not.toContain('Sorted by name')
   })
 
-  it('shows detected save guidance after toggling detected state', () => {
+  it('shows detected save guidance when space is pressed on the detected preset row', () => {
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <ProjectManageApp
+          presets={[]}
+          detected={{ plugins: [{ name: 'alpha', enabled: true, source: 'user' }], skills: [], mcps: [] }}
+          statesByPreset={{}}
+          onSubmit={vi.fn()}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.(' ', {})
+    })
+
+    expect(flattenJson(output!.toJSON())).toContain('Press enter to create a new preset from Detected')
+  })
+
+  it('does not show detected save guidance when toggling details while detected is selected', () => {
     let output: TestRenderer.ReactTestRenderer
 
     act(() => {
@@ -392,7 +470,7 @@ describe('ProjectManageApp interactions', () => {
       latestInputHandler()?.(' ', {})
     })
 
-    expect(flattenJson(output!.toJSON())).toContain('Press enter to create a new preset from Detected')
+    expect(flattenJson(output!.toJSON())).not.toContain('Press enter to create a new preset from Detected')
   })
 
   it('launches with save-first behavior on l when an existing preset is dirty', async () => {

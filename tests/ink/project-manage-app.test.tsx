@@ -39,6 +39,12 @@ describe('ProjectManageApp', () => {
     expect(output).toContain('MCPs')
   })
 
+  it('keeps the management layout at least 90 columns wide in very narrow terminals', () => {
+    const output = withStdoutColumns(60, () => renderToString(<ProjectManageApp {...props} />, { columns: 60 }))
+
+    expect(longestLineLength(output)).toBeGreaterThanOrEqual(85)
+  })
+
   it('expands close to the available terminal width', () => {
     const output = withStdoutColumns(160, () => renderToString(<ProjectManageApp {...props} />, { columns: 160 }))
 

@@ -2,24 +2,14 @@ import { useState } from 'react'
 import { Box, useApp, useInput } from 'ink'
 import { TruncateText } from './components/truncate-text.js'
 import type { LaunchPresetMeta } from '../core/schema.js'
-import type { DisableRemovalMark } from '../flows/project-launch-flow.js'
-import {
-  annotateToggleItems,
-  createProjectLaunchFlowState,
-  formatProjectLaunchSortMode,
-  getActiveProjectLaunchItem,
-  getActiveProjectLaunchState,
-  getPendingDisableRemovals,
-  reduceProjectLaunchFlow,
-  shouldBubbleProjectLaunchEscape,
-  type ProjectLaunchToggleState,
-} from '../flows/project-launch-flow.js'
+import type { DisableRemovalMark, ProjectLaunchToggleState } from '../flows/project-launch-flow.js'
 import type { DisableLockSource } from '../services/disable-lock-service.js'
 import { ConfirmEnableUnlock } from './components/confirm-enable-unlock.js'
 import { ProjectLaunchColumnsView } from './components/project-launch-columns-view.js'
 import { useInkResizeVersion } from './components/resize-context.js'
 import { TextInput } from './components/text-input.js'
 import { normalizePresetName } from '../core/name.js'
+import { useProjectLaunchBrowserController } from './use-project-launch-browser-controller.js'
 
 type SaveChoice = 'none' | 'confirm-save' | 'name-new'
 
@@ -41,36 +31,27 @@ export type ProjectLaunchAppProps = {
 export function ProjectLaunchApp({ presets, detected, statesByPreset, disableLockSources = [], lastUsedName, onSubmit, onCreateSubmit }: ProjectLaunchAppProps) {
   useInkResizeVersion()
   const { exit } = useApp()
-  const [state, setState] = useState(() =>
-    createProjectLaunchFlowState({
-      presets,
-      detected,
-      statesByPreset,
-      disableLockSources,
-      ...(lastUsedName ? { lastUsedName } : {}),
-    })
-  )
+  const controller = useProjectLaunchBrowserController({
+    presets,
+    detected,
+    statesByPreset,
+    disableLockSources,
+    ...(lastUsedName ? { lastUsedName } : {}),
+  })
+  const { state, activeItem, activeToggleState, columnsProps } = controller
   const [saveChoice, setSaveChoice] = useState<SaveChoice>('none')
   const [newName, setNewName] = useState('')
   const [createError, setCreateError] = useState<string | null>(null)
-  const [sortMessage, setSortMessage] = useState<string | null>(null)
-
-  function disableRemovalsFromState() {
-    const removals = getPendingDisableRemovals(state)
-    return removals.length > 0 ? { disableRemovals: removals } : {}
-  }
 
   function submitLaunch(saveAs?: string) {
     const normalizedSaveAs = saveAs?.trim()
     if (saveAs !== undefined && !normalizedSaveAs) return
 
-    const item = getActiveProjectLaunchItem(state)
-    const toggles = getActiveProjectLaunchState(state)
     onSubmit({
       type: 'launch',
-      toggles,
-      ...disableRemovalsFromState(),
-      ...(item?.type === 'preset' ? { presetName: item.name } : {}),
+      toggles: activeToggleState,
+      ...controller.disableRemovalsProps(),
+      ...(activeItem?.type === 'preset' ? { presetName: activeItem.name } : {}),
       ...(normalizedSaveAs ? { saveAs: normalizedSaveAs } : {}),
     })
     exit()
@@ -78,33 +59,19 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, disableLoc
 
   useInput((input, key) => {
     if (saveChoice !== 'none' || state.pendingEnableUnlock) return
-    if (input !== 't' && sortMessage) setSortMessage(null)
     if (input === 'q') {
       exit()
       return
     }
-    if (key.leftArrow || input === 'h') setState(current => reduceProjectLaunchFlow(current, { type: 'focus-left' }))
-    if (key.rightArrow || (input === 'l' && !key.ctrl && !key.meta)) setState(current => reduceProjectLaunchFlow(current, { type: 'focus-right' }))
-    if (key.upArrow || input === 'k') setState(current => reduceProjectLaunchFlow(current, { type: 'up' }))
-    if (key.downArrow || input === 'j') setState(current => reduceProjectLaunchFlow(current, { type: 'down' }))
-    if (key.escape) {
-      if (shouldBubbleProjectLaunchEscape(state)) {
-        onSubmit({ type: 'back' })
-        exit()
-        return
-      }
-      setState(current => reduceProjectLaunchFlow(current, { type: 'escape' }))
+    const browserResult = controller.dispatchBrowserKey(input, key)
+    if (browserResult.bubbledEscape) {
+      onSubmit({ type: 'back' })
+      exit()
+      return
     }
-    if (input === 't') {
-      const nextState = reduceProjectLaunchFlow(state, { type: 'toggle-sort-mode' })
-      setState(nextState)
-      setSortMessage(formatProjectLaunchSortMode(nextState.sortMode))
-    }
-    if (input === ' ') setState(current => reduceProjectLaunchFlow(current, { type: 'toggle-current' }))
     if (key.return) {
       if (state.dirty) {
-        const item = getActiveProjectLaunchItem(state)
-        if (item?.type === 'preset') {
+        if (activeItem?.type === 'preset') {
           submitLaunch()
           return
         }
@@ -122,8 +89,8 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, disableLoc
           itemName={state.pendingEnableUnlock.name}
           {...(state.pendingEnableUnlock.filePath ? { filePath: state.pendingEnableUnlock.filePath } : {})}
           {...(state.pendingEnableUnlock.requiredPlugin ? { requiredPlugin: state.pendingEnableUnlock.requiredPlugin } : {})}
-          onConfirm={() => setState(current => reduceProjectLaunchFlow(current, { type: 'confirm-enable-unlock' }))}
-          onCancel={() => setState(current => reduceProjectLaunchFlow(current, { type: 'cancel-enable-unlock' }))}
+          onConfirm={controller.confirmEnableUnlock}
+          onCancel={controller.cancelEnableUnlock}
         />
       </Box>
     )
@@ -139,8 +106,8 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, disableLoc
           onTemp={() => {
             onSubmit({
               type: 'temp-launch',
-              toggles: getActiveProjectLaunchState(state),
-              ...disableRemovalsFromState(),
+              toggles: activeToggleState,
+              ...controller.disableRemovalsProps(),
             })
             exit()
           }}
@@ -169,7 +136,7 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, disableLoc
             const saveAs = newName.trim()
             if (!saveAs) return
             if (onCreateSubmit) {
-              const error = await onCreateSubmit(saveAs, getActiveProjectLaunchState(state))
+              const error = await onCreateSubmit(saveAs, activeToggleState)
               if (error) {
                 setCreateError(error)
                 return
@@ -177,8 +144,8 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, disableLoc
               onSubmit({
                 type: 'launch',
                 presetName: normalizePresetName(saveAs, { preserveCase: true }),
-                toggles: getActiveProjectLaunchState(state),
-                ...disableRemovalsFromState(),
+                toggles: activeToggleState,
+                ...controller.disableRemovalsProps(),
               })
               exit()
               return
@@ -190,30 +157,7 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, disableLoc
     )
   }
 
-  const detectedBaseline = state.statesByPreset.Detected ?? detected
-  const pluginItems = annotateToggleItems(state, detectedBaseline, 'plugins', state.plugins)
-  const skillItems = annotateToggleItems(state, detectedBaseline, 'skills', state.skills)
-  const mcpItems = annotateToggleItems(state, detectedBaseline, 'mcps', state.mcps)
-
-  const message = state.toggleMessage ?? sortMessage
-
-  return (
-    <ProjectLaunchColumnsView
-      presetItems={state.presetItems}
-      presetCursor={state.presetCursor}
-      focus={state.focus}
-      plugins={state.plugins}
-      pluginItems={pluginItems}
-      pluginCursor={state.pluginCursor}
-      skills={state.skills}
-      skillItems={skillItems}
-      skillCursor={state.skillCursor}
-      mcps={state.mcps}
-      mcpItems={mcpItems}
-      mcpCursor={state.mcpCursor}
-      {...(message ? { toggleMessage: message } : {})}
-    />
-  )
+  return <ProjectLaunchColumnsView {...columnsProps} />
 }
 
 function ConfirmSaveChoice({

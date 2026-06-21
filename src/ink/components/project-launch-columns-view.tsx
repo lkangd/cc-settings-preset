@@ -21,6 +21,7 @@ export type ProjectLaunchColumnsViewProps = {
   title?: string
   help?: string
   toggleMessage?: string
+  minWidth?: number
 }
 
 export function computeProjectLaunchColumnWidths(innerWidth: number): {
@@ -52,10 +53,11 @@ export function ProjectLaunchColumnsView({
   title = 'Select project launch preset',
   help = '←/→ switch column · h/j/k/l navigate · t sort · space toggle · enter launch · esc presets/back · q quit',
   toggleMessage,
+  minWidth,
 }: ProjectLaunchColumnsViewProps) {
   useInkResizeVersion()
   const { stdout } = useStdout()
-  const innerWidth = stdout.columns ?? 120
+  const innerWidth = Math.max(minWidth ?? 0, stdout.columns ?? 120)
   const { presetWidth, detailWidth, mcpWidth } = computeProjectLaunchColumnWidths(innerWidth)
 
   return (
