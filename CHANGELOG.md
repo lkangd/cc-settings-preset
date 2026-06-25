@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.5 (2026-06-25)
+
+### Features
+* **ui**: add bordered title box with aligned column heights
+
 ## 1.1.4 (2026-06-21)
 
 ### Code Refactoring
