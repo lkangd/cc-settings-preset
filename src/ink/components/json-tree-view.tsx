@@ -1,4 +1,5 @@
 import { Box, Text } from 'ink'
+import { isPlainObject } from '../../core/is-plain-object.js'
 import { TruncateText } from './truncate-text.js'
 
 const KEY_COLOR = 'cyan'
@@ -66,6 +67,12 @@ function JsonLeaf({ name, value }: { name?: string; value: unknown }) {
   )
 }
 
+export function countJsonTreeViewLines(value: unknown): number {
+  if (Array.isArray(value)) return 2 + value.reduce<number>((sum, item) => sum + countJsonTreeViewLines(item), 0)
+  if (isPlainObject(value)) return 2 + Object.values(value).reduce<number>((sum, item) => sum + countJsonTreeViewLines(item), 0)
+  return 1
+}
+
 function JsonNode({ name, value, depth }: { name?: string; value: unknown; depth: number }) {
   if (Array.isArray(value)) {
     return (
@@ -81,7 +88,7 @@ function JsonNode({ name, value, depth }: { name?: string; value: unknown; depth
     )
   }
 
-  if (value && typeof value === 'object') {
+  if (isPlainObject(value)) {
     const entries = Object.entries(value as Record<string, unknown>)
     return (
       <Box flexDirection="column" width="100%">

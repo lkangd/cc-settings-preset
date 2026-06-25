@@ -1,4 +1,5 @@
 import { Box, Text } from 'ink'
+import { isPlainObject } from '../../core/is-plain-object.js'
 import { TruncateText } from './truncate-text.js'
 
 const KEY_COLOR = 'cyan'
@@ -7,10 +8,6 @@ const STRING_COLOR = 'green'
 const NUMBER_COLOR = 'yellow'
 const BOOL_COLOR = 'magenta'
 const NULL_COLOR = 'gray'
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 function isScalar(value: unknown): boolean {
   return !isPlainObject(value) && !Array.isArray(value)
@@ -38,6 +35,35 @@ function renderScalar(value: unknown): string {
   if (value === null || value === undefined) return 'null'
   if (typeof value === 'string') return needsQuote(value) ? JSON.stringify(value) : value
   return String(value)
+}
+
+function countYamlMappingEntryLines(value: unknown): number {
+  if (Array.isArray(value)) return value.length === 0 ? 1 : 1 + countYamlSequenceLines(value)
+  if (isPlainObject(value)) return Object.keys(value).length === 0 ? 1 : 1 + countYamlMappingLines(value)
+  return 1
+}
+
+function countYamlMappingLines(value: Record<string, unknown>): number {
+  const entries = Object.values(value)
+  if (entries.length === 0) return 1
+  return entries.reduce<number>((sum, item) => sum + countYamlMappingEntryLines(item), 0)
+}
+
+function countYamlSequenceItemLines(value: unknown): number {
+  if (Array.isArray(value)) return value.length === 0 ? 1 : countYamlSequenceLines(value)
+  if (isPlainObject(value)) return Object.keys(value).length === 0 ? 1 : countYamlMappingLines(value)
+  return 1
+}
+
+function countYamlSequenceLines(items: unknown[]): number {
+  if (items.length === 0) return 1
+  return items.reduce<number>((sum, item) => sum + countYamlSequenceItemLines(item), 0)
+}
+
+export function countYamlTreeViewLines(value: unknown): number {
+  if (Array.isArray(value)) return countYamlSequenceLines(value)
+  if (isPlainObject(value)) return countYamlMappingLines(value)
+  return 1
 }
 
 function YamlScalar({ value }: { value: unknown }) {

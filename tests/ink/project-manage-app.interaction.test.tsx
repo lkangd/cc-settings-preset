@@ -193,7 +193,7 @@ describe('ProjectManageApp interactions', () => {
       await textInputProps.at(-1)?.onSubmit()
     })
 
-    expect(flattenJson(output!.toJSON())).toContain('Presets( 2 )')
+    expect(flattenJson(output!.toJSON())).toContain('Presets(2)')
     expect(flattenJson(output!.toJSON())).toContain('fresh')
     expect(flattenJson(output!.toJSON())).toMatch(/❯\s+fresh/)
     expect(flattenJson(output!.toJSON())).not.toMatch(/❯\s+Detected/)

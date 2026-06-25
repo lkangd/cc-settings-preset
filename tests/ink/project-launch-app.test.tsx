@@ -8,7 +8,11 @@ function longestLineLength(output: string): number {
 }
 
 function topBorderLine(output: string): string {
-  return output.split(/\n/).find(line => line.startsWith('╭')) ?? ''
+  return output.split(/\n/).find(line => line.startsWith('╭') || line.startsWith('┌')) ?? ''
+}
+
+function bottomBorderLine(output: string): string {
+  return output.split(/\n/).find(line => (line.match(/╰/g) ?? []).length === 4) ?? ''
 }
 
 function withStdoutColumns<T>(columns: number, run: () => T): T {
@@ -52,7 +56,13 @@ describe('ProjectLaunchApp', () => {
   it('uses equal visible gaps between all four columns', () => {
     const output = withStdoutColumns(160, () => renderToString(<ProjectLaunchApp {...props} />, { columns: 160 }))
 
-    expect((topBorderLine(output).match(/╮ ╭/g) ?? []).length).toBe(3)
+    expect((topBorderLine(output).match(/[╮┐] [╭┌]/g) ?? []).length).toBe(3)
+  })
+
+  it('keeps all four column bottoms aligned', () => {
+    const output = withStdoutColumns(160, () => renderToString(<ProjectLaunchApp {...props} />, { columns: 160 }))
+
+    expect((bottomBorderLine(output).match(/╰/g) ?? []).length).toBe(4)
   })
 
   it('truncates long launch labels instead of wrapping them', () => {

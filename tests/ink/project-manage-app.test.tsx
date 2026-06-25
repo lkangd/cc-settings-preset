@@ -8,7 +8,7 @@ function longestLineLength(output: string): number {
 }
 
 function topBorderLine(output: string): string {
-  return output.split(/\n/).find(line => line.startsWith('╭')) ?? ''
+  return output.split(/\n/).find(line => line.startsWith('╭') || line.startsWith('┌')) ?? ''
 }
 
 function withStdoutColumns<T>(columns: number, run: () => T): T {
@@ -56,7 +56,7 @@ describe('ProjectManageApp', () => {
   it('uses equal visible gaps between all four columns', () => {
     const output = withStdoutColumns(160, () => renderToString(<ProjectManageApp {...props} />, { columns: 160 }))
 
-    expect((topBorderLine(output).match(/╮ ╭/g) ?? []).length).toBe(3)
+    expect((topBorderLine(output).match(/[╮┐] [╭┌]/g) ?? []).length).toBe(3)
   })
 
   it('truncates long management labels instead of wrapping them', () => {

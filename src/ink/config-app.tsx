@@ -6,6 +6,7 @@ import {
   reduceConfigFlow,
 } from '../flows/config-flow.js'
 import type { CcspConfig } from '../core/schema.js'
+import { BorderedTitleBox } from './components/bordered-title-box.js'
 import { useInkResizeVersion } from './components/resize-context.js'
 import { TruncateText } from './components/truncate-text.js'
 
@@ -53,40 +54,29 @@ export function ConfigApp({ initialConfig, onChange }: Props) {
       <TruncateText bold color="cyan">ccsp config</TruncateText>
       <TruncateText dimColor>↑/k ↓/j navigate · space/enter toggle · q quit</TruncateText>
       <Box marginTop={0.5} width={innerWidth}>
-        <Box
-          flexDirection="column"
-          width={listWidth}
-          marginRight={0.5}
-          borderStyle="round"
-          borderColor="cyan"
-          paddingX={0.5}
-          paddingY={0.5}
-        >
-          <TruncateText bold>Config({CONFIG_OPTIONS.length})</TruncateText>
-          {CONFIG_OPTIONS.map((option, index) => {
-            const display = option.display(state.config)
-            const isCursor = index === state.cursor
-            return (
-              <TruncateText key={option.key} {...(isCursor ? { color: 'cyan' as const } : {})}>
-                {isCursor ? '❯ ' : '  '}
-                {option.label}
-                {' '}
-                <Text color={VALUE_COLORS[display.tone]}>[{display.label}]</Text>
-              </TruncateText>
-            )
-          })}
+        <Box marginRight={0.5}>
+          <BorderedTitleBox title={`Config(${CONFIG_OPTIONS.length})`} width={listWidth} borderColor="cyan">
+            {CONFIG_OPTIONS.map((option, index) => {
+              const display = option.display(state.config)
+              const isCursor = index === state.cursor
+              return (
+                <TruncateText key={option.key} {...(isCursor ? { color: 'cyan' as const } : {})}>
+                  {isCursor ? '❯ ' : '  '}
+                  {option.label}
+                  {' '}
+                  <Text color={VALUE_COLORS[display.tone]}>[{display.label}]</Text>
+                </TruncateText>
+              )
+            })}
+          </BorderedTitleBox>
         </Box>
-        <Box
-          flexDirection="column"
+        <BorderedTitleBox
+          title={focused?.label ?? 'No option selected'}
           width={previewWidth}
-          borderStyle="round"
           borderColor="gray"
-          paddingX={0.5}
-          paddingY={0.5}
         >
-          <TruncateText bold>{focused?.label ?? 'No option selected'}</TruncateText>
           {focused ? <Text>{focused.description}</Text> : <TruncateText dimColor>no description</TruncateText>}
-        </Box>
+        </BorderedTitleBox>
       </Box>
     </Box>
   )

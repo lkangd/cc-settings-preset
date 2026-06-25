@@ -1,7 +1,8 @@
 import { Box, useStdout } from 'ink'
 import type { ProjectLaunchFocus, ProjectLaunchPresetItem, ToggleColumnItem } from '../../flows/project-launch-flow.js'
 import { enabledToggleCount } from '../../flows/toggle-utils.js'
-import { ToggleColumn } from './toggle-column.js'
+import { BORDERED_TITLE_BOX_FRAME_LINES, BorderedTitleBox } from './bordered-title-box.js'
+import { countToggleColumnContentLines, ToggleColumn } from './toggle-column.js'
 import { useInkResizeVersion } from './resize-context.js'
 import { TruncateText } from './truncate-text.js'
 
@@ -59,21 +60,25 @@ export function ProjectLaunchColumnsView({
   const { stdout } = useStdout()
   const innerWidth = Math.max(minWidth ?? 0, stdout.columns ?? 120)
   const { presetWidth, detailWidth, mcpWidth } = computeProjectLaunchColumnWidths(innerWidth)
+  const columnContentHeight = Math.max(
+    presetItems.length,
+    countToggleColumnContentLines(pluginItems),
+    countToggleColumnContentLines(skillItems),
+    countToggleColumnContentLines(mcpItems),
+  )
+  const columnHeight = columnContentHeight + BORDERED_TITLE_BOX_FRAME_LINES
 
   return (
     <Box flexDirection="column">
       <TruncateText bold color="cyan">{title}</TruncateText>
       <TruncateText dimColor>{help}</TruncateText>
       <Box marginTop={0.5} width={innerWidth} flexDirection="row">
-        <Box
-          flexDirection="column"
+        <BorderedTitleBox
+          title={`Presets(${presetItems.length})`}
           width={presetWidth}
-          borderStyle="round"
+          height={columnHeight}
           borderColor={focus === 'presets' ? 'cyan' : 'gray'}
-          paddingX={0.5}
-          paddingY={0.5}
         >
-          <TruncateText bold>Presets({presetItems.length})</TruncateText>
           {presetItems.map((item, index) => (
             <TruncateText
               key={item.name}
@@ -83,7 +88,7 @@ export function ProjectLaunchColumnsView({
               {item.name}
             </TruncateText>
           ))}
-        </Box>
+        </BorderedTitleBox>
         <Box width={1} />
         <ToggleColumn
           title={`Plugins(${enabledToggleCount(plugins)}/${plugins.length})`}
@@ -91,6 +96,7 @@ export function ProjectLaunchColumnsView({
           items={pluginItems}
           cursor={pluginCursor}
           width={detailWidth}
+          height={columnHeight}
         />
         <Box width={1} />
         <ToggleColumn
@@ -99,6 +105,7 @@ export function ProjectLaunchColumnsView({
           items={skillItems}
           cursor={skillCursor}
           width={detailWidth}
+          height={columnHeight}
         />
         <Box width={1} />
         <ToggleColumn
@@ -107,6 +114,7 @@ export function ProjectLaunchColumnsView({
           items={mcpItems}
           cursor={mcpCursor}
           width={mcpWidth}
+          height={columnHeight}
         />
       </Box>
       {toggleMessage ? <TruncateText color="yellow">{toggleMessage}</TruncateText> : null}

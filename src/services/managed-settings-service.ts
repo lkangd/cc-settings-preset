@@ -6,10 +6,7 @@ import {
   resolveManagedClaudeSettingsDropInDir,
   resolveManagedClaudeSettingsPath,
 } from '../core/paths.js'
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-}
+import { isPlainObject } from '../core/is-plain-object.js'
 
 function mergeManagedValue(base: unknown, override: unknown): unknown {
   if (Array.isArray(base) && Array.isArray(override)) {

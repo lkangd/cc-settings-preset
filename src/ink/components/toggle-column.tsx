@@ -1,6 +1,11 @@
-import { Box, Text } from 'ink'
+import { Text } from 'ink'
 import type { ToggleColumnItem } from '../../flows/project-launch-flow.js'
+import { BorderedTitleBox } from './bordered-title-box.js'
 import { TruncateText } from './truncate-text.js'
+
+export function countToggleColumnContentLines(items: ToggleColumnItem[]): number {
+  return Math.max(items.length, 1)
+}
 
 function sourceBadge(source: ToggleColumnItem['source']): string {
   if (source === 'project-local') return '[L]'
@@ -19,25 +24,24 @@ export function ToggleColumn({
   items,
   cursor,
   width,
+  height,
 }: {
   title: string
   focused: boolean
   items: ToggleColumnItem[]
   cursor: number
   width: number
+  height?: number
 }) {
   const Line = TruncateText
 
   return (
-    <Box
-      flexDirection="column"
+    <BorderedTitleBox
+      title={title}
       width={width}
-      borderStyle="round"
       borderColor={focused ? 'cyan' : 'gray'}
-      paddingX={0.5}
-      paddingY={0.5}
+      {...(height === undefined ? {} : { height })}
     >
-      <Line bold>{title}</Line>
       {items.map((item, index) => {
         const lockedOff = Boolean(item.enableLocked && !item.enabled)
         const focusedLine = focused && index === cursor
@@ -57,6 +61,6 @@ export function ToggleColumn({
         )
       })}
       {items.length === 0 ? <Line dimColor>none found</Line> : null}
-    </Box>
+    </BorderedTitleBox>
   )
 }

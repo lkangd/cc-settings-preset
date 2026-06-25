@@ -13,6 +13,10 @@ function withStdoutColumns<T>(columns: number, run: () => T): T {
   }
 }
 
+function bottomBorderLine(output: string): string {
+  return output.split(/\n/).find(line => (line.match(/╰/g) ?? []).length === 2) ?? ''
+}
+
 describe('TwoColumnSettingsView', () => {
   it('renders settings names and JSON tree values', () => {
     const output = renderToString(
@@ -70,5 +74,38 @@ describe('TwoColumnSettingsView', () => {
     ))
 
     expect(output).not.toContain(longValue)
+  })
+
+  it('keeps both column bottoms aligned when preview is taller', () => {
+    const output = withStdoutColumns(100, () => renderToString(
+      <TwoColumnSettingsView
+        title="Settings"
+        help="Preview"
+        items={[{ name: 'base', sourcePath: '/tmp/base.json', settings: { env: { TOKEN: 'a', URL: 'b', PORT: 1 } } }]}
+        cursor={0}
+      />,
+      { columns: 100 },
+    ))
+
+    expect((bottomBorderLine(output).match(/╰/g) ?? []).length).toBe(2)
+  })
+
+  it('keeps both column bottoms aligned when settings list is taller', () => {
+    const output = withStdoutColumns(100, () => renderToString(
+      <TwoColumnSettingsView
+        title="Settings"
+        help="Preview"
+        items={[
+          { name: 'base', sourcePath: '/tmp/base.json', settings: { model: 'sonnet' } },
+          { name: 'work', sourcePath: '/tmp/work.json', settings: { model: 'opus' } },
+          { name: 'mini', sourcePath: '/tmp/mini.json', settings: { model: 'haiku' } },
+          { name: 'env-only', sourcePath: '/tmp/env.json', settings: { model: 'gpt' } },
+        ]}
+        cursor={0}
+      />,
+      { columns: 100 },
+    ))
+
+    expect((bottomBorderLine(output).match(/╰/g) ?? []).length).toBe(2)
   })
 })
