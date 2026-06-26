@@ -1,9 +1,11 @@
 import { promises as fs, type Dirent } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
+import { dirname, join } from 'node:path'
 
-import { pathExists, readJsonFile } from '../core/json.js'
-import { resolveClaudePluginCacheDir, resolveProjectCommandsDir, resolveProjectSkillsDir, resolveUserSkillsDir } from '../core/paths.js'
+import { readDirSafe } from '../core/fs.js'
+import { pathExists } from '../core/json.js'
+import { resolveProjectCommandsDir, resolveProjectSkillsDir, resolveUserSkillsDir } from '../core/paths.js'
 import type { Settings, SkillOverrideValue } from '../core/schema.js'
+import { discoverCachedClaudePlugins } from './plugin-cache-service.js'
 import type { SettingsSourceScope } from './settings-source-service.js'
 
 export type SkillState = {
@@ -19,15 +21,6 @@ export type SkillDiscoveryInput = {
   cwd: string
   enabledPlugins: Record<string, boolean>
   skillOverrides?: Record<string, SkillOverrideValue>
-}
-
-async function readDirSafe(dirPath: string): Promise<Dirent[]> {
-  try {
-    return await fs.readdir(dirPath, { withFileTypes: true })
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
-    throw error
-  }
 }
 
 async function isDirectoryLike(entryPath: string, entry: Dirent): Promise<boolean> {
@@ -85,45 +78,23 @@ async function discoverCommandSkills(commandsDir: string): Promise<SkillState[]>
 }
 
 async function discoverPluginSkills(homeDir: string, enabledPlugins: Record<string, boolean>): Promise<SkillState[]> {
-  const cacheDir = resolveClaudePluginCacheDir(homeDir)
   const enabledPluginNames = new Set(Object.entries(enabledPlugins).filter(([, enabled]) => enabled).map(([name]) => name))
   const skills: SkillState[] = []
 
-  async function scan(dirPath: string): Promise<void> {
-    const entries = await readDirSafe(dirPath)
+  for (const plugin of await discoverCachedClaudePlugins(homeDir)) {
+    if (!enabledPluginNames.has(plugin.pluginName)) continue
 
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue
-      const fullPath = join(dirPath, entry.name)
-      const manifestPath = join(fullPath, 'plugin.json')
-
-      if (await pathExists(manifestPath)) {
-        const manifest = await readJsonFile(manifestPath) as { name?: unknown }
-        const pluginName = typeof manifest.name === 'string' ? manifest.name : basename(fullPath)
-        if (!enabledPluginNames.has(pluginName)) continue
-
-        const skillEntries = await readDirSafe(join(fullPath, 'skills'))
-        for (const skillEntry of skillEntries) {
-          if (!skillEntry.isDirectory()) continue
-          const skillPath = join(fullPath, 'skills', skillEntry.name, 'SKILL.md')
-          if (await pathExists(skillPath)) {
-            skills.push({
-              name: `${pluginName}:${skillEntry.name}`,
-              enabled: true,
-              source: 'plugin',
-              toggleable: false,
-              controlledByPlugin: pluginName,
-            })
-          }
-        }
-        continue
-      }
-
-      await scan(fullPath)
+    for (const skillName of plugin.skillNames) {
+      skills.push({
+        name: `${plugin.pluginName}:${skillName}`,
+        enabled: true,
+        source: 'plugin',
+        toggleable: false,
+        controlledByPlugin: plugin.pluginName,
+      })
     }
   }
 
-  await scan(cacheDir)
   return skills
 }
 

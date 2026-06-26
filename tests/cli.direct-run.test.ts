@@ -2,6 +2,7 @@ import React from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const listPresetsMock = vi.fn()
+const listPresetsWithSettingsMock = vi.fn()
 const readPresetSettingsMock = vi.fn()
 const getPresetPathMock = vi.fn()
 const readIndexMock = vi.fn()
@@ -9,6 +10,7 @@ const buildClaudeOfficialItemMock = vi.fn()
 const readLastUsedGlobalSettingsMock = vi.fn()
 const writeLastUsedGlobalSettingsMock = vi.fn()
 const listLaunchPresetsMock = vi.fn()
+const listLaunchPresetsWithSettingsMock = vi.fn()
 const readLaunchPresetSettingsMock = vi.fn()
 const writeLastUsedLaunchPresetMock = vi.fn()
 const writeTempSettingsMock = vi.fn().mockResolvedValue('/tmp/project/.claude/.ccsp/tmp/temp-settings.json')
@@ -77,6 +79,7 @@ vi.mock('../src/services/preset-service.js', () => ({
   CLAUDE_OFFICIAL_PRESET_NAME: '*Claude Official*',
   createPresetService: () => ({
     listPresets: listPresetsMock,
+    listPresetsWithSettings: listPresetsWithSettingsMock,
     readIndex: readIndexMock,
     getPresetPath: getPresetPathMock,
     readPresetSettings: readPresetSettingsMock,
@@ -118,6 +121,7 @@ vi.mock('../src/services/mcp-service.js', () => ({
 vi.mock('../src/services/launch-preset-service.js', () => ({
   createLaunchPresetService: () => ({
     listPresets: listLaunchPresetsMock,
+    listPresetsWithSettings: listLaunchPresetsWithSettingsMock,
     readPresetSettings: readLaunchPresetSettingsMock,
     readLastUsed: vi.fn().mockResolvedValue(undefined),
     writeLastUsed: writeLastUsedLaunchPresetMock,
@@ -175,10 +179,12 @@ describe('cli direct run', () => {
     vi.resetModules()
     renderMock.mockReset()
     listPresetsMock.mockReset()
+    listPresetsWithSettingsMock.mockReset()
     readIndexMock.mockReset()
     getPresetPathMock.mockReset()
     readPresetSettingsMock.mockReset()
     listLaunchPresetsMock.mockReset()
+    listLaunchPresetsWithSettingsMock.mockReset()
     readLaunchPresetSettingsMock.mockReset()
     writeLastUsedGlobalSettingsMock.mockReset()
     writeLastUsedLaunchPresetMock.mockReset()
@@ -191,6 +197,7 @@ describe('cli direct run', () => {
     discoverMcpStatesMock.mockResolvedValue([])
 
     listPresetsMock.mockResolvedValue([basePreset])
+    listPresetsWithSettingsMock.mockResolvedValue([{ meta: basePreset, sourcePath: selectedSettings.sourcePath, settings: selectedSettings.settings }])
     readIndexMock.mockResolvedValue({ version: 1, presets: { work: basePreset } })
     getPresetPathMock.mockResolvedValue(selectedSettings.sourcePath)
     readPresetSettingsMock.mockResolvedValue(selectedSettings.settings)
@@ -202,6 +209,12 @@ describe('cli direct run', () => {
       skillOverrides: {},
       deniedMcpServers: [],
     })
+    listLaunchPresetsWithSettingsMock.mockResolvedValue([
+      {
+        meta: { name: 'web', fileName: 'web-launch.json', createdAt: '2026-05-17T00:00:00.000Z', updatedAt: '2026-05-17T00:00:00.000Z' },
+        settings: { enabledPlugins: { alpha: false }, skillOverrides: {}, deniedMcpServers: [] },
+      },
+    ])
   })
 
   it('launches Claude directly when global and project presets are specified', async () => {
@@ -242,6 +255,10 @@ describe('cli direct run', () => {
     }
 
     listPresetsMock.mockResolvedValue([otherPreset, basePreset])
+    listPresetsWithSettingsMock.mockResolvedValue([
+      { meta: otherPreset, sourcePath: '/tmp/.ccsp/settings/alpha-settings.json', settings: { source: 'alpha' } },
+      { meta: basePreset, sourcePath: selectedSettings.sourcePath, settings: selectedSettings.settings },
+    ])
     getPresetPathMock.mockImplementation(async (name: string) => `/tmp/.ccsp/settings/${name}-settings.json`)
     readPresetSettingsMock.mockImplementation(async (name: string) => ({ source: name }))
     readLastUsedGlobalSettingsMock.mockResolvedValue('work')
@@ -291,6 +308,7 @@ describe('cli direct run', () => {
 
   it('throws when the requested global preset does not exist', async () => {
     listPresetsMock.mockResolvedValue([])
+    listPresetsWithSettingsMock.mockResolvedValue([])
     readIndexMock.mockResolvedValue({ version: 1, presets: {} })
 
     const { main } = await import('../src/cli.js')

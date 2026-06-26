@@ -59,6 +59,92 @@ describe('discoverMcpStates', () => {
     ])
   })
 
+  it('discovers plugin MCP servers from versioned cache directories and root .mcp.json', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ccsp-mcp-versioned-'))
+    const homeDir = join(root, 'home')
+    const cwd = join(root, 'repo')
+    const pluginCache = join(homeDir, '.claude', 'plugins', 'cache', 'vendor', 'plugin-a', '1.2.3')
+    await mkdir(pluginCache, { recursive: true })
+    await mkdir(cwd, { recursive: true })
+
+    await writeFile(join(pluginCache, 'package.json'), JSON.stringify({
+      name: 'plugin-a',
+    }), 'utf8')
+    await writeFile(join(pluginCache, '.mcp.json'), JSON.stringify({
+      mcpServers: {
+        pluginOnly: { command: 'node', args: ['plugin.js'] },
+      },
+    }), 'utf8')
+
+    expect(await discoverMcpStates({ homeDir, cwd, knownPlugins: ['plugin-a'] })).toEqual([
+      {
+        name: 'pluginOnly',
+        enabled: true,
+        source: 'plugin',
+        config: { pluginName: 'plugin-a', command: 'node', args: ['plugin.js'] },
+        controlledByPlugin: 'plugin-a',
+      },
+    ])
+  })
+
+  it('discovers plugin MCP servers from direct cache plugin layouts without a vendor directory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ccsp-mcp-direct-'))
+    const homeDir = join(root, 'home')
+    const cwd = join(root, 'repo')
+    const pluginCache = join(homeDir, '.claude', 'plugins', 'cache', 'plugin-a', '1.2.3')
+    await mkdir(pluginCache, { recursive: true })
+    await mkdir(cwd, { recursive: true })
+
+    await writeFile(join(pluginCache, 'package.json'), JSON.stringify({
+      name: 'plugin-a',
+    }), 'utf8')
+    await writeFile(join(pluginCache, '.mcp.json'), JSON.stringify({
+      mcpServers: {
+        pluginOnly: { command: 'node', args: ['plugin.js'] },
+      },
+    }), 'utf8')
+
+    expect(await discoverMcpStates({ homeDir, cwd, knownPlugins: ['plugin-a'] })).toEqual([
+      {
+        name: 'pluginOnly',
+        enabled: true,
+        source: 'plugin',
+        config: { pluginName: 'plugin-a', command: 'node', args: ['plugin.js'] },
+        controlledByPlugin: 'plugin-a',
+      },
+    ])
+  })
+
+  it('skips malformed plugin .mcp.json files instead of failing the whole discovery pass', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ccsp-mcp-bad-json-'))
+    const homeDir = join(root, 'home')
+    const cwd = join(root, 'repo')
+    const brokenPluginCache = join(homeDir, '.claude', 'plugins', 'cache', 'vendor', 'broken-plugin', '1.2.3')
+    const validPluginCache = join(homeDir, '.claude', 'plugins', 'cache', 'vendor', 'valid-plugin', '2.0.0')
+    await mkdir(brokenPluginCache, { recursive: true })
+    await mkdir(validPluginCache, { recursive: true })
+    await mkdir(cwd, { recursive: true })
+
+    await writeFile(join(brokenPluginCache, 'package.json'), JSON.stringify({ name: 'broken-plugin' }), 'utf8')
+    await writeFile(join(brokenPluginCache, '.mcp.json'), '{"mcpServers":', 'utf8')
+    await writeFile(join(validPluginCache, 'package.json'), JSON.stringify({ name: 'valid-plugin' }), 'utf8')
+    await writeFile(join(validPluginCache, '.mcp.json'), JSON.stringify({
+      mcpServers: {
+        validOnly: { command: 'node', args: ['valid.js'] },
+      },
+    }), 'utf8')
+
+    expect(await discoverMcpStates({ homeDir, cwd, knownPlugins: ['broken-plugin', 'valid-plugin'] })).toEqual([
+      {
+        name: 'validOnly',
+        enabled: true,
+        source: 'plugin',
+        config: { pluginName: 'valid-plugin', command: 'node', args: ['valid.js'] },
+        controlledByPlugin: 'valid-plugin',
+      },
+    ])
+  })
+
   it('ignores plugin MCP servers when the plugin is not in the detected plugin list', async () => {
     const root = await mkdtemp(join(tmpdir(), 'ccsp-mcp-'))
     const homeDir = join(root, 'home')

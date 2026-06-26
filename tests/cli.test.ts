@@ -15,11 +15,13 @@ const readJsonFileMock = vi.fn().mockResolvedValue({})
 const renderMock = vi.fn()
 const instanceCleanupMock = vi.fn()
 const listPresetsMock = vi.fn()
+const listPresetsWithSettingsMock = vi.fn()
 const deletePresetMock = vi.fn()
 const renamePresetMock = vi.fn()
 const writePresetSettingsByNameMock = vi.fn()
 const createProjectLaunchPresetMock = vi.fn()
 const writeLastUsedLaunchPresetMock = vi.fn()
+const listLaunchPresetsWithSettingsMock = vi.fn()
 const readLastUsedGlobalSettingsMock = vi.fn()
 const writeLastUsedGlobalSettingsMock = vi.fn()
 const writeTempSettingsMock = vi.fn().mockResolvedValue('/tmp/project/.claude/.ccsp/tmp/temp-settings.json')
@@ -86,6 +88,7 @@ vi.mock('../src/core/paths.js', async () => {
 vi.mock('../src/services/preset-service.js', () => ({
   createPresetService: () => ({
     listPresets: listPresetsMock,
+    listPresetsWithSettings: listPresetsWithSettingsMock,
     deletePreset: deletePresetMock,
     renamePreset: renamePresetMock,
     getPresetPath: vi.fn((name: string) => Promise.resolve(`/tmp/.ccsp/settings/${name}.json`)),
@@ -128,6 +131,7 @@ vi.mock('../src/services/mcp-service.js', () => ({
 vi.mock('../src/services/launch-preset-service.js', () => ({
   createLaunchPresetService: () => ({
     listPresets: vi.fn().mockResolvedValue([]),
+    listPresetsWithSettings: listLaunchPresetsWithSettingsMock,
     readPresetSettings: vi.fn().mockResolvedValue({}),
     createPreset: createProjectLaunchPresetMock,
     writePresetSettings: vi.fn(),
@@ -356,12 +360,20 @@ describe('run command', () => {
     renderMock.mockReset()
     instanceCleanupMock.mockReset()
     listPresetsMock.mockReset()
+    listPresetsWithSettingsMock.mockReset()
+    listPresetsWithSettingsMock.mockImplementation(async () => (await listPresetsMock()).map((meta: { fileName: string }) => ({
+      meta,
+      sourcePath: `/tmp/.ccsp/settings/${meta.fileName}`,
+      settings: {},
+    })))
     deletePresetMock.mockReset()
     writePresetSettingsByNameMock.mockReset()
     renamePresetMock.mockReset()
     createProjectLaunchPresetMock.mockReset()
     createProjectLaunchPresetMock.mockResolvedValue({ name: 'web', fileName: 'web-launch.json', createdAt: '2026-05-19T00:00:00.000Z', updatedAt: '2026-05-19T00:00:00.000Z' })
     writeLastUsedLaunchPresetMock.mockReset()
+    listLaunchPresetsWithSettingsMock.mockReset()
+    listLaunchPresetsWithSettingsMock.mockResolvedValue([])
     readLastUsedGlobalSettingsMock.mockReset()
     readLastUsedGlobalSettingsMock.mockResolvedValue(undefined)
     writeLastUsedGlobalSettingsMock.mockReset()
@@ -633,6 +645,12 @@ describe('manage command', () => {
     renderMock.mockReset()
     instanceCleanupMock.mockReset()
     listPresetsMock.mockReset()
+    listPresetsWithSettingsMock.mockReset()
+    listPresetsWithSettingsMock.mockImplementation(async () => (await listPresetsMock()).map((meta: { fileName: string }) => ({
+      meta,
+      sourcePath: `/tmp/.ccsp/settings/${meta.fileName}`,
+      settings: {},
+    })))
     deletePresetMock.mockReset()
     writePresetSettingsByNameMock.mockReset()
     renamePresetMock.mockReset()

@@ -23,6 +23,21 @@ describe('preset service', () => {
     expect(presets[0]?.name).toBe('base')
   })
 
+  it('lists presets together with settings in one call', async () => {
+    const { root, service } = await createService()
+
+    await service.createBasePreset('Base', { model: 'claude-sonnet', enabledPlugins: { alpha: true } })
+    const presets = await service.listPresetsWithSettings()
+
+    expect(presets).toEqual([
+      {
+        meta: expect.objectContaining({ name: 'base', fileName: 'base-settings.json' }),
+        sourcePath: resolvePresetPath(root, 'base-settings.json'),
+        settings: { model: 'claude-sonnet', enabledPlugins: { alpha: true } },
+      },
+    ])
+  })
+
   it('updates settings for an existing base preset by name', async () => {
     const { service } = await createService()
 

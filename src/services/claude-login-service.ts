@@ -21,12 +21,22 @@ export function createClaudeLoginService(context: PathContext, deps: Partial<Cla
   const checkPathExists = deps.pathExists ?? pathExists
   const hasKeychainCredentials = deps.hasKeychainCredentials ?? defaultHasKeychainCredentials
   const platform = deps.platform ?? process.platform
+  let cachedLoginStatePromise: Promise<boolean> | undefined
 
   return {
     async isLoggedIn(): Promise<boolean> {
-      if (await checkPathExists(resolveClaudeCredentialsPath(context.homeDir))) return true
-      if (platform === 'darwin' && hasKeychainCredentials(KEYCHAIN_SERVICE)) return true
-      return false
+      if (!cachedLoginStatePromise) {
+        cachedLoginStatePromise = (async () => {
+          if (await checkPathExists(resolveClaudeCredentialsPath(context.homeDir))) return true
+          if (platform === 'darwin' && hasKeychainCredentials(KEYCHAIN_SERVICE)) return true
+          return false
+        })().catch(error => {
+          cachedLoginStatePromise = undefined
+          throw error
+        })
+      }
+
+      return cachedLoginStatePromise
     },
   }
 }

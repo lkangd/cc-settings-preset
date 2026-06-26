@@ -74,6 +74,7 @@ describe('manage launch flow', () => {
     vi.doMock('../src/services/preset-service.js', () => ({
       createPresetService: () => ({
         listPresets: vi.fn().mockResolvedValue([{ name: selectedItem.name, fileName: selectedItem.fileName, type: 'base' }]),
+        listPresetsWithSettings: vi.fn().mockResolvedValue([{ meta: { name: selectedItem.name, fileName: selectedItem.fileName, type: 'base' }, sourcePath: selectedItem.sourcePath, settings: selectedItem.settings }]),
         getPresetPath: vi.fn().mockResolvedValue(selectedItem.sourcePath),
         readIndex: vi.fn().mockResolvedValue({
           version: 1,
@@ -125,6 +126,7 @@ describe('manage launch flow', () => {
     vi.doMock('../src/services/launch-preset-service.js', () => ({
       createLaunchPresetService: () => ({
         listPresets: vi.fn().mockResolvedValue([launchPreset]),
+        listPresetsWithSettings: vi.fn().mockResolvedValue([{ meta: launchPreset, settings: { enabledPlugins: {}, skillOverrides: {}, deniedMcpServers: [] } }]),
         readPresetSettings: vi.fn().mockResolvedValue({
           enabledPlugins: {},
           skillOverrides: {},
@@ -241,6 +243,7 @@ describe('manage launch flow', () => {
     vi.doMock('../src/services/preset-service.js', () => ({
       createPresetService: () => ({
         listPresets: vi.fn().mockResolvedValue([]),
+        listPresetsWithSettings: vi.fn().mockResolvedValue([]),
         getPresetPath: vi.fn(),
         readPresetSettings: vi.fn(),
         renamePreset: vi.fn(),
@@ -280,6 +283,7 @@ describe('manage launch flow', () => {
     vi.doMock('../src/services/launch-preset-service.js', () => ({
       createLaunchPresetService: () => ({
         listPresets: vi.fn().mockResolvedValue([launchPreset]),
+        listPresetsWithSettings: vi.fn().mockResolvedValue([{ meta: launchPreset, settings: { enabledPlugins: {}, skillOverrides: {}, deniedMcpServers: [] } }]),
         readPresetSettings: vi.fn().mockResolvedValue({
           enabledPlugins: {},
           skillOverrides: {},
@@ -398,6 +402,7 @@ describe('manage launch flow', () => {
     vi.doMock('../src/services/preset-service.js', () => ({
       createPresetService: () => ({
         listPresets: vi.fn().mockResolvedValue([{ name: selectedItem.name, fileName: selectedItem.fileName, type: 'base' }]),
+        listPresetsWithSettings: vi.fn().mockResolvedValue([{ meta: { name: selectedItem.name, fileName: selectedItem.fileName, type: 'base' }, sourcePath: selectedItem.sourcePath, settings: selectedItem.settings }]),
         getPresetPath: vi.fn().mockResolvedValue(selectedItem.sourcePath),
         readIndex: vi.fn().mockResolvedValue({
           version: 1,
@@ -446,6 +451,7 @@ describe('manage launch flow', () => {
     vi.doMock('../src/services/launch-preset-service.js', () => ({
       createLaunchPresetService: () => ({
         listPresets: vi.fn().mockResolvedValue([]),
+        listPresetsWithSettings: vi.fn().mockResolvedValue([]),
         readPresetSettings: vi.fn(),
         readLastUsed: vi.fn().mockResolvedValue(undefined),
         writeLastUsed: vi.fn(),
@@ -570,6 +576,7 @@ describe('manage launch flow', () => {
     vi.doMock('../src/services/preset-service.js', () => ({
       createPresetService: () => ({
         listPresets: vi.fn(),
+        listPresetsWithSettings: vi.fn().mockResolvedValue([]),
         getPresetPath: vi.fn(),
         readPresetSettings: vi.fn(),
         buildClaudeOfficialItem: vi.fn(),
@@ -612,6 +619,7 @@ describe('manage launch flow', () => {
     vi.doMock('../src/services/launch-preset-service.js', () => ({
       createLaunchPresetService: () => ({
         listPresets: vi.fn().mockResolvedValue([launchPreset]),
+        listPresetsWithSettings: vi.fn().mockResolvedValue([{ meta: launchPreset, settings: { enabledPlugins: {}, skillOverrides: {}, deniedMcpServers: [] } }]),
         readPresetSettings: vi.fn().mockResolvedValue({ enabledPlugins: {}, skillOverrides: {}, deniedMcpServers: [] }),
         readLastUsed: vi.fn().mockResolvedValue(undefined),
         writeLastUsed,
@@ -717,6 +725,7 @@ describe('manage launch flow', () => {
     vi.doMock('../src/services/preset-service.js', () => ({
       createPresetService: () => ({
         listPresets: vi.fn().mockResolvedValue([{ name: selectedItem.name, fileName: selectedItem.fileName, type: 'base' }]),
+        listPresetsWithSettings: vi.fn().mockResolvedValue([{ meta: { name: selectedItem.name, fileName: selectedItem.fileName, type: 'base' }, sourcePath: selectedItem.sourcePath, settings: selectedItem.settings }]),
         getPresetPath: vi.fn().mockResolvedValue(selectedItem.sourcePath),
         readIndex: vi.fn().mockResolvedValue({
           version: 1,
@@ -764,6 +773,7 @@ describe('manage launch flow', () => {
     vi.doMock('../src/services/launch-preset-service.js', () => ({
       createLaunchPresetService: () => ({
         listPresets: vi.fn().mockResolvedValue([launchPreset]),
+        listPresetsWithSettings: vi.fn().mockResolvedValue([{ meta: launchPreset, settings: { enabledPlugins: {}, skillOverrides: {}, deniedMcpServers: [] } }]),
         readPresetSettings: vi.fn().mockResolvedValue({ enabledPlugins: {}, skillOverrides: {}, deniedMcpServers: [] }),
         readLastUsed: vi.fn().mockResolvedValue(undefined),
         writeLastUsed: vi.fn().mockResolvedValue(undefined),
@@ -855,6 +865,7 @@ describe('manage launch flow', () => {
     vi.doMock('../src/services/preset-service.js', () => ({
       createPresetService: () => ({
         listPresets: vi.fn().mockResolvedValue([{ name: selectedItem.name, fileName: selectedItem.fileName, type: 'base' }]),
+        listPresetsWithSettings: vi.fn().mockResolvedValue([{ meta: { name: selectedItem.name, fileName: selectedItem.fileName, type: 'base' }, sourcePath: selectedItem.sourcePath, settings: selectedItem.settings }]),
         getPresetPath: vi.fn().mockResolvedValue(selectedItem.sourcePath),
         readIndex: vi.fn().mockResolvedValue({
           version: 1,
@@ -902,6 +913,7 @@ describe('manage launch flow', () => {
     vi.doMock('../src/services/launch-preset-service.js', () => ({
       createLaunchPresetService: () => ({
         listPresets: vi.fn().mockResolvedValue([launchPreset]),
+        listPresetsWithSettings: vi.fn().mockResolvedValue([{ meta: launchPreset, settings: { enabledPlugins: {}, skillOverrides: {}, deniedMcpServers: [] } }]),
         readPresetSettings: vi.fn().mockResolvedValue({ enabledPlugins: {}, skillOverrides: {}, deniedMcpServers: [] }),
         readLastUsed: vi.fn().mockResolvedValue(undefined),
         writeLastUsed,

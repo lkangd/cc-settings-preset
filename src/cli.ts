@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { realpathSync } from 'node:fs'
+import { performance } from 'node:perf_hooks'
 import { fileURLToPath } from 'node:url'
 import React from 'react'
 import { Command } from 'commander'
@@ -12,7 +13,7 @@ import { isCcspCommanderSubcommand } from './core/commands.js'
 import { resolvePresetIndexKey } from './core/name.js'
 import { CliError } from './core/errors.js'
 import { readJsonFile } from './core/json.js'
-import { createPathContext, resolveGlobalRoot, resolvePresetPath, resolveUserClaudeSettingsPath } from './core/paths.js'
+import { createPathContext, resolveGlobalRoot, resolveUserClaudeSettingsPath } from './core/paths.js'
 import { parseSettings, type BasePresetMeta, type CcspConfig, type RunMode, type SessionBinding, type SettingsDisplayFormat } from './core/schema.js'
 import { spawnClaude } from './core/spawn.js'
 import { ConfigApp } from './ink/config-app.js'
@@ -27,6 +28,7 @@ import { ProjectManageApp, type ProjectManageResult } from './ink/project-manage
 import { DirectRunPreviewApp } from './ink/direct-run-preview-app.js'
 import { createSettingsSelectFlowState } from './flows/settings-select-flow.js'
 import { SettingsSelectApp, type SettingsSelectResult } from './ink/settings-select-app.js'
+import { discoverCachedClaudePlugins } from './services/plugin-cache-service.js'
 import { applyPluginOverrides, pluginStatesToEnabledPlugins, resolvePluginStates } from './services/plugin-service.js'
 import { createCcspConfigService } from './services/ccsp-config-service.js'
 import { createGlobalLastSettingsService } from './services/global-last-settings-service.js'
@@ -140,6 +142,28 @@ function createBannerCandidates(): string[][] {
 
 function selectBannerCandidate(width: number, candidates: string[][]): string[] {
   return candidates.find(lines => Math.max(...lines.map(visibleWidth)) <= width) ?? candidates.at(-1) ?? []
+}
+
+function isProfileEnabled(): boolean {
+  return process.env.CCSP_PROFILE === '1'
+}
+
+function writeProfileLine(label: string, durationMs: number): void {
+  process.stderr.write(`\x1b[2m[ccsp profile] ${label}: ${durationMs.toFixed(1)}ms\x1b[0m\n`)
+}
+
+async function profileStep<T>(label: string, action: () => Promise<T>): Promise<T> {
+  if (!isProfileEnabled()) return action()
+  const startedAt = performance.now()
+  try {
+    return await action()
+  } finally {
+    writeProfileLine(label, performance.now() - startedAt)
+  }
+}
+
+function prewarmProjectLaunchDiscovery(): void {
+  void discoverCachedClaudePlugins(context.homeDir).catch(() => {})
 }
 
 export function buildBannerLines(columns: number): string[] {
@@ -323,18 +347,14 @@ async function renderSettingsSelectApp(
 }
 
 async function buildGlobalSettingsPresetItems(lastUsedName?: string): Promise<SettingsSelectResult[]> {
-  const presets = (await presetService.listPresets()).filter(preset => preset.type === 'base')
-  const items: SettingsSelectResult[] = []
-  for (const preset of presets) {
-    items.push({
-      name: preset.name,
-      sourcePath: resolvePresetPath(globalRoot, preset.fileName),
-      settings: await presetService.readPresetSettings(preset.name),
-      updatedAt: preset.updatedAt,
-      isLastUsed: preset.name === lastUsedName,
-    })
-  }
-  return items
+  const presets = await profileStep('global-presets', () => presetService.listPresetsWithSettings())
+  return presets.map(({ meta, sourcePath, settings }) => ({
+    name: meta.name,
+    sourcePath,
+    settings,
+    updatedAt: meta.updatedAt,
+    isLastUsed: meta.name === lastUsedName,
+  }))
 }
 
 async function resolveProjectManageBaseSettings(): Promise<SettingsSelectResult | undefined> {
@@ -350,8 +370,10 @@ async function resolveProjectManageBaseSettings(): Promise<SettingsSelectResult 
 }
 
 async function resolveInteractiveBaseSettings(config?: CcspConfig): Promise<SettingsSelectResult | undefined> {
-  const officialItem = await buildClaudeOfficialPresetItem()
-  const rememberedName = await globalLastSettingsService.readLastUsed(context.cwd)
+  const [officialItem, rememberedName] = await Promise.all([
+    profileStep('claude-official-preset', buildClaudeOfficialPresetItem),
+    profileStep('global-last-used', () => globalLastSettingsService.readLastUsed(context.cwd)),
+  ])
   const presetItems = [...(officialItem ? [officialItem] : []), ...(await buildGlobalSettingsPresetItems(rememberedName))]
   if (presetItems.length > 0) {
     const initialName =
@@ -383,36 +405,41 @@ async function buildProjectLaunchInput(selectedSettings: SettingsSelectResult): 
   >
   lastUsedName?: string
 }> {
-  const sources = await settingsSourceService.discoverSettingsSources()
+  const startedAt = isProfileEnabled() ? performance.now() : undefined
+  const sources = await profileStep('settings-sources', () => settingsSourceService.discoverSettingsSources())
   const settingsSources = [
     ...sources,
     { scope: 'preset' as const, filePath: selectedSettings.sourcePath, settings: selectedSettings.settings }
   ]
   const basePlugins = resolvePluginStates(settingsSources)
-  const baseSkills = applySkillOverrides(
-    await discoverSkillStates({
+  const enabledPlugins = Object.fromEntries(
+    basePlugins.filter(plugin => plugin.enabled).map(plugin => [plugin.name, true])
+  )
+  const [discoveredSkills, rawMcps, launchPresetEntries, lastUsedName] = await Promise.all([
+    profileStep('skills-discovery', () => discoverSkillStates({
       homeDir: context.homeDir,
       cwd: context.cwd,
-      enabledPlugins: Object.fromEntries(
-        basePlugins.filter(plugin => plugin.enabled).map(plugin => [plugin.name, true])
-      )
-    }),
+      enabledPlugins,
+    })),
+    profileStep('mcp-discovery', () => discoverMcpStates({
+      homeDir: context.homeDir,
+      cwd: context.cwd,
+      knownPlugins: basePlugins.map(plugin => plugin.name)
+    })),
+    profileStep('launch-presets', () => launchPresetService.listPresetsWithSettings()),
+    profileStep('launch-last-used', () => launchPresetService.readLastUsed()),
+  ])
+  const baseSkills = applySkillOverrides(
+    discoveredSkills,
     resolveSkillOverrides(settingsSources)
   )
-  const rawMcps = await discoverMcpStates({
-    homeDir: context.homeDir,
-    cwd: context.cwd,
-    knownPlugins: basePlugins.map(plugin => plugin.name)
-  })
   const baseMcps = applyDeniedMcpServers(
     applyPluginMcpAvailability(rawMcps, basePlugins),
     resolveDeniedMcpServers(settingsSources)
   )
-  const launchPresets = await launchPresetService.listPresets()
   const statesByPreset: Record<string, ProjectLaunchToggleState> = {}
 
-  for (const preset of launchPresets) {
-    const settings = await launchPresetService.readPresetSettings(preset.name)
+  for (const { meta: preset, settings } of launchPresetEntries) {
     const presetPlugins = applyPluginOverrides(basePlugins, settings.enabledPlugins)
     statesByPreset[preset.name] = {
       plugins: presetPlugins,
@@ -421,9 +448,12 @@ async function buildProjectLaunchInput(selectedSettings: SettingsSelectResult): 
     }
   }
 
-  const lastUsedName = await launchPresetService.readLastUsed()
+  if (startedAt !== undefined) {
+    writeProfileLine('build-project-launch-input', performance.now() - startedAt)
+  }
+
   return {
-    presets: launchPresets,
+    presets: launchPresetEntries.map(entry => entry.meta),
     detected: { plugins: basePlugins, skills: baseSkills, mcps: baseMcps },
     statesByPreset,
     disableLockSources: settingsSources,
@@ -600,19 +630,29 @@ async function launchClaudeWithFinalizedSettings(input: {
 }): Promise<void> {
   const session = resolveSessionLaunch(input.args)
   const stem = randomUUID()
-  const claudeSources = await settingsSourceService.discoverSettingsSources()
-  const statusLineEnabled = input.statusLineEnabled ?? (await ccspConfigService.read()).statusLineEnabled
-  const settingsPath = await launchPresetService.writeTempSettings(
-    await finalizeLaunchSettings(input.baseSettings, input.launchSettings, {
+  const launchPrepStartedAt = isProfileEnabled() ? performance.now() : undefined
+  const [claudeSources, statusLineEnabled] = await Promise.all([
+    profileStep('launch-settings-sources', () => settingsSourceService.discoverSettingsSources()),
+    input.statusLineEnabled !== undefined
+      ? Promise.resolve(input.statusLineEnabled)
+      : profileStep('ccsp-config', async () => (await ccspConfigService.read()).statusLineEnabled),
+  ])
+  const finalizedSettings = await profileStep('finalize-launch-settings', () => finalizeLaunchSettings(
+    input.baseSettings,
+    input.launchSettings,
+    {
       presetLabel: input.presetLabel,
       toggles: input.toggles,
       context,
       claudeSources,
       stem,
       statusLineEnabled,
-    }),
+    },
+  ))
+  const settingsPath = await profileStep('write-temp-settings', () => launchPresetService.writeTempSettings(
+    finalizedSettings,
     stem,
-  )
+  ))
 
   const bindingInput = {
     globalName: input.globalName,
@@ -627,9 +667,14 @@ async function launchClaudeWithFinalizedSettings(input: {
   // record the binding upfront so the config is recoverable even if Claude is
   // killed before exit. Otherwise snapshot Claude's project dir and discover
   // the id post-spawn by diffing.
-  const sessionSnapshot = session.sessionId ? undefined : await claudeSessionService.snapshot()
+  const sessionSnapshot = session.sessionId
+    ? undefined
+    : await profileStep('claude-session-snapshot', () => claudeSessionService.snapshot())
   if (session.sessionId) {
     await launchPresetService.writeSessionBinding({ sessionId: session.sessionId, ...bindingInput })
+  }
+  if (launchPrepStartedAt !== undefined) {
+    writeProfileLine('prepare-claude-launch', performance.now() - launchPrepStartedAt)
   }
 
   try {
@@ -724,6 +769,7 @@ async function launchGlobalOnly(
 async function runInteractive(rawClaudeArgs: string[], fallbackMode?: 'resume' | 'continue'): Promise<void> {
   printBanner()
   const config = await ccspConfigService.read()
+  prewarmProjectLaunchDiscovery()
   const launchArgs = fallbackMode === 'resume'
     ? ['--resume', ...rawClaudeArgs]
     : rawClaudeArgs

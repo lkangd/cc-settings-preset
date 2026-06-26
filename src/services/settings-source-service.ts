@@ -24,18 +24,16 @@ export function createSettingsSourceService(context: PathContext) {
 
   return {
     async discoverSettingsSources(): Promise<SettingsSource[]> {
-      const sources: SettingsSource[] = []
-
-      for (const candidate of candidates) {
-        if (!(await pathExists(candidate.filePath))) continue
-        sources.push({
+      const sources = await Promise.all(candidates.map(async candidate => {
+        if (!(await pathExists(candidate.filePath))) return undefined
+        return {
           scope: candidate.scope,
           filePath: candidate.filePath,
           settings: parseSettings(await readJsonFile(candidate.filePath)),
-        })
-      }
+        }
+      }))
 
-      return sources
+      return sources.filter((source): source is SettingsSource => Boolean(source))
     },
   }
 }

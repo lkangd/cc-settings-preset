@@ -1,4 +1,4 @@
-import { pathExists, readJsonFile, writeJsonFile } from '../core/json.js'
+import { readJsonFileOrDefault, writeJsonFile } from '../core/json.js'
 import { resolveGlobalLastSettingsPath } from '../core/paths.js'
 import { lastSettingsSchema, type LastSettings } from '../core/schema.js'
 
@@ -6,8 +6,7 @@ export function createGlobalLastSettingsService(homeDir: string) {
   const filePath = resolveGlobalLastSettingsPath(homeDir)
 
   async function readState(): Promise<LastSettings> {
-    if (!(await pathExists(filePath))) return {}
-    return lastSettingsSchema.parse(await readJsonFile(filePath))
+    return lastSettingsSchema.parse(await readJsonFileOrDefault(filePath, {}))
   }
 
   async function writeState(state: LastSettings): Promise<void> {

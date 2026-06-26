@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
 
-import { pathExists, readJsonFile } from '../core/json.js'
+import { readJsonFile, readJsonFileOrDefault } from '../core/json.js'
 import {
   resolveManagedClaudeSettingsDropInDir,
   resolveManagedClaudeSettingsPath,
@@ -52,14 +52,13 @@ async function readManagedDropInFragments(): Promise<Record<string, unknown>[]> 
 
 export async function readManagedSettings(): Promise<Record<string, unknown> | undefined> {
   const mainPath = resolveManagedClaudeSettingsPath()
-  let merged: Record<string, unknown> = {}
+  const [main, fragments] = await Promise.all([
+    readJsonFileOrDefault(mainPath, undefined),
+    readManagedDropInFragments(),
+  ])
+  let merged: Record<string, unknown> = isPlainObject(main) ? { ...main } : {}
 
-  if (await pathExists(mainPath)) {
-    const main = await readJsonFile(mainPath)
-    if (isPlainObject(main)) merged = { ...main }
-  }
-
-  for (const fragment of await readManagedDropInFragments()) {
+  for (const fragment of fragments) {
     merged = mergeManagedSettings(merged, fragment)
   }
 

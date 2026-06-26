@@ -1,8 +1,8 @@
-import { promises as fs, type Dirent } from 'node:fs'
-import { basename, join } from 'node:path'
-import { pathExists, readJsonFile } from '../core/json.js'
-import { resolveClaudePluginCacheDir, resolveProjectMcpPath, resolveUserClaudeJsonPath } from '../core/paths.js'
+import { asRecord } from '../core/is-plain-object.js'
+import { readJsonFile, readJsonFileOrDefault } from '../core/json.js'
+import { resolveProjectMcpPath, resolveUserClaudeJsonPath } from '../core/paths.js'
 import type { McpPolicyEntry, Settings } from '../core/schema.js'
+import { discoverCachedClaudePlugins } from './plugin-cache-service.js'
 import { resolvePluginRegistryKey, type PluginState } from './plugin-service.js'
 
 export type McpSource = 'local' | 'project' | 'user' | 'plugin' | 'connector'
@@ -21,15 +21,6 @@ export type McpDiscoveryInput = {
   knownPlugins?: string[]
 }
 
-async function readDirSafe(dirPath: string): Promise<Dirent[]> {
-  try {
-    return await fs.readdir(dirPath, { withFileTypes: true })
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
-    throw error
-  }
-}
-
 function readMcpServers(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object') return {}
   const servers = (value as { mcpServers?: unknown }).mcpServers
@@ -45,55 +36,33 @@ async function discoverPluginMcpServers(
   homeDir: string,
   knownPlugins: string[] = [],
 ): Promise<Array<{ name: string; config: unknown; controlledByPlugin: string }>> {
-  const cacheDir = resolveClaudePluginCacheDir(homeDir)
   const servers: Array<{ name: string; config: unknown; controlledByPlugin: string }> = []
 
-  async function scan(dirPath: string): Promise<void> {
-    const entries = await readDirSafe(dirPath)
+  for (const plugin of await discoverCachedClaudePlugins(homeDir)) {
+    const registryKey = resolvePluginRegistryKey(plugin.pluginName, knownPlugins)
+    if (!registryKey) continue
 
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue
-      const fullPath = join(dirPath, entry.name)
-      const manifestPath = join(fullPath, 'plugin.json')
-
-      if (await pathExists(manifestPath)) {
-        const manifest = await readJsonFile(manifestPath)
-        const pluginName = typeof (manifest as { name?: unknown }).name === 'string'
-          ? (manifest as { name: string }).name
-          : basename(fullPath)
-        const registryKey = resolvePluginRegistryKey(pluginName, knownPlugins)
-        if (!registryKey) continue
-
-        for (const [name, config] of Object.entries(readMcpServers(manifest))) {
-          servers.push({
-            name,
-            controlledByPlugin: registryKey,
-            config: { pluginName, ...asRecord(config) },
-          })
-        }
-        continue
-      }
-
-      await scan(fullPath)
+    for (const [name, config] of Object.entries(readMcpServers(plugin.manifest))) {
+      servers.push({
+        name,
+        controlledByPlugin: registryKey,
+        config: { pluginName: plugin.pluginName, ...asRecord(config) },
+      })
     }
   }
 
-  await scan(cacheDir)
   return servers
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-  return value as Record<string, unknown>
 }
 
 export async function discoverMcpStates(input: McpDiscoveryInput): Promise<McpState[]> {
   const resolved = new Map<string, McpState>()
   const knownPlugins = input.knownPlugins ?? []
   const userClaudePath = resolveUserClaudeJsonPath(input.homeDir)
-  const userClaudeJson = await pathExists(userClaudePath) ? await readJsonFile(userClaudePath) : {}
   const projectMcpPath = resolveProjectMcpPath(input.cwd)
-  const projectMcpJson = await pathExists(projectMcpPath) ? await readJsonFile(projectMcpPath) : {}
+  const [userClaudeJson, projectMcpJson] = await Promise.all([
+    readJsonFileOrDefault(userClaudePath, {}),
+    readJsonFileOrDefault(projectMcpPath, {}),
+  ])
 
   for (const { name, config, controlledByPlugin } of await discoverPluginMcpServers(input.homeDir, knownPlugins)) {
     resolved.set(name, { name, enabled: true, source: 'plugin', config, controlledByPlugin })

@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs'
 import { basename } from 'node:path'
 import { CliError } from '../core/errors.js'
-import { pathExists, readJsonFile, writeJsonFile } from '../core/json.js'
+import { readJsonFile, readJsonFileOrDefault, writeJsonFile } from '../core/json.js'
 import {
   buildLaunchPresetFileName,
   normalizePresetName,
@@ -84,25 +84,57 @@ export function createLaunchPresetService(cwd: string) {
   const indexPath = resolveProjectLaunchPresetIndexPath(cwd)
   const lastUsedPath = resolveProjectLastUsedPath(cwd)
   const sessionsPath = resolveProjectSessionsPath(cwd)
+  let indexPromise: Promise<LaunchPresetIndex> | undefined
+  let sessionsPromise: Promise<SessionIndex> | undefined
+
+  function invalidateIndex(): void {
+    indexPromise = undefined
+  }
+
+  function invalidateSessions(): void {
+    sessionsPromise = undefined
+  }
+
+  async function readIndexUncached(): Promise<LaunchPresetIndex> {
+    return launchPresetIndexSchema.parse(await readJsonFileOrDefault(indexPath, createEmptyLaunchPresetIndex()))
+  }
 
   async function readIndex(): Promise<LaunchPresetIndex> {
-    if (!(await pathExists(indexPath))) return createEmptyLaunchPresetIndex()
-    return launchPresetIndexSchema.parse(await readJsonFile(indexPath))
+    if (!indexPromise) {
+      indexPromise = readIndexUncached().catch(error => {
+        indexPromise = undefined
+        throw error
+      })
+    }
+
+    return indexPromise
   }
 
   async function writeIndex(index: LaunchPresetIndex): Promise<void> {
     await ensureProjectCcspStore(cwd)
     await writeJsonFile(indexPath, launchPresetIndexSchema.parse(index))
+    invalidateIndex()
+  }
+
+  async function readSessionsUncached(): Promise<SessionIndex> {
+    return sessionIndexSchema.parse(await readJsonFileOrDefault(sessionsPath, createEmptySessionIndex()))
   }
 
   async function readSessions(): Promise<SessionIndex> {
-    if (!(await pathExists(sessionsPath))) return createEmptySessionIndex()
-    return sessionIndexSchema.parse(await readJsonFile(sessionsPath))
+    if (!sessionsPromise) {
+      sessionsPromise = readSessionsUncached().catch(error => {
+        sessionsPromise = undefined
+        throw error
+      })
+    }
+
+    return sessionsPromise
   }
 
   async function writeSessions(sessions: SessionIndex): Promise<void> {
     await ensureProjectCcspStore(cwd)
     await writeJsonFile(sessionsPath, sessionIndexSchema.parse(sessions))
+    invalidateSessions()
   }
 
   function getPresetPath(meta: LaunchPresetMeta): string {
@@ -110,8 +142,9 @@ export function createLaunchPresetService(cwd: string) {
   }
 
   async function readLastUsed(): Promise<string | undefined> {
-    if (!(await pathExists(lastUsedPath))) return undefined
-    const parsed = lastUsedLaunchPresetSchema.parse(await readJsonFile(lastUsedPath))
+    const raw = await readJsonFileOrDefault(lastUsedPath, undefined)
+    if (raw === undefined) return undefined
+    const parsed = lastUsedLaunchPresetSchema.parse(raw)
     const index = await readIndex()
     return index.presets[parsed.presetName] ? parsed.presetName : undefined
   }
@@ -165,6 +198,14 @@ export function createLaunchPresetService(cwd: string) {
     async listPresets(): Promise<LaunchPresetMeta[]> {
       const index = await readIndex()
       return Object.values(index.presets).sort((a, b) => a.name.localeCompare(b.name))
+    },
+
+    async listPresetsWithSettings(): Promise<Array<{ meta: LaunchPresetMeta; settings: LaunchPresetSettings }>> {
+      const presets = await service.listPresets()
+      return Promise.all(presets.map(async meta => ({
+        meta,
+        settings: parseLaunchPresetSettings(await readJsonFile(getPresetPath(meta))),
+      })))
     },
 
     async readPresetSettings(nameInput: string): Promise<LaunchPresetSettings> {

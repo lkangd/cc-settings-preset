@@ -50,4 +50,19 @@ describe('createClaudeLoginService.isLoggedIn', () => {
 
     expect(await service.isLoggedIn()).toBe(false)
   })
+
+  it('caches the resolved login state within one service instance', async () => {
+    const pathExists = vi.fn(async () => false)
+    const hasKeychainCredentials = vi.fn(() => true)
+    const service = createClaudeLoginService(context, {
+      pathExists,
+      hasKeychainCredentials,
+      platform: 'darwin',
+    })
+
+    expect(await service.isLoggedIn()).toBe(true)
+    expect(await service.isLoggedIn()).toBe(true)
+    expect(pathExists).toHaveBeenCalledTimes(1)
+    expect(hasKeychainCredentials).toHaveBeenCalledTimes(1)
+  })
 })

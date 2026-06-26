@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs'
 
 import { CliError } from '../core/errors.js'
-import { pathExists, readJsonFile, writeJsonFile } from '../core/json.js'
+import { readJsonFile, readJsonFileOrDefault, writeJsonFile } from '../core/json.js'
 import {
   buildSettingsFileName,
   derivePresetNameFromSettingsPath,
@@ -66,11 +66,16 @@ function buildLookup(presets: BasePresetMeta[]): PresetLookup {
 export function createPresetService(globalRoot: string) {
   const settingsDir = resolveSettingsDir(globalRoot)
   const metadataPath = resolvePresetMetadataPath(globalRoot)
+  let presetLookupPromise: Promise<PresetLookup> | undefined
+
+  function invalidatePresetLookup(): void {
+    presetLookupPromise = undefined
+  }
 
   async function readStoredMetadata(): Promise<PresetMetadataState> {
-    if (!(await pathExists(metadataPath))) return createEmptyMetadataState()
+    const raw = await readJsonFileOrDefault(metadataPath, undefined)
+    if (raw === undefined) return createEmptyMetadataState()
 
-    const raw = await readJsonFile(metadataPath)
     const parsed = presetIndexSchema.safeParse(raw)
     if (!parsed.success) return createEmptyMetadataState()
 
@@ -100,7 +105,7 @@ export function createPresetService(globalRoot: string) {
     })
   }
 
-  async function readPresetLookup(): Promise<PresetLookup> {
+  async function readPresetLookupUncached(): Promise<PresetLookup> {
     let entries: Array<{ name: string; isFile(): boolean; isSymbolicLink(): boolean }>
     try {
       entries = await fs.readdir(settingsDir, { withFileTypes: true, encoding: 'utf8' })
@@ -160,6 +165,17 @@ export function createPresetService(globalRoot: string) {
     return buildLookup(discovered.map(meta => stored.presets[meta.name] ?? meta))
   }
 
+  async function readPresetLookup(): Promise<PresetLookup> {
+    if (!presetLookupPromise) {
+      presetLookupPromise = readPresetLookupUncached().catch(error => {
+        presetLookupPromise = undefined
+        throw error
+      })
+    }
+
+    return presetLookupPromise
+  }
+
   async function readIndex(): Promise<PresetIndex> {
     const lookup = await readPresetLookup()
     return {
@@ -182,6 +198,7 @@ export function createPresetService(globalRoot: string) {
     const state = await readStoredMetadata()
     state.presets[meta.name] = sanitizePresetMeta(meta)
     await writeStoredMetadata(state)
+    invalidatePresetLookup()
     return state.presets[meta.name]!
   }
 
@@ -191,6 +208,7 @@ export function createPresetService(globalRoot: string) {
     if (!name) return
     delete state.presets[name]
     await writeStoredMetadata(state)
+    invalidatePresetLookup()
   }
 
   async function writePresetSettings(fileName: string, settings: Settings): Promise<void> {
@@ -224,6 +242,18 @@ export function createPresetService(globalRoot: string) {
 
     async listPresets(): Promise<BasePresetMeta[]> {
       return (await readPresetLookup()).list
+    },
+
+    async listPresetsWithSettings(): Promise<Array<{ meta: BasePresetMeta; sourcePath: string; settings: Settings }>> {
+      const lookup = await readPresetLookup()
+      return Promise.all(lookup.list.map(async meta => {
+        const sourcePath = getPresetPath(meta.fileName)
+        return {
+          meta,
+          sourcePath,
+          settings: parseSettings(await readJsonFile(sourcePath)),
+        }
+      }))
     },
 
     async readPresetSettings(nameInput: string): Promise<Settings> {
@@ -304,7 +334,7 @@ export function createPresetService(globalRoot: string) {
     },
 
     async buildClaudeOfficialItem(settingsPath: string): Promise<ClaudeOfficialPresetItem> {
-      const settings = (await pathExists(settingsPath)) ? parseSettings(await readJsonFile(settingsPath)) : {}
+      const settings = parseSettings(await readJsonFileOrDefault(settingsPath, {}))
       return {
         name: CLAUDE_OFFICIAL_PRESET_NAME,
         sourcePath: settingsPath,

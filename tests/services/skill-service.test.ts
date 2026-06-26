@@ -33,6 +33,64 @@ describe('discoverSkillStates', () => {
     expect(skills.find(skill => skill.name === 'demo-plugin:plugin-skill')?.toggleable).toBe(false)
   })
 
+  it('discovers plugin skills from versioned cache directories', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ccsp-skills-versioned-'))
+    const home = join(root, 'home')
+    const cwd = join(root, 'repo')
+    const pluginCache = join(home, '.claude', 'plugins', 'cache', 'market', 'demo-plugin', '1.2.3')
+
+    await mkdir(join(pluginCache, 'skills', 'plugin-skill'), { recursive: true })
+    await writeFile(join(pluginCache, 'package.json'), '{"name":"demo-plugin"}')
+    await writeFile(join(pluginCache, 'skills', 'plugin-skill', 'SKILL.md'), '---\nname: plugin-skill\n---\n')
+
+    const skills = await discoverSkillStates({
+      homeDir: home,
+      cwd,
+      enabledPlugins: { 'demo-plugin': true },
+    })
+
+    expect(skills.map(skill => skill.name)).toContain('demo-plugin:plugin-skill')
+  })
+
+  it('discovers plugin skills from direct cache plugin layouts without a vendor directory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ccsp-skills-direct-'))
+    const home = join(root, 'home')
+    const cwd = join(root, 'repo')
+    const pluginCache = join(home, '.claude', 'plugins', 'cache', 'demo-plugin', '1.2.3')
+
+    await mkdir(join(pluginCache, 'skills', 'plugin-skill'), { recursive: true })
+    await writeFile(join(pluginCache, 'package.json'), '{"name":"demo-plugin"}')
+    await writeFile(join(pluginCache, 'skills', 'plugin-skill', 'SKILL.md'), '---\nname: plugin-skill\n---\n')
+
+    const skills = await discoverSkillStates({
+      homeDir: home,
+      cwd,
+      enabledPlugins: { 'demo-plugin': true },
+    })
+
+    expect(skills.map(skill => skill.name)).toContain('demo-plugin:plugin-skill')
+  })
+
+  it('keeps plugin skills discoverable when a sibling .mcp.json is malformed', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ccsp-skills-bad-mcp-'))
+    const home = join(root, 'home')
+    const cwd = join(root, 'repo')
+    const pluginCache = join(home, '.claude', 'plugins', 'cache', 'market', 'demo-plugin', '1.2.3')
+
+    await mkdir(join(pluginCache, 'skills', 'plugin-skill'), { recursive: true })
+    await writeFile(join(pluginCache, 'package.json'), '{"name":"demo-plugin"}')
+    await writeFile(join(pluginCache, '.mcp.json'), '{"mcpServers":', 'utf8')
+    await writeFile(join(pluginCache, 'skills', 'plugin-skill', 'SKILL.md'), '---\nname: plugin-skill\n---\n')
+
+    const skills = await discoverSkillStates({
+      homeDir: home,
+      cwd,
+      enabledPlugins: { 'demo-plugin': true },
+    })
+
+    expect(skills.map(skill => skill.name)).toContain('demo-plugin:plugin-skill')
+  })
+
   it('applies preset skill overrides to discovered non-plugin skills', async () => {
     const root = await mkdtemp(join(tmpdir(), 'ccsp-skill-overrides-'))
     const home = join(root, 'home')

@@ -40,6 +40,28 @@ describe('launch preset service', () => {
     expect(await service.listPresets()).toEqual([])
   })
 
+  it('lists launch presets together with settings in one call', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ccsp-project-'))
+    const service = createLaunchPresetService(cwd)
+
+    await service.createPreset('Web Dev', {
+      enabledPlugins: { alpha: false },
+      skillOverrides: { personal: 'off' },
+      deniedMcpServers: [{ serverName: 'github' }],
+    })
+
+    expect(await service.listPresetsWithSettings()).toEqual([
+      {
+        meta: expect.objectContaining({ name: 'Web-Dev', fileName: 'Web-Dev-launch.json' }),
+        settings: {
+          enabledPlugins: { alpha: false },
+          skillOverrides: { personal: 'off' },
+          deniedMcpServers: [{ serverName: 'github' }],
+        },
+      },
+    ])
+  })
+
   it('rejects duplicate project launch preset names', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'ccsp-project-'))
     const service = createLaunchPresetService(cwd)
