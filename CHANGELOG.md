@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0 (2026-06-26)
+
+### Performance Improvements
+* **launch**: parallelize and cache settings discovery for faster launches
+
 ## 1.1.5 (2026-06-25)
 
 ### Features
