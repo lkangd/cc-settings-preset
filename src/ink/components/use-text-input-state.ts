@@ -76,6 +76,13 @@ export const reduceTextInputState = (state: State, action: Action): State => {
       }
     }
     case 'sync-external-value':
+      if (action.value === state.value) {
+        return {
+          ...state,
+          previousValue: action.value,
+        }
+      }
+
       return {
         previousValue: action.value,
         value: action.value,

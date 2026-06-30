@@ -49,6 +49,16 @@ describe('reduceTextInputState', () => {
     expect(next.value).toBe('hello ')
     expect(next.cursorOffset).toBe(6)
   })
+
+  it('preserves cursor position when syncing the same external value', () => {
+    const next = reduceTextInputState(
+      { previousValue: 'ac', value: 'abc', cursorOffset: 2 },
+      { type: 'sync-external-value', value: 'abc' },
+    )
+
+    expect(next.value).toBe('abc')
+    expect(next.cursorOffset).toBe(2)
+  })
 })
 
 describe('useTextInputState', () => {

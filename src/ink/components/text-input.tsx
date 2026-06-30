@@ -36,7 +36,7 @@ export function TextInput({ label, value, placeholder, isDisabled = false, onCha
       <TruncateText bold>{label}</TruncateText>
       <TruncateText dimColor={!state.value}>{inputValue}</TruncateText>
       <TruncateText dimColor>
-        enter confirm · esc cancel · ←/→ cursor · ⌃U del to start · ⌃K del to end
+        enter confirm · esc cancel · ←/→ cursor · ⌘⌫/⌃U del to start · ⌃K del to end
       </TruncateText>
     </Box>
   )

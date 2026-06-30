@@ -103,6 +103,11 @@ export function useTextInput({
       return
     }
 
+    if ((key.meta || key.super) && (key.backspace || key.delete)) {
+      state.deleteToStart()
+      return
+    }
+
     if (key.backspace || key.delete) {
       state.delete()
       return

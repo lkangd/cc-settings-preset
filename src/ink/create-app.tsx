@@ -30,6 +30,7 @@ export function CreateApp({ sources, onSubmit }: Props) {
   const { exit } = useApp()
   const [state, setState] = useState(() => createCreateFlowState(sources))
   const [nameError, setNameError] = useState<string | null>(null)
+  const [manualPathError, setManualPathError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const submitVersion = useRef(0)
   const isSubmittingRef = useRef(false)
@@ -69,21 +70,34 @@ export function CreateApp({ sources, onSubmit }: Props) {
 
   if (state.mode === 'manual-path') {
     return (
-      <TextInput
-        label="Settings JSON path"
-        value={state.manualPath}
-        placeholder="/path/to/settings.json"
-        onChange={value => setState(current => ({ ...current, manualPath: value }))}
-        onCancel={() => {
-          setState(current => ({ ...current, mode: 'select-source' }))
-        }}
-        onSubmit={() => {
-          setState(current => transitionCreateFlowToName(
-            current,
-            normalizeInputPath(current.manualPath),
-          ))
-        }}
-      />
+      <Box flexDirection="column">
+        <TextInput
+          label="Settings JSON path"
+          value={state.manualPath}
+          placeholder="/path/to/settings.json"
+          onChange={value => {
+            if (manualPathError) setManualPathError(null)
+            setState(current => ({ ...current, manualPath: value }))
+          }}
+          onCancel={() => {
+            setManualPathError(null)
+            setState(current => ({ ...current, mode: 'select-source' }))
+          }}
+          onSubmit={() => {
+            if (!state.manualPath.trim()) {
+              setManualPathError('Settings JSON path is required')
+              return
+            }
+
+            setManualPathError(null)
+            setState(current => transitionCreateFlowToName(
+              current,
+              normalizeInputPath(current.manualPath),
+            ))
+          }}
+        />
+        {manualPathError ? <Text color="red">{manualPathError}</Text> : null}
+      </Box>
     )
   }
 

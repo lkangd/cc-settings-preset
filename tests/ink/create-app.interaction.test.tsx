@@ -62,6 +62,35 @@ describe('CreateApp interactions', () => {
     exitMock.mockReset()
   })
 
+  it('keeps the user on manual path input and warns when submitting an empty path', async () => {
+    const onSubmit = vi.fn()
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <CreateApp
+          sources={[]}
+          onSubmit={onSubmit}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('', { return: true })
+    })
+
+    expect(textInputProps.at(-1)?.label).toBe('Settings JSON path')
+
+    await act(async () => {
+      await textInputProps.at(-1)?.onSubmit()
+    })
+
+    expect(textInputProps.at(-1)?.label).toBe('Settings JSON path')
+    expect(flattenJson(output!.toJSON())).toContain('Settings JSON path is required')
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(exitMock).not.toHaveBeenCalled()
+  })
+
   it('keeps the user on the name step when the preset name already exists', async () => {
     const onSubmit = vi.fn()
       .mockResolvedValueOnce({ ok: false, error: 'Preset already exists: glm-5.1' } satisfies CreateSubmitResult)
