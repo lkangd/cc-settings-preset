@@ -62,6 +62,8 @@ pnpm add -g @lkangd/cc-settings-preset
 
 安装后可用 `ccsp` 或 `cc-settings-preset` 命令。
 
+后续需要更新时，运行 `ccsp update`。它会检查最新发布版本，打印当前版本之后的 changelog，识别当前是 Homebrew 还是 npm 安装，并执行对应的升级命令。
+
 ### 使用
 
 ```bash
@@ -76,6 +78,9 @@ ccsp claude -p "review this PR"
 ccsp -g work -p web
 ccsp -g glm-5.1 -p Chore claude -p "汇总未关闭的 issue"
 ccsp --global-preset work --project-preset web --dry-run   # 预览合并结果，不启动
+
+# 检查更新，并用识别到的安装器升级 ccsp
+ccsp update
 
 # 恢复本项目最近退出的会话，并复用其原始预设 / 启动配置
 ccsp --continue

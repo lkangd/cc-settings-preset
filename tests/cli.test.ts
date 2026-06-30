@@ -229,6 +229,22 @@ describe('cli argument behavior', () => {
     expect(help).toContain(`v${pkg.version}`)
   })
 
+  it('registers update as a commander subcommand', async () => {
+    const { createProgram } = await import('../src/cli.js')
+    const { isCcspCommanderSubcommand } = await import('../src/core/commands.js')
+
+    expect(isCcspCommanderSubcommand('update')).toBe(true)
+    expect(createProgram().commands.map(command => command.name())).toContain('update')
+  })
+
+  it('shows update in generated help', async () => {
+    const { createProgram } = await import('../src/cli.js')
+    const help = createProgram().helpInformation()
+
+    expect(help).toContain('update')
+    expect(help).toContain('Check for updates and upgrade ccsp')
+  })
+
   it('selects a banner candidate that fits within the terminal width', async () => {
     const { buildBannerLines } = await import('../src/cli.js')
 

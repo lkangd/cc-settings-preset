@@ -1,4 +1,4 @@
-export const CCSP_COMMANDER_SUBCOMMANDS = ['create', 'manage', 'config'] as const
+export const CCSP_COMMANDER_SUBCOMMANDS = ['create', 'manage', 'config', 'update'] as const
 
 export const CCSP_PARSE_STOP_TOKENS = ['claude', ...CCSP_COMMANDER_SUBCOMMANDS] as const
 

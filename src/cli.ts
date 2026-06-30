@@ -44,6 +44,7 @@ import {
 import { createClaudeLoginService } from './services/claude-login-service.js'
 import { CLAUDE_OFFICIAL_PRESET_NAME, createPresetService } from './services/preset-service.js'
 import { createSettingsSourceService, type SettingsSource } from './services/settings-source-service.js'
+import { createUpdateService } from './services/update-service.js'
 import {
   finalizeLaunchSettings,
   resolveProjectPresetName,
@@ -107,6 +108,13 @@ export function createProgram(): Command {
     .action(async () => {
       printBanner()
       await configInteractive()
+    })
+
+  program
+    .command('update')
+    .description('Check for updates and upgrade ccsp')
+    .action(async () => {
+      await createUpdateService({ currentVersion: VERSION }).update()
     })
 
   return program

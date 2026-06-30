@@ -62,6 +62,8 @@ pnpm add -g @lkangd/cc-settings-preset
 
 After install, use either `ccsp` or `cc-settings-preset`.
 
+To update later, run `ccsp update`. It checks the latest published version, prints changelog entries for versions newer than your current install, detects Homebrew vs npm installation, and runs the matching upgrade command.
+
 ### Usage
 
 ```bash
@@ -76,6 +78,9 @@ ccsp claude -p "review this PR"
 ccsp -g work -p web
 ccsp -g glm-5.1 -p Chore claude -p "summarize open issues"
 ccsp --global-preset work --project-preset web --dry-run   # preview merged config, no launch
+
+# Check for updates and upgrade ccsp with the detected installer
+ccsp update
 
 # Resume the last session in this project with its original preset/launch config
 ccsp --continue
