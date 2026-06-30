@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.1 (2026-06-30)
+
+### Features
+* **update**: add self-update command
+
 ## 1.2.0 (2026-06-26)
 
 ### Performance Improvements
