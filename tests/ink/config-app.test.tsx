@@ -19,6 +19,7 @@ describe('ConfigApp', () => {
     statusLineEnabled: true,
     settingsDisplayFormat: 'yaml' as const,
     runMode: 'both' as const,
+    bannerEnabled: true,
   }
 
   it('renders the config list and description panel', () => {

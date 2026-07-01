@@ -37,6 +37,14 @@ export const CONFIG_OPTIONS: ConfigOption[] = [
     toggle: config => ({ ...config, statusLineEnabled: !config.statusLineEnabled }),
   },
   {
+    key: 'bannerEnabled',
+    label: 'Show banner',
+    description:
+      'When enabled, ccsp prints the startup banner before interactive screens. When disabled, ccsp starts directly without printing the banner.',
+    display: config => booleanDisplay(config.bannerEnabled),
+    toggle: config => ({ ...config, bannerEnabled: !config.bannerEnabled }),
+  },
+  {
     key: 'settingsDisplayFormat',
     label: 'Settings preview format',
     description:

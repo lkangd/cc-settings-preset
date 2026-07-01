@@ -92,12 +92,13 @@ describe('lastSettingsSchema', () => {
 })
 
 describe('ccspConfigSchema', () => {
-  it('defaults run mode to both', () => {
+  it('defaults optional preferences', () => {
     expect(parseCcspConfig({})).toEqual({
       globalPresetEnvOnly: true,
       statusLineEnabled: true,
       settingsDisplayFormat: 'yaml',
       runMode: 'both',
+      bannerEnabled: true,
     })
   })
 

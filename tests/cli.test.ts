@@ -35,6 +35,13 @@ const findNewClaudeSessionIdMock = vi.fn().mockResolvedValue(undefined)
 const discoverSettingsSourcesMock = vi.fn().mockResolvedValue([])
 const discoverMcpStatesMock = vi.fn().mockResolvedValue([])
 const spawnClaudeMock = vi.fn().mockResolvedValue(0)
+const readCcspConfigMock = vi.fn().mockResolvedValue({
+  globalPresetEnvOnly: true,
+  statusLineEnabled: true,
+  settingsDisplayFormat: 'yaml',
+  runMode: 'both',
+  bannerEnabled: true,
+})
 
 type ManageAppElement = React.ReactElement<{ onSubmit: (result: ManageResult) => void; initialState?: { renamePresetName?: string; renameValue?: string; renameError?: string } }>
 type CreateAppElement = React.ReactElement<{ onSubmit: (result: { sourcePath: string; name: string }) => void }>
@@ -164,7 +171,7 @@ vi.mock('../src/services/global-last-settings-service.js', () => ({
 
 vi.mock('../src/services/ccsp-config-service.js', () => ({
   createCcspConfigService: () => ({
-    read: vi.fn().mockResolvedValue({ globalPresetEnvOnly: true, statusLineEnabled: true, settingsDisplayFormat: 'yaml' }),
+    read: readCcspConfigMock,
     write: vi.fn().mockResolvedValue(undefined),
     setOption: vi.fn().mockResolvedValue(undefined),
   }),
@@ -278,6 +285,37 @@ describe('cli argument behavior', () => {
     expect(normalizeTerminalOutput(output)).toContain('CC-Settings-Preset')
 
     Object.defineProperty(process.stderr, 'columns', { value: originalColumns, configurable: true })
+    stderrWriteSpy.mockRestore()
+  })
+
+  it('skips banner output when banner is disabled', async () => {
+    const stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+
+    const { printBanner } = await import('../src/cli.js')
+    printBanner({ bannerEnabled: false })
+
+    expect(stderrWriteSpy).not.toHaveBeenCalled()
+
+    stderrWriteSpy.mockRestore()
+  })
+
+  it('does not print the banner before config when banner is disabled', async () => {
+    vi.resetModules()
+    readCcspConfigMock.mockResolvedValue({
+      globalPresetEnvOnly: true,
+      statusLineEnabled: true,
+      settingsDisplayFormat: 'yaml',
+      runMode: 'both',
+      bannerEnabled: false,
+    })
+    renderMock.mockReturnValueOnce({ waitUntilExit: async () => undefined })
+    const stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli', 'config'])
+
+    expect(stderrWriteSpy).not.toHaveBeenCalled()
+
     stderrWriteSpy.mockRestore()
   })
 

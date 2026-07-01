@@ -65,6 +65,7 @@ export const ccspConfigSchema = z.object({
   statusLineEnabled: z.boolean().default(true),
   settingsDisplayFormat: z.enum(['yaml', 'json']).default('yaml'),
   runMode: runModeSchema.default('both'),
+  bannerEnabled: z.boolean().default(true),
 })
 
 const sessionToggleStateSchema = z.object({

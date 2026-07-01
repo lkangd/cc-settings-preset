@@ -14,6 +14,7 @@ describe('ccsp config service', () => {
       statusLineEnabled: true,
       settingsDisplayFormat: 'yaml',
       runMode: 'both',
+      bannerEnabled: true,
     })
   })
 
@@ -26,6 +27,7 @@ describe('ccsp config service', () => {
       statusLineEnabled: false,
       settingsDisplayFormat: 'json',
       runMode: 'project-only',
+      bannerEnabled: false,
     })
 
     expect(await service.read()).toEqual({
@@ -33,12 +35,14 @@ describe('ccsp config service', () => {
       statusLineEnabled: false,
       settingsDisplayFormat: 'json',
       runMode: 'project-only',
+      bannerEnabled: false,
     })
     expect(JSON.parse(await readFile(join(globalRoot, 'config.json'), 'utf8'))).toEqual({
       globalPresetEnvOnly: false,
       statusLineEnabled: false,
       settingsDisplayFormat: 'json',
       runMode: 'project-only',
+      bannerEnabled: false,
     })
   })
 
@@ -53,6 +57,7 @@ describe('ccsp config service', () => {
       statusLineEnabled: false,
       settingsDisplayFormat: 'yaml',
       runMode: 'both',
+      bannerEnabled: true,
     })
   })
 
@@ -67,6 +72,7 @@ describe('ccsp config service', () => {
       statusLineEnabled: true,
       settingsDisplayFormat: 'yaml',
       runMode: 'both',
+      bannerEnabled: true,
     })
   })
 
@@ -81,6 +87,7 @@ describe('ccsp config service', () => {
       statusLineEnabled: true,
       settingsDisplayFormat: 'yaml',
       runMode: 'global-only',
+      bannerEnabled: true,
     })
   })
 })

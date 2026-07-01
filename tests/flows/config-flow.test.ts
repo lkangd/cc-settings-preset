@@ -11,6 +11,7 @@ const defaultConfig: CcspConfig = {
   statusLineEnabled: true,
   settingsDisplayFormat: 'yaml',
   runMode: 'both',
+  bannerEnabled: true,
 }
 
 describe('config flow', () => {
@@ -75,6 +76,20 @@ describe('config flow', () => {
     expect(backToBoth.config.runMode).toBe('both')
   })
 
+  it('toggles banner visibility', () => {
+    const bannerIndex = CONFIG_OPTIONS.findIndex(option => option.key === 'bannerEnabled')
+    let state = createConfigFlowState(defaultConfig)
+    for (let i = 0; i < bannerIndex; i += 1) {
+      state = reduceConfigFlow(state, { type: 'down' })
+    }
+
+    const disabled = reduceConfigFlow(state, { type: 'toggle' })
+    expect(disabled.config.bannerEnabled).toBe(false)
+
+    const enabled = reduceConfigFlow(disabled, { type: 'toggle' })
+    expect(enabled.config.bannerEnabled).toBe(true)
+  })
+
   it('reports value display per option', () => {
     const [first] = CONFIG_OPTIONS
     expect(first?.display(defaultConfig)).toEqual({ label: 'enable', tone: 'on' })
@@ -84,5 +99,9 @@ describe('config flow', () => {
 
     const runModeOption = CONFIG_OPTIONS.find(option => option.key === 'runMode')
     expect(runModeOption?.display(defaultConfig)).toEqual({ label: 'both', tone: 'info' })
+
+    const bannerOption = CONFIG_OPTIONS.find(option => option.key === 'bannerEnabled')
+    expect(bannerOption?.display(defaultConfig)).toEqual({ label: 'enable', tone: 'on' })
+    expect(bannerOption?.display({ ...defaultConfig, bannerEnabled: false })).toEqual({ label: 'disabled', tone: 'off' })
   })
 })

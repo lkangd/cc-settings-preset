@@ -48,6 +48,7 @@ describe('ConfigApp interactions', () => {
             statusLineEnabled: true,
             settingsDisplayFormat: 'yaml',
             runMode: 'both',
+            bannerEnabled: true,
           }}
           onChange={vi.fn()}
         />,
@@ -55,6 +56,7 @@ describe('ConfigApp interactions', () => {
     })
 
     act(() => {
+      latestInputHandler()?.('j', {})
       latestInputHandler()?.('j', {})
       latestInputHandler()?.('j', {})
       latestInputHandler()?.('j', {})

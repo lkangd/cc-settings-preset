@@ -85,7 +85,8 @@ export function createProgram(): Command {
     .command('create')
     .description('Create a first-level settings preset')
     .action(async () => {
-      printBanner()
+      const config = await ccspConfigService.read()
+      printBanner({ bannerEnabled: config.bannerEnabled })
       await createPresetInteractive()
     })
 
@@ -94,20 +95,22 @@ export function createProgram(): Command {
     .description('Manage settings presets')
     .option('-p, --project', 'Manage project launch presets')
     .action(async (options: { project?: boolean }) => {
-      printBanner()
+      const config = await ccspConfigService.read()
+      printBanner({ bannerEnabled: config.bannerEnabled })
       if (options.project) {
         await manageProjectInteractive()
         return
       }
-      await manageInteractive()
+      await manageInteractive(config)
     })
 
   program
     .command('config')
     .description('Configure ccsp preferences')
     .action(async () => {
-      printBanner()
-      await configInteractive()
+      const config = await ccspConfigService.read()
+      printBanner({ bannerEnabled: config.bannerEnabled })
+      await configInteractive(config)
     })
 
   program
@@ -189,7 +192,8 @@ export function buildBannerLines(columns: number): string[] {
   return [...headline, subtitle, divider]
 }
 
-export function printBanner() {
+export function printBanner(options: { bannerEnabled?: boolean } = {}) {
+  if (options.bannerEnabled === false) return
   const columns = process.stderr.columns ?? 80
   const lines = buildBannerLines(columns)
   process.stderr.write(`\n\n${lines.join('\n')}\n\n`)
@@ -309,8 +313,8 @@ async function renderCreateApp(): Promise<BasePresetMeta | undefined> {
   return result
 }
 
-async function configInteractive(): Promise<void> {
-  const initialConfig = await ccspConfigService.read()
+async function configInteractive(config?: CcspConfig): Promise<void> {
+  const initialConfig = config ?? await ccspConfigService.read()
   const createNode = () =>
     h(ConfigApp, {
       initialConfig,
@@ -775,8 +779,8 @@ async function launchGlobalOnly(
 }
 
 async function runInteractive(rawClaudeArgs: string[], fallbackMode?: 'resume' | 'continue'): Promise<void> {
-  printBanner()
   const config = await ccspConfigService.read()
+  printBanner({ bannerEnabled: config.bannerEnabled })
   prewarmProjectLaunchDiscovery()
   const launchArgs = fallbackMode === 'resume'
     ? ['--resume', ...rawClaudeArgs]
@@ -803,7 +807,7 @@ async function runInteractive(rawClaudeArgs: string[], fallbackMode?: 'resume' |
 
     const outcome = await launchWithSelectedSettings(selectedSettings, launchArgs, config, 'both')
     if (outcome !== 'back') return
-    printBanner()
+    printBanner({ bannerEnabled: config.bannerEnabled })
   }
 }
 
@@ -876,8 +880,8 @@ async function runContinue(extraArgs: string[]): Promise<void> {
   await runInteractive(extraArgs)
 }
 
-async function manageInteractive(): Promise<void> {
-  const config = await ccspConfigService.read()
+async function manageInteractive(preloadedConfig?: CcspConfig): Promise<void> {
+  const config = preloadedConfig ?? await ccspConfigService.read()
   while (true) {
     const rememberedName = await globalLastSettingsService.readLastUsed(context.cwd)
     const items = await buildGlobalSettingsPresetItems(rememberedName)
