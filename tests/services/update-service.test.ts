@@ -42,7 +42,7 @@ describe('createUpdateService', () => {
     expect(output.join('')).toContain('ccsp is already up to date.')
   })
 
-  it('runs brew upgrade for Homebrew installs', async () => {
+  it('runs noninteractive brew upgrade for Homebrew installs', async () => {
     const calls: Parameters<CommandRunner>[0][] = []
     const service = createUpdateService({
       currentVersion: '1.2.0',
@@ -61,9 +61,23 @@ describe('createUpdateService', () => {
     expect(calls.map(call => call.command)).toEqual(['brew', 'brew', 'brew'])
     expect(calls.map(call => call.args)).toEqual([
       ['list', '--formula', 'cc-settings-preset'],
-      ['update'],
-      ['upgrade', 'cc-settings-preset'],
+      ['update', '--quiet'],
+      ['upgrade', 'cc-settings-preset', '--yes'],
     ])
+    expect(calls[1]).toMatchObject({
+      inheritStdio: true,
+      env: {
+        HOMEBREW_NO_ASK: '1',
+        HOMEBREW_NO_INSTALL_CLEANUP: '1',
+      },
+    })
+    expect(calls[2]).toMatchObject({
+      inheritStdio: true,
+      env: {
+        HOMEBREW_NO_ASK: '1',
+        HOMEBREW_NO_INSTALL_CLEANUP: '1',
+      },
+    })
   })
 
   it('falls back to npm update for npm global installs', async () => {

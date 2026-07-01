@@ -8,6 +8,7 @@ const execFile = promisify(execFileCallback)
 export type TtyStep =
   | { type: 'write'; data: string }
   | { type: 'read'; ms: number }
+  | { type: 'waitFor'; expected: string; timeoutMs: number }
 
 export type RunInTtyOptions = {
   command: string[]

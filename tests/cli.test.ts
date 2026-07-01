@@ -956,9 +956,9 @@ describe('manage command', () => {
         TERM: 'xterm-256color',
       },
       steps: [
-        { type: 'read', ms: 1500 },
+        { type: 'waitFor', expected: 'Manage settings presets', timeoutMs: 5000 },
         { type: 'write', data: 'r' },
-        { type: 'read', ms: 1500 },
+        { type: 'waitFor', expected: 'Rename test-dddd to test-dddd', timeoutMs: 5000 },
       ],
     })
 

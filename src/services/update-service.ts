@@ -5,9 +5,14 @@ import { CliError } from '../core/errors.js'
 const PACKAGE_NAME = '@lkangd/cc-settings-preset'
 const NPM_REGISTRY_URL = `https://registry.npmjs.org/${encodeURIComponent(PACKAGE_NAME)}`
 const CHANGELOG_URL = 'https://raw.githubusercontent.com/lkangd/cc-settings-preset/main/CHANGELOG.md'
+const HOMEBREW_NONINTERACTIVE_ENV: NodeJS.ProcessEnv = {
+  HOMEBREW_NO_ASK: '1',
+  HOMEBREW_NO_INSTALL_CLEANUP: '1',
+}
 
 type RunResult = { status: number | null; stdout: string; stderr: string }
-export type CommandRunner = (input: { command: string; args: string[]; inheritStdio?: boolean }) => Promise<RunResult>
+type CommandInput = { command: string; args: string[]; inheritStdio?: boolean; env?: NodeJS.ProcessEnv }
+export type CommandRunner = (input: CommandInput) => Promise<RunResult>
 
 type UpdateServiceOptions = {
   currentVersion: string
@@ -52,9 +57,10 @@ async function defaultFetchText(url: string): Promise<string> {
   return response.text()
 }
 
-function defaultRunCommand(input: { command: string; args: string[]; inheritStdio?: boolean }): Promise<RunResult> {
+function defaultRunCommand(input: CommandInput): Promise<RunResult> {
   return new Promise(resolve => {
     const child = spawn(input.command, input.args, {
+      env: input.env ? { ...process.env, ...input.env } : process.env,
       stdio: input.inheritStdio ? 'inherit' : ['ignore', 'pipe', 'pipe'],
     })
     let stdout = ''
@@ -112,10 +118,20 @@ export function createUpdateService(options: UpdateServiceOptions) {
 
       const source = await detectInstallSource(runCommand)
       if (source === 'brew') {
-        write('Detected Homebrew install. Running brew update and brew upgrade cc-settings-preset...\n')
-        let result = await runCommand({ command: 'brew', args: ['update'], inheritStdio: true })
+        write('Detected Homebrew install. Running noninteractive brew update and brew upgrade cc-settings-preset...\n')
+        let result = await runCommand({
+          command: 'brew',
+          args: ['update', '--quiet'],
+          inheritStdio: true,
+          env: HOMEBREW_NONINTERACTIVE_ENV,
+        })
         if (result.status !== 0) throw new CliError('brew update failed.')
-        result = await runCommand({ command: 'brew', args: ['upgrade', 'cc-settings-preset'], inheritStdio: true })
+        result = await runCommand({
+          command: 'brew',
+          args: ['upgrade', 'cc-settings-preset', '--yes'],
+          inheritStdio: true,
+          env: HOMEBREW_NONINTERACTIVE_ENV,
+        })
         if (result.status !== 0) throw new CliError('brew upgrade cc-settings-preset failed.')
         return
       }
