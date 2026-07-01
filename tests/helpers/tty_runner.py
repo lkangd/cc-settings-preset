@@ -41,10 +41,12 @@ def read_for(master: int, seconds: float) -> str:
 def wait_for(master: int, process: subprocess.Popen, output: str, expected: str, timeout_ms: int) -> str:
     end = time.time() + timeout_ms / 1000
 
-    while time.time() < end:
-        if expected in normalize_terminal_output(output):
-            return output
+    # 只有真正读到新字节时才重新跑一遍正则归一化；select 超时但没有新数据的轮询不用
+    # 对累积的整段 output 重复做同样的替换。
+    if expected in normalize_terminal_output(output):
+        return output
 
+    while time.time() < end:
         readable, _, _ = select.select([master], [], [], 0.05)
         if master in readable:
             try:
@@ -56,6 +58,8 @@ def wait_for(master: int, process: subprocess.Popen, output: str, expected: str,
                 break
 
             output += chunk.decode('utf-8', 'replace')
+            if expected in normalize_terminal_output(output):
+                return output
             continue
 
         if process.poll() is not None:
