@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.3 (2026-07-01)
+
+### Features
+* **config**: add banner visibility toggle
+
 ## 1.2.2 (2026-06-30)
 
 ### Bug Fixes
