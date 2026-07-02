@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.5 (2026-07-02)
+
+### Features
+* **update**: add background update availability check and notices
+
 ## 1.2.4 (2026-07-01)
 
 ### Bug Fixes
