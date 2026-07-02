@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ManageResult } from '../src/ink/manage-app.js'
 import { sanitizeClaudeArgs } from '../src/core/args.js'
 import { runInTty } from './helpers/tty.js'
+import { VERSION } from '../src/version.js'
 
 const createBasePresetMock = vi.fn()
 const readJsonFileMock = vi.fn().mockResolvedValue({})
@@ -253,9 +254,11 @@ function containsText(node: unknown, text: string): boolean {
   return containsText(children, text)
 }
 
+const UPDATE_NOTICE = `Update available: v1.3.0 (current v${VERSION}) · run ccsp update`
+
 function expectCompactUpdateNotice(node: unknown): void {
-  expect(containsText(node, 'CC-Settings-Preset v1.2.4')).toBe(true)
-  expect(findTextWithColor(node, 'yellow')).toBe('Update available: v1.3.0 (current v1.2.4) · run ccsp update')
+  expect(containsText(node, `CC-Settings-Preset v${VERSION}`)).toBe(true)
+  expect(findTextWithColor(node, 'yellow')).toBe(UPDATE_NOTICE)
 }
 
 describe('cli argument behavior', () => {
@@ -320,20 +323,20 @@ describe('cli argument behavior', () => {
   it('renders a cached update notice below the banner subtitle', async () => {
     const { buildBannerLines } = await import('../src/cli.js')
 
-    const lines = buildBannerLines(120, 'Update available: v1.3.0 (current v1.2.4) · run ccsp update')
+    const lines = buildBannerLines(120, UPDATE_NOTICE)
 
-    expect(lines.map(stripAnsi).join('\n')).toContain('Update available: v1.3.0 (current v1.2.4) · run ccsp update')
+    expect(lines.map(stripAnsi).join('\n')).toContain(UPDATE_NOTICE)
   })
 
   it('prints cached update notice and starts refresh without waiting', async () => {
-    readCachedUpdateNoticeMock.mockReturnValue('Update available: v1.3.0 (current v1.2.4) · run ccsp update')
+    readCachedUpdateNoticeMock.mockReturnValue(UPDATE_NOTICE)
     const stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
 
     const { printBanner } = await import('../src/cli.js')
     printBanner()
 
     const output = String(stderrWriteSpy.mock.calls[0]?.[0] ?? '')
-    expect(stripAnsi(output)).toContain('Update available: v1.3.0 (current v1.2.4) · run ccsp update')
+    expect(stripAnsi(output)).toContain(UPDATE_NOTICE)
     expect(refreshUpdateCheckMock).toHaveBeenCalledTimes(1)
 
     stderrWriteSpy.mockRestore()
@@ -545,13 +548,13 @@ describe('run command', () => {
       runMode: 'both',
       bannerEnabled: false,
     })
-    readCachedUpdateNoticeMock.mockReturnValue('Update available: v1.3.0 (current v1.2.4) · run ccsp update')
+    readCachedUpdateNoticeMock.mockReturnValue(UPDATE_NOTICE)
     const stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
 
     renderMock
       .mockImplementationOnce((element: React.ReactElement<{ headerNotice?: string; headerUpdateNotice?: string; onSubmit: (result: unknown) => void }>) => {
-        expect(element.props.headerNotice).toBe('CC-Settings-Preset v1.2.4')
-        expect(element.props.headerUpdateNotice).toBe('Update available: v1.3.0 (current v1.2.4) · run ccsp update')
+        expect(element.props.headerNotice).toBe(`CC-Settings-Preset v${VERSION}`)
+        expect(element.props.headerUpdateNotice).toBe(UPDATE_NOTICE)
         expect(element.props.headerNotice?.startsWith(' ')).toBe(false)
         element.props.onSubmit({
           name: 'base',
@@ -586,7 +589,7 @@ describe('run command', () => {
       runMode: 'both',
       bannerEnabled: false,
     })
-    readCachedUpdateNoticeMock.mockReturnValue('Update available: v1.3.0 (current v1.2.4) · run ccsp update')
+    readCachedUpdateNoticeMock.mockReturnValue(UPDATE_NOTICE)
     renderMock.mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: { sourcePath: string; name: string }) => void }>) => {
       element.props.onSubmit({ sourcePath: '/tmp/source.json', name: 'new-base' })
       return { waitUntilExit: async () => undefined }
@@ -606,7 +609,7 @@ describe('run command', () => {
       runMode: 'both',
       bannerEnabled: false,
     })
-    readCachedUpdateNoticeMock.mockReturnValue('Update available: v1.3.0 (current v1.2.4) · run ccsp update')
+    readCachedUpdateNoticeMock.mockReturnValue(UPDATE_NOTICE)
     listPresetsMock.mockResolvedValue([])
     renderMock.mockReturnValueOnce({ waitUntilExit: async () => undefined })
 
@@ -624,7 +627,7 @@ describe('run command', () => {
       runMode: 'both',
       bannerEnabled: false,
     })
-    readCachedUpdateNoticeMock.mockReturnValue('Update available: v1.3.0 (current v1.2.4) · run ccsp update')
+    readCachedUpdateNoticeMock.mockReturnValue(UPDATE_NOTICE)
     renderMock.mockReturnValueOnce({ waitUntilExit: async () => undefined })
 
     const { main } = await import('../src/cli.js')
