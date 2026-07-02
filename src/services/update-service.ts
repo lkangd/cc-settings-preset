@@ -77,7 +77,7 @@ function defaultRunCommand(input: CommandInput): Promise<RunResult> {
   })
 }
 
-async function resolveLatestVersion(fetchText: (url: string) => Promise<string>): Promise<string> {
+export async function resolveLatestVersion(fetchText: (url: string) => Promise<string>): Promise<string> {
   const metadata = JSON.parse(await fetchText(NPM_REGISTRY_URL)) as { 'dist-tags'?: { latest?: string } }
   const latest = metadata['dist-tags']?.latest
   if (!latest) throw new CliError('Unable to resolve latest ccsp version from npm registry.')

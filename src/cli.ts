@@ -44,6 +44,7 @@ import {
 import { createClaudeLoginService } from './services/claude-login-service.js'
 import { CLAUDE_OFFICIAL_PRESET_NAME, createPresetService } from './services/preset-service.js'
 import { createSettingsSourceService, type SettingsSource } from './services/settings-source-service.js'
+import { createUpdateCheckService } from './services/update-check-service.js'
 import { createUpdateService } from './services/update-service.js'
 import {
   finalizeLaunchSettings,
@@ -68,6 +69,7 @@ const ccspConfigService = createCcspConfigService(globalRoot)
 const launchPresetService = createLaunchPresetService(context.cwd)
 const claudeSessionService = createClaudeSessionService(context.homeDir, context.cwd)
 const claudeLoginService = createClaudeLoginService(context)
+const updateCheckService = createUpdateCheckService({ homeDir: context.homeDir, currentVersion: VERSION })
 
 async function buildClaudeOfficialPresetItem(): Promise<SettingsSelectResult | undefined> {
   if (!(await claudeLoginService.isLoggedIn())) return undefined
@@ -87,7 +89,7 @@ export function createProgram(): Command {
     .action(async () => {
       const config = await ccspConfigService.read()
       printBanner({ bannerEnabled: config.bannerEnabled })
-      await createPresetInteractive()
+      await createPresetInteractive(resolveInlineHeaderNotice(config))
     })
 
   program
@@ -98,7 +100,7 @@ export function createProgram(): Command {
       const config = await ccspConfigService.read()
       printBanner({ bannerEnabled: config.bannerEnabled })
       if (options.project) {
-        await manageProjectInteractive()
+        await manageProjectInteractive(config)
         return
       }
       await manageInteractive(config)
@@ -177,26 +179,67 @@ function prewarmProjectLaunchDiscovery(): void {
   void discoverCachedClaudePlugins(context.homeDir).catch(() => {})
 }
 
-export function buildBannerLines(columns: number): string[] {
+export function buildBannerLines(columns: number, updateNotice?: string): string[] {
   const cyan = '\x1b[36m'
+  const yellow = '\x1b[33m'
   const dim = '\x1b[2m'
   const reset = '\x1b[0m'
   const safeColumns = Math.max(1, columns)
   const headline = selectBannerCandidate(safeColumns, createBannerCandidates()).map(line =>
     centerVisibleLine(line, safeColumns)
   )
-  const subtitle = centerVisibleLine(`${dim}${cyan}CC-Settings-Preset${reset}`, safeColumns)
+  const subtitle = centerVisibleLine(`${dim}${cyan}CC-Settings-Preset v${VERSION}${reset}`, safeColumns)
+  const notice = updateNotice ? centerVisibleLine(`${dim}${yellow}${updateNotice}${reset}`, safeColumns) : undefined
   const dividerWidth = Math.min(safeColumns, Math.max(stripAnsi(subtitle).length, 12))
   const divider = centerVisibleLine(`${dim}${'─'.repeat(dividerWidth)}${reset}`, safeColumns)
 
-  return [...headline, subtitle, divider]
+  return [...headline, subtitle, ...(notice ? [notice] : []), divider]
 }
 
 export function printBanner(options: { bannerEnabled?: boolean } = {}) {
-  if (options.bannerEnabled === false) return
+  if (options.bannerEnabled === false) {
+    void updateCheckService.refreshInBackground()
+    return
+  }
   const columns = process.stderr.columns ?? 80
-  const lines = buildBannerLines(columns)
+  const lines = buildBannerLines(columns, updateCheckService.readCachedNotice())
   process.stderr.write(`\n\n${lines.join('\n')}\n\n`)
+  void updateCheckService.refreshInBackground()
+}
+
+type InlineHeaderNotice = { headerNotice: string; headerUpdateNotice?: string }
+
+function buildInlineHeaderNotice(): InlineHeaderNotice {
+  const updateNotice = updateCheckService.readCachedNotice()
+  return {
+    headerNotice: `CC-Settings-Preset v${VERSION}`,
+    ...(updateNotice ? { headerUpdateNotice: updateNotice } : {}),
+  }
+}
+
+function resolveInlineHeaderNotice(config: Pick<CcspConfig, 'bannerEnabled'>): InlineHeaderNotice | undefined {
+  return config.bannerEnabled === false ? buildInlineHeaderNotice() : undefined
+}
+
+function wrapWithInlineHeader(node: React.ReactElement, header?: InlineHeaderNotice): React.ReactElement {
+  if (!header) return node
+  return h(React.Fragment, {
+    children: [
+      h(Text, {
+        key: 'inline-header',
+        children: [
+          h(Text, { key: 'version', dimColor: true, children: header.headerNotice }),
+          ...(header.headerUpdateNotice
+            ? [
+                h(Text, { key: 'separator', dimColor: true, children: ' · ' }),
+                h(Text, { key: 'update', color: 'yellow', children: header.headerUpdateNotice }),
+              ]
+            : []),
+        ],
+      }),
+      React.cloneElement(node, { key: 'inline-app' }),
+    ],
+  })
 }
 
 const CLEAR_TERMINAL_HISTORY = '\x1b[3J\x1b[H\x1b[2J'
@@ -281,14 +324,14 @@ export async function waitForInkAppExit(
   }
 }
 
-async function renderCreateApp(): Promise<BasePresetMeta | undefined> {
+async function renderCreateApp(header?: InlineHeaderNotice): Promise<BasePresetMeta | undefined> {
   const sources = (await settingsSourceService.discoverSettingsSources()).map(source => ({
     label: source.scope,
     filePath: source.filePath
   }))
   let result: BasePresetMeta | undefined
   const createNode = () =>
-    h(CreateApp, {
+    wrapWithInlineHeader(h(CreateApp, {
       sources,
       onSubmit: async (value: CreateResult): Promise<CreateSubmitResult> => {
         try {
@@ -302,7 +345,7 @@ async function renderCreateApp(): Promise<BasePresetMeta | undefined> {
           throw error
         }
       }
-    })
+    }), header)
   const state = { resizeVersion: 0 }
   let app: RefreshableInkApp
   const onShortcut = (input: string, key: ShortcutKey) => {
@@ -315,13 +358,14 @@ async function renderCreateApp(): Promise<BasePresetMeta | undefined> {
 
 async function configInteractive(config?: CcspConfig): Promise<void> {
   const initialConfig = config ?? await ccspConfigService.read()
+  const header = resolveInlineHeaderNotice(initialConfig)
   const createNode = () =>
-    h(ConfigApp, {
+    wrapWithInlineHeader(h(ConfigApp, {
       initialConfig,
       onChange: (config) => {
         void ccspConfigService.write(config)
       }
-    })
+    }), header)
   const state = { resizeVersion: 0 }
   let app: RefreshableInkApp
   const onShortcut = (input: string, key: ShortcutKey) => {
@@ -337,6 +381,8 @@ async function renderSettingsSelectApp(
     initialName?: string
     initialEnvOnly?: boolean
     displayFormat?: SettingsDisplayFormat
+    headerNotice?: string
+    headerUpdateNotice?: string
   } = {}
 ): Promise<SettingsSelectResult | undefined> {
   let result: SettingsSelectResult | undefined
@@ -381,7 +427,10 @@ async function resolveProjectManageBaseSettings(): Promise<SettingsSelectResult 
   }
 }
 
-async function resolveInteractiveBaseSettings(config?: CcspConfig): Promise<SettingsSelectResult | undefined> {
+async function resolveInteractiveBaseSettings(
+  config?: CcspConfig,
+  header?: { headerNotice: string; headerUpdateNotice?: string },
+): Promise<SettingsSelectResult | undefined> {
   const [officialItem, rememberedName] = await Promise.all([
     profileStep('claude-official-preset', buildClaudeOfficialPresetItem),
     profileStep('global-last-used', () => globalLastSettingsService.readLastUsed(context.cwd)),
@@ -393,6 +442,8 @@ async function resolveInteractiveBaseSettings(config?: CcspConfig): Promise<Sett
     const { globalPresetEnvOnly, settingsDisplayFormat } = config ?? await ccspConfigService.read()
     const selected = await renderSettingsSelectApp(presetItems, {
       ...(initialName ? { initialName } : {}),
+      ...(header ? { headerNotice: header.headerNotice } : {}),
+      ...(header?.headerUpdateNotice ? { headerUpdateNotice: header.headerUpdateNotice } : {}),
       initialEnvOnly: globalPresetEnvOnly,
       displayFormat: settingsDisplayFormat,
     })
@@ -511,12 +562,13 @@ async function renderProjectLaunchApp(
 }
 
 async function renderProjectManageApp(
-  selectedSettings: SettingsSelectResult
+  selectedSettings: SettingsSelectResult,
+  header?: InlineHeaderNotice,
 ): Promise<ProjectManageResult | undefined> {
   const input = await buildProjectLaunchInput(selectedSettings)
   let result: ProjectManageResult | undefined
   const createNode = () =>
-    h(ProjectManageApp, {
+    wrapWithInlineHeader(h(ProjectManageApp, {
       ...input,
       onSubmit: (value: ProjectManageResult) => {
         result = value
@@ -551,7 +603,7 @@ async function renderProjectManageApp(
           throw error
         }
       }
-    })
+    }), header)
   const state = { resizeVersion: 0 }
   let app: RefreshableInkApp
   const onShortcut = (input: string, key: ShortcutKey) => {
@@ -595,11 +647,12 @@ function bindingPresetLabel(binding: SessionBinding): string {
 
 async function renderManageApp(
   items: SettingsSelectResult[],
-  settingsDisplayFormat: SettingsDisplayFormat
+  settingsDisplayFormat: SettingsDisplayFormat,
+  header?: InlineHeaderNotice,
 ): Promise<ManageResult | undefined> {
   let result: ManageResult | undefined
   const createNode = () =>
-    h(ManageApp, {
+    wrapWithInlineHeader(h(ManageApp, {
       items,
       displayFormat: settingsDisplayFormat,
       onSubmit: (value: ManageResult) => {
@@ -615,7 +668,7 @@ async function renderManageApp(
           throw error
         }
       }
-    })
+    }), header)
   const state = { resizeVersion: 0 }
   let app: RefreshableInkApp
   const onShortcut = (input: string, key: ShortcutKey) => {
@@ -626,8 +679,8 @@ async function renderManageApp(
   return result
 }
 
-async function createPresetInteractive(): Promise<BasePresetMeta | undefined> {
-  return renderCreateApp()
+async function createPresetInteractive(header?: InlineHeaderNotice): Promise<BasePresetMeta | undefined> {
+  return renderCreateApp(header)
 }
 
 async function launchClaudeWithFinalizedSettings(input: {
@@ -797,7 +850,8 @@ async function runInteractive(rawClaudeArgs: string[], fallbackMode?: 'resume' |
   }
 
   while (true) {
-    const selectedSettings = await resolveInteractiveBaseSettings(config)
+    const headerNotice = config.bannerEnabled === false ? buildInlineHeaderNotice() : undefined
+    const selectedSettings = await resolveInteractiveBaseSettings(config, headerNotice)
     if (!selectedSettings) return
 
     if (config.runMode === 'global-only') {
@@ -885,7 +939,7 @@ async function manageInteractive(preloadedConfig?: CcspConfig): Promise<void> {
   while (true) {
     const rememberedName = await globalLastSettingsService.readLastUsed(context.cwd)
     const items = await buildGlobalSettingsPresetItems(rememberedName)
-    const selection = await renderManageApp(items, config.settingsDisplayFormat)
+    const selection = await renderManageApp(items, config.settingsDisplayFormat, resolveInlineHeaderNotice(config))
     if (!selection || selection.type === 'exit') return
 
     if (selection.type === 'launch') {
@@ -911,7 +965,7 @@ async function manageInteractive(preloadedConfig?: CcspConfig): Promise<void> {
     }
 
     if (selection.type === 'create') {
-      await createPresetInteractive()
+      await createPresetInteractive(resolveInlineHeaderNotice(config))
       continue
     }
 
@@ -1111,7 +1165,7 @@ async function runDirect(options: DirectRunOptions): Promise<void> {
   })
 }
 
-async function manageProjectInteractive(): Promise<void> {
+async function manageProjectInteractive(config?: CcspConfig): Promise<void> {
   const selectedSettings = await resolveProjectManageBaseSettings()
   if (!selectedSettings) {
     process.stderr.write('No project settings sources found for project preset management.\n')
@@ -1119,7 +1173,7 @@ async function manageProjectInteractive(): Promise<void> {
   }
 
   while (true) {
-    const result = await renderProjectManageApp(selectedSettings)
+    const result = await renderProjectManageApp(selectedSettings, config ? resolveInlineHeaderNotice(config) : undefined)
     if (!result) return
 
     if (result.type === 'refresh') {

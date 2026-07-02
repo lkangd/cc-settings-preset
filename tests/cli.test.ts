@@ -13,6 +13,7 @@ import { runInTty } from './helpers/tty.js'
 const createBasePresetMock = vi.fn()
 const readJsonFileMock = vi.fn().mockResolvedValue({})
 const renderMock = vi.fn()
+const renderRawMock = vi.fn()
 const instanceCleanupMock = vi.fn()
 const listPresetsMock = vi.fn()
 const listPresetsWithSettingsMock = vi.fn()
@@ -42,6 +43,8 @@ const readCcspConfigMock = vi.fn().mockResolvedValue({
   runMode: 'both',
   bannerEnabled: true,
 })
+const readCachedUpdateNoticeMock = vi.fn<() => string | undefined>()
+const refreshUpdateCheckMock = vi.fn<() => Promise<void>>().mockResolvedValue(undefined)
 
 type ManageAppElement = React.ReactElement<{ onSubmit: (result: ManageResult) => void; initialState?: { renamePresetName?: string; renameValue?: string; renameError?: string } }>
 type CreateAppElement = React.ReactElement<{ onSubmit: (result: { sourcePath: string; name: string }) => void }>
@@ -80,7 +83,10 @@ vi.mock('../src/core/json.js', () => ({
 
 vi.mock('ink', () => ({
   Text: ({ children }: { children?: React.ReactNode }) => children,
-  render: (element: unknown) => renderMock(unwrapRenderedElement(element)),
+  render: (element: unknown) => {
+    renderRawMock(element)
+    return renderMock(unwrapRenderedElement(element))
+  },
 }))
 
 vi.mock('../src/core/paths.js', async () => {
@@ -183,6 +189,13 @@ vi.mock('../src/services/claude-login-service.js', () => ({
   }),
 }))
 
+vi.mock('../src/services/update-check-service.js', () => ({
+  createUpdateCheckService: () => ({
+    readCachedNotice: readCachedUpdateNoticeMock,
+    refreshInBackground: refreshUpdateCheckMock,
+  }),
+}))
+
 vi.mock('../src/services/settings-finalizer-service.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/services/settings-finalizer-service.js')>()
   return {
@@ -217,7 +230,41 @@ function stripAnsi(value: string): string {
   return value.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')
 }
 
+function findTextWithColor(node: unknown, color: string): string | undefined {
+  if (!React.isValidElement(node)) return undefined
+  const props = node.props as { color?: string; children?: React.ReactNode }
+  if (props.color === color && typeof props.children === 'string') return props.children
+  const children = props.children
+  if (Array.isArray(children)) {
+    for (const child of children) {
+      const found = findTextWithColor(child, color)
+      if (found) return found
+    }
+  }
+  if (React.isValidElement(children)) return findTextWithColor(children, color)
+  return undefined
+}
+
+function containsText(node: unknown, text: string): boolean {
+  if (typeof node === 'string') return node.includes(text)
+  if (!React.isValidElement(node)) return false
+  const children = (node.props as { children?: React.ReactNode }).children
+  if (Array.isArray(children)) return children.some(child => containsText(child, text))
+  return containsText(children, text)
+}
+
+function expectCompactUpdateNotice(node: unknown): void {
+  expect(containsText(node, 'CC-Settings-Preset v1.2.4')).toBe(true)
+  expect(findTextWithColor(node, 'yellow')).toBe('Update available: v1.3.0 (current v1.2.4) · run ccsp update')
+}
+
 describe('cli argument behavior', () => {
+  beforeEach(() => {
+    readCachedUpdateNoticeMock.mockReset()
+    refreshUpdateCheckMock.mockReset()
+    refreshUpdateCheckMock.mockResolvedValue(undefined)
+  })
+
   it('keeps claude passthrough args while stripping reserved settings', () => {
     expect(sanitizeClaudeArgs(['--resume', 'abc', '--settings=bad.json']).args).toEqual(['--resume', 'abc'])
   })
@@ -261,6 +308,35 @@ describe('cli argument behavior', () => {
     expect(Math.max(...wide.map(line => stripAnsi(line).length))).toBeLessThanOrEqual(120)
     expect(Math.max(...narrow.map(line => stripAnsi(line).length))).toBeLessThanOrEqual(40)
     expect(wide.join('\n')).not.toEqual(narrow.join('\n'))
+  })
+
+  it('shows the current version in the banner subtitle', async () => {
+    const { buildBannerLines } = await import('../src/cli.js')
+    const { VERSION } = await import('../src/version.js')
+
+    expect(buildBannerLines(120).map(stripAnsi).join('\n')).toContain(`CC-Settings-Preset v${VERSION}`)
+  })
+
+  it('renders a cached update notice below the banner subtitle', async () => {
+    const { buildBannerLines } = await import('../src/cli.js')
+
+    const lines = buildBannerLines(120, 'Update available: v1.3.0 (current v1.2.4) · run ccsp update')
+
+    expect(lines.map(stripAnsi).join('\n')).toContain('Update available: v1.3.0 (current v1.2.4) · run ccsp update')
+  })
+
+  it('prints cached update notice and starts refresh without waiting', async () => {
+    readCachedUpdateNoticeMock.mockReturnValue('Update available: v1.3.0 (current v1.2.4) · run ccsp update')
+    const stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+
+    const { printBanner } = await import('../src/cli.js')
+    printBanner()
+
+    const output = String(stderrWriteSpy.mock.calls[0]?.[0] ?? '')
+    expect(stripAnsi(output)).toContain('Update available: v1.3.0 (current v1.2.4) · run ccsp update')
+    expect(refreshUpdateCheckMock).toHaveBeenCalledTimes(1)
+
+    stderrWriteSpy.mockRestore()
   })
 
   it('centers the selected banner lines against the full terminal width', async () => {
@@ -412,6 +488,7 @@ describe('run command', () => {
   beforeEach(() => {
     vi.resetModules()
     renderMock.mockReset()
+    renderRawMock.mockReset()
     instanceCleanupMock.mockReset()
     listPresetsMock.mockReset()
     listPresetsWithSettingsMock.mockReset()
@@ -439,6 +516,121 @@ describe('run command', () => {
     discoverMcpStatesMock.mockResolvedValue([])
     spawnClaudeMock.mockReset()
     spawnClaudeMock.mockResolvedValue(0)
+    readCcspConfigMock.mockReset()
+    readCcspConfigMock.mockResolvedValue({
+      globalPresetEnvOnly: true,
+      statusLineEnabled: true,
+      settingsDisplayFormat: 'yaml',
+      runMode: 'both',
+      bannerEnabled: true,
+    })
+    readCachedUpdateNoticeMock.mockReset()
+    refreshUpdateCheckMock.mockReset()
+    refreshUpdateCheckMock.mockResolvedValue(undefined)
+  })
+
+  it('passes a left-aligned inline notice to settings select when banner is disabled', async () => {
+    const basePreset = {
+      type: 'base' as const,
+      name: 'base',
+      fileName: 'base-settings.json',
+      createdAt: '2026-05-17T00:00:00.000Z',
+      updatedAt: '2026-05-17T00:00:00.000Z',
+    }
+    listPresetsMock.mockResolvedValue([basePreset])
+    readCcspConfigMock.mockResolvedValue({
+      globalPresetEnvOnly: true,
+      statusLineEnabled: true,
+      settingsDisplayFormat: 'yaml',
+      runMode: 'both',
+      bannerEnabled: false,
+    })
+    readCachedUpdateNoticeMock.mockReturnValue('Update available: v1.3.0 (current v1.2.4) · run ccsp update')
+    const stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+
+    renderMock
+      .mockImplementationOnce((element: React.ReactElement<{ headerNotice?: string; headerUpdateNotice?: string; onSubmit: (result: unknown) => void }>) => {
+        expect(element.props.headerNotice).toBe('CC-Settings-Preset v1.2.4')
+        expect(element.props.headerUpdateNotice).toBe('Update available: v1.3.0 (current v1.2.4) · run ccsp update')
+        expect(element.props.headerNotice?.startsWith(' ')).toBe(false)
+        element.props.onSubmit({
+          name: 'base',
+          sourcePath: '/tmp/.ccsp/settings/base-settings.json',
+          settings: {},
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          type: 'launch',
+          presetName: 'base',
+          toggles: { plugins: [], skills: [], mcps: [] },
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli'])
+
+    expect(stderrWriteSpy).not.toHaveBeenCalled()
+    expect(refreshUpdateCheckMock).toHaveBeenCalledTimes(1)
+
+    stderrWriteSpy.mockRestore()
+  })
+
+  it('shows compact update notice above create app when banner is disabled', async () => {
+    readCcspConfigMock.mockResolvedValue({
+      globalPresetEnvOnly: true,
+      statusLineEnabled: true,
+      settingsDisplayFormat: 'yaml',
+      runMode: 'both',
+      bannerEnabled: false,
+    })
+    readCachedUpdateNoticeMock.mockReturnValue('Update available: v1.3.0 (current v1.2.4) · run ccsp update')
+    renderMock.mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: { sourcePath: string; name: string }) => void }>) => {
+      element.props.onSubmit({ sourcePath: '/tmp/source.json', name: 'new-base' })
+      return { waitUntilExit: async () => undefined }
+    })
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli', 'create'])
+
+    expectCompactUpdateNotice(renderRawMock.mock.calls[0]?.[0])
+  })
+
+  it('shows compact update notice above manage app when banner is disabled', async () => {
+    readCcspConfigMock.mockResolvedValue({
+      globalPresetEnvOnly: true,
+      statusLineEnabled: true,
+      settingsDisplayFormat: 'yaml',
+      runMode: 'both',
+      bannerEnabled: false,
+    })
+    readCachedUpdateNoticeMock.mockReturnValue('Update available: v1.3.0 (current v1.2.4) · run ccsp update')
+    listPresetsMock.mockResolvedValue([])
+    renderMock.mockReturnValueOnce({ waitUntilExit: async () => undefined })
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli', 'manage'])
+
+    expectCompactUpdateNotice(renderRawMock.mock.calls[0]?.[0])
+  })
+
+  it('shows compact update notice above config app when banner is disabled', async () => {
+    readCcspConfigMock.mockResolvedValue({
+      globalPresetEnvOnly: true,
+      statusLineEnabled: true,
+      settingsDisplayFormat: 'yaml',
+      runMode: 'both',
+      bannerEnabled: false,
+    })
+    readCachedUpdateNoticeMock.mockReturnValue('Update available: v1.3.0 (current v1.2.4) · run ccsp update')
+    renderMock.mockReturnValueOnce({ waitUntilExit: async () => undefined })
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli', 'config'])
+
+    expectCompactUpdateNotice(renderRawMock.mock.calls[0]?.[0])
   })
 
   it('selects settings, saves a project launch preset, finalizes settings, and launches Claude', async () => {
@@ -697,6 +889,7 @@ describe('manage command', () => {
   beforeEach(() => {
     vi.resetModules()
     renderMock.mockReset()
+    renderRawMock.mockReset()
     instanceCleanupMock.mockReset()
     listPresetsMock.mockReset()
     listPresetsWithSettingsMock.mockReset()

@@ -9,7 +9,7 @@ const inputHandlers: InputHandler[] = []
 const exitMock = vi.fn()
 
 vi.mock('ink', () => ({
-  Text: ({ children }: { children?: React.ReactNode }) => React.createElement('text', null, children),
+  Text: (props: { children?: React.ReactNode; color?: string; dimColor?: boolean }) => React.createElement('text', props, props.children),
   useApp: () => ({ exit: exitMock }),
   useInput: (handler: InputHandler) => {
     inputHandlers.push(handler)
@@ -28,6 +28,48 @@ describe('SettingsSelectApp interactions', () => {
   beforeEach(() => {
     inputHandlers.length = 0
     exitMock.mockReset()
+  })
+
+  it('renders header notice before settings view without centered padding', () => {
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <SettingsSelectApp
+          headerNotice="CC-Settings-Preset v1.2.4"
+          items={[{ name: 'base', sourcePath: '/tmp/base.json', settings: {} }]}
+          onSubmit={vi.fn()}
+        />,
+      )
+    })
+
+    const rendered = JSON.stringify(output!.toJSON())
+    const noticeIndex = rendered.indexOf('CC-Settings-Preset v1.2.4')
+    const settingsViewIndex = rendered.indexOf('two-column-settings-view')
+
+    expect(noticeIndex).toBeGreaterThanOrEqual(0)
+    expect(settingsViewIndex).toBeGreaterThanOrEqual(0)
+    expect(rendered).not.toContain(' CC-Settings-Preset v1.2.4')
+    expect(noticeIndex).toBeLessThan(settingsViewIndex)
+  })
+
+  it('renders update notice in yellow when header includes an update', () => {
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <SettingsSelectApp
+          headerNotice="CC-Settings-Preset v1.2.0"
+          headerUpdateNotice="Update available: v1.2.4 (current v1.2.0) · run ccsp update"
+          items={[{ name: 'base', sourcePath: '/tmp/base.json', settings: {} }]}
+          onSubmit={vi.fn()}
+        />,
+      )
+    })
+
+    const yellowText = output!.root.findAllByType('text').find(node => node.props.color === 'yellow')
+
+    expect(yellowText?.props.children).toBe('Update available: v1.2.4 (current v1.2.0) · run ccsp update')
   })
 
   it('shows the active sort mode when t is pressed', () => {

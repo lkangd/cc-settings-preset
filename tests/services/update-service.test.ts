@@ -3,6 +3,7 @@ import {
   compareVersions,
   createUpdateService,
   extractChangelogRange,
+  resolveLatestVersion,
   type CommandRunner,
 } from '../../src/services/update-service.js'
 
@@ -11,6 +12,20 @@ describe('compareVersions', () => {
     expect(compareVersions('1.2.0', '1.2.1')).toBeLessThan(0)
     expect(compareVersions('1.10.0', '1.2.9')).toBeGreaterThan(0)
     expect(compareVersions('1.2.0', '1.2.0')).toBe(0)
+  })
+})
+
+describe('resolveLatestVersion', () => {
+  it('fetches npm metadata with the shared package URL and returns dist-tags latest', async () => {
+    const urls: string[] = []
+
+    const latest = await resolveLatestVersion(async url => {
+      urls.push(url)
+      return JSON.stringify({ 'dist-tags': { latest: '1.3.0' } })
+    })
+
+    expect(latest).toBe('1.3.0')
+    expect(urls).toEqual(['https://registry.npmjs.org/%40lkangd%2Fcc-settings-preset'])
   })
 })
 

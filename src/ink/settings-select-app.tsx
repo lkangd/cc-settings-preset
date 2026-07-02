@@ -16,10 +16,12 @@ type Props = {
   initialName?: string
   initialEnvOnly?: boolean
   displayFormat?: SettingsDisplayFormat
+  headerNotice?: string
+  headerUpdateNotice?: string
   onSubmit: (result: SettingsSelectResult) => void
 }
 
-export function SettingsSelectApp({ items, initialName, initialEnvOnly = false, displayFormat = 'yaml', onSubmit }: Props) {
+export function SettingsSelectApp({ items, initialName, initialEnvOnly = false, displayFormat = 'yaml', headerNotice, headerUpdateNotice, onSubmit }: Props) {
   const { exit } = useApp()
   const [state, setState] = useState(() => createSettingsSelectFlowState({
     items,
@@ -55,6 +57,13 @@ export function SettingsSelectApp({ items, initialName, initialEnvOnly = false, 
 
   return (
     <>
+      {headerNotice ? (
+        <Text>
+          <Text dimColor>{headerNotice}</Text>
+          {headerUpdateNotice ? <Text dimColor> · </Text> : null}
+          {headerUpdateNotice ? <Text color="yellow">{headerUpdateNotice}</Text> : null}
+        </Text>
+      ) : null}
       <TwoColumnSettingsView
         title="Select Claude Code settings"
         help={`↑/k ↓/j navigate · enter select · t sort · f toggle ${envOnly ? 'full' : 'env'} · q quit`}
