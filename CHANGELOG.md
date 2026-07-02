@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.6 (2026-07-02)
+
+### Features
+* **launch**: persist all modified presets before launching
+
 ## 1.2.5 (2026-07-02)
 
 ### Features
