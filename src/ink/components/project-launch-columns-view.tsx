@@ -2,9 +2,17 @@ import { Box, useStdout } from 'ink'
 import type { ProjectLaunchFocus, ProjectLaunchPresetItem, ToggleColumnItem } from '../../flows/project-launch-flow.js'
 import { enabledToggleCount } from '../../flows/toggle-utils.js'
 import { BORDERED_TITLE_BOX_FRAME_LINES, BorderedTitleBox } from './bordered-title-box.js'
-import { countToggleColumnContentLines, ToggleColumn } from './toggle-column.js'
+import { countToggleColumnContentLines, SOURCE_BADGE_ITEMS, ToggleColumn } from './toggle-column.js'
 import { useInkResizeVersion } from './resize-context.js'
 import { TruncateText } from './truncate-text.js'
+
+function buildSourceBadgeHelp(items: ToggleColumnItem[]): string | undefined {
+  const sources = new Set(items.map(item => item.source))
+  const labels = SOURCE_BADGE_ITEMS
+    .filter(item => item.sources.some(source => sources.has(source)))
+    .map(item => item.label)
+  return labels.length > 0 ? `Source badges: ${labels.join(' · ')}` : undefined
+}
 
 export type ProjectLaunchColumnsViewProps = {
   presetItems: ProjectLaunchPresetItem[]
@@ -60,6 +68,7 @@ export function ProjectLaunchColumnsView({
   const { stdout } = useStdout()
   const innerWidth = Math.max(minWidth ?? 0, stdout.columns ?? 120)
   const { presetWidth, detailWidth, mcpWidth } = computeProjectLaunchColumnWidths(innerWidth)
+  const sourceBadgeHelp = buildSourceBadgeHelp([...pluginItems, ...skillItems, ...mcpItems])
   const columnContentHeight = Math.max(
     presetItems.length,
     countToggleColumnContentLines(pluginItems),
@@ -72,6 +81,7 @@ export function ProjectLaunchColumnsView({
     <Box flexDirection="column">
       <TruncateText bold color="cyan">{title}</TruncateText>
       <TruncateText dimColor>{help}</TruncateText>
+      {sourceBadgeHelp ? <TruncateText dimColor>{sourceBadgeHelp}</TruncateText> : null}
       <Box marginTop={0.5} width={innerWidth} flexDirection="row">
         <BorderedTitleBox
           title={`Presets(${presetItems.length})`}

@@ -199,6 +199,56 @@ describe('ProjectManageApp interactions', () => {
     expect(flattenJson(output!.toJSON())).not.toMatch(/❯\s+Detected/)
   })
 
+  it('saves modified saved presets when creating from Detected', async () => {
+    const onCreateSubmit = vi.fn().mockResolvedValue(null)
+    const onSaveSubmit = vi.fn().mockResolvedValue(null)
+
+    act(() => {
+      TestRenderer.create(
+        <ProjectManageApp
+          presets={[{ name: 'web', fileName: 'web-launch.json', createdAt: '2026-05-19T00:00:00.000Z', updatedAt: '2026-05-19T00:00:00.000Z' }]}
+          detected={{ plugins: [{ name: 'alpha', enabled: true, source: 'user' }], skills: [], mcps: [] }}
+          statesByPreset={{ web: { plugins: [{ name: 'beta', enabled: true, source: 'user' }], skills: [], mcps: [] } }}
+          lastUsedName="web"
+          onSubmit={vi.fn()}
+          onCreateSubmit={onCreateSubmit}
+          onSaveSubmit={onSaveSubmit}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('', { rightArrow: true })
+    })
+
+    act(() => {
+      latestInputHandler()?.(' ', {})
+    })
+
+    act(() => {
+      latestInputHandler()?.('', { leftArrow: true })
+    })
+
+    act(() => {
+      latestInputHandler()?.('', { upArrow: true })
+    })
+
+    act(() => {
+      latestInputHandler()?.('', { return: true })
+    })
+
+    act(() => {
+      textInputProps.at(-1)?.onChange('fresh')
+    })
+
+    await act(async () => {
+      await textInputProps.at(-1)?.onSubmit()
+    })
+
+    expect(onSaveSubmit).toHaveBeenCalledWith('web', { plugins: [{ name: 'beta', enabled: false, source: 'user' }], skills: [], mcps: [] })
+    expect(onCreateSubmit).toHaveBeenCalledWith('fresh', { plugins: [{ name: 'alpha', enabled: true, source: 'user' }], skills: [], mcps: [] })
+  })
+
   it('keeps create errors in the input when the new preset name conflicts', async () => {
     const onSubmit = vi.fn()
     const onCreateSubmit = vi.fn().mockResolvedValue('Launch preset already exists: fff')
@@ -511,7 +561,74 @@ describe('ProjectManageApp interactions', () => {
       type: 'launch',
       presetName: 'web',
       toggles: { plugins: [{ name: 'alpha', enabled: false, source: 'user' }], skills: [], mcps: [] },
+      savedPresets: ['web'],
     })
+  })
+
+  it('saves all modified saved presets before launching on l', async () => {
+    const onSubmit = vi.fn()
+    const onSaveSubmit = vi.fn().mockResolvedValue(null)
+
+    act(() => {
+      TestRenderer.create(
+        <ProjectManageApp
+          presets={[
+            { name: 'web', fileName: 'web-launch.json', createdAt: '2026-05-19T00:00:00.000Z', updatedAt: '2026-05-19T00:00:00.000Z' },
+            { name: 'api', fileName: 'api-launch.json', createdAt: '2026-05-19T00:00:00.000Z', updatedAt: '2026-05-19T00:00:00.000Z' },
+          ]}
+          detected={{ plugins: [{ name: 'alpha', enabled: true, source: 'user' }], skills: [], mcps: [] }}
+          statesByPreset={{
+            web: { plugins: [{ name: 'alpha', enabled: true, source: 'user' }], skills: [], mcps: [] },
+            api: { plugins: [{ name: 'beta', enabled: true, source: 'user' }], skills: [], mcps: [] },
+          }}
+          lastUsedName="web"
+          onSubmit={onSubmit}
+          onSaveSubmit={onSaveSubmit}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('', { rightArrow: true })
+    })
+
+    act(() => {
+      latestInputHandler()?.(' ', {})
+    })
+
+    act(() => {
+      latestInputHandler()?.('', { leftArrow: true })
+    })
+
+    act(() => {
+      latestInputHandler()?.('', { downArrow: true })
+    })
+
+    act(() => {
+      latestInputHandler()?.('', { rightArrow: true })
+    })
+
+    act(() => {
+      latestInputHandler()?.(' ', {})
+    })
+
+    act(() => {
+      latestInputHandler()?.('l', {})
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(onSaveSubmit).toHaveBeenCalledWith('web', { plugins: [{ name: 'alpha', enabled: false, source: 'user' }], skills: [], mcps: [] })
+    expect(onSaveSubmit).toHaveBeenCalledWith('api', { plugins: [{ name: 'beta', enabled: false, source: 'user' }], skills: [], mcps: [] })
+    expect(onSubmit).toHaveBeenCalledWith({
+      type: 'launch',
+      presetName: 'api',
+      toggles: { plugins: [{ name: 'beta', enabled: false, source: 'user' }], skills: [], mcps: [] },
+      savedPresets: ['web', 'api'],
+    })
+    expect(exitMock).toHaveBeenCalled()
   })
 
   it('does not launch on ctrl+l so the global refresh shortcut can handle it', () => {

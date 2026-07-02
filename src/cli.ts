@@ -20,7 +20,7 @@ import { ConfigApp } from './ink/config-app.js'
 import { CreateApp, type CreateResult, type CreateSubmitResult } from './ink/create-app.js'
 import { GlobalShortcutHandler } from './ink/components/global-shortcut-handler.js'
 import { InkResizeProvider } from './ink/components/resize-context.js'
-import type { DisableRemovalMark, ProjectLaunchToggleState } from './flows/project-launch-flow.js'
+import type { ChangedProjectLaunchPresets, DisableRemovalMark, ProjectLaunchToggleState } from './flows/project-launch-flow.js'
 import { applyDisableRemovals } from './services/disable-lock-service.js'
 import { ManageApp, type ManageResult } from './ink/manage-app.js'
 import { ProjectLaunchApp, type ProjectLaunchResult } from './ink/project-launch-app.js'
@@ -626,6 +626,46 @@ function launchResultToSettings(result: { toggles: ProjectLaunchToggleState }): 
   }
 }
 
+type ProjectLaunchPresetPersistenceInput = {
+  changedPresets?: ChangedProjectLaunchPresets
+  savedPresets?: string[]
+}
+
+function shouldWriteProjectLaunchPreset(
+  input: ProjectLaunchPresetPersistenceInput,
+  presetName: string,
+): boolean {
+  return !input.savedPresets?.includes(presetName) && !input.changedPresets?.[presetName]
+}
+
+async function writeProjectLaunchPresetSettingsIfPresent(
+  presetName: string,
+  toggles: ProjectLaunchToggleState,
+): Promise<void> {
+  try {
+    await launchPresetService.writePresetSettings(presetName, launchResultToSettings({ toggles }))
+  } catch (error) {
+    if (CliError.is(error, 'launch_preset_not_found')) return
+    throw error
+  }
+}
+
+async function writeProjectLaunchLastUsedIfPresent(presetName: string): Promise<void> {
+  try {
+    await launchPresetService.writeLastUsed(presetName)
+  } catch (error) {
+    if (CliError.is(error, 'launch_preset_not_found')) return
+    throw error
+  }
+}
+
+async function writeChangedProjectLaunchPresets(input: ProjectLaunchPresetPersistenceInput): Promise<void> {
+  const savedPresets = new Set(input.savedPresets ?? [])
+  await Promise.all(Object.entries(input.changedPresets ?? {})
+    .filter(([presetName]) => !savedPresets.has(presetName))
+    .map(([presetName, toggles]) => writeProjectLaunchPresetSettingsIfPresent(presetName, toggles)))
+}
+
 const EMPTY_TOGGLES: ProjectLaunchToggleState = { plugins: [], skills: [], mcps: [] }
 
 const SETTINGS_FLAG_WARNING = '\x1b[31mWarning: ccsp ignores passthrough --settings because it manages that flag.\x1b[0m\n'
@@ -782,12 +822,16 @@ async function launchWithSelectedSettings(
 
   const launchSettings = launchResultToSettings(launchResult)
 
+  await writeChangedProjectLaunchPresets(launchResult)
+
   if (launchResult.type === 'launch' && launchResult.saveAs) {
     const saved = await launchPresetService.createPreset(launchResult.saveAs, launchSettings)
     await launchPresetService.writeLastUsed(saved.name)
   } else if (launchResult.type === 'launch' && launchResult.presetName) {
-    await launchPresetService.writePresetSettings(launchResult.presetName, launchSettings)
-    await launchPresetService.writeLastUsed(launchResult.presetName)
+    if (shouldWriteProjectLaunchPreset(launchResult, launchResult.presetName)) {
+      await writeProjectLaunchPresetSettingsIfPresent(launchResult.presetName, launchResult.toggles)
+    }
+    await writeProjectLaunchLastUsedIfPresent(launchResult.presetName)
   }
 
   const projectPresetName = resolveProjectPresetName(launchResult)
@@ -1185,9 +1229,13 @@ async function manageProjectInteractive(config?: CcspConfig): Promise<void> {
 
       const launchSettings = launchResultToSettings(result)
 
+      await writeChangedProjectLaunchPresets(result)
+
       if (result.presetName) {
-        await launchPresetService.writePresetSettings(result.presetName, launchSettings)
-        await launchPresetService.writeLastUsed(result.presetName)
+        if (shouldWriteProjectLaunchPreset(result, result.presetName)) {
+          await writeProjectLaunchPresetSettingsIfPresent(result.presetName, result.toggles)
+        }
+        await writeProjectLaunchLastUsedIfPresent(result.presetName)
       }
 
       const projectPresetName = resolveProjectPresetName(result)
@@ -1222,6 +1270,7 @@ async function manageProjectInteractive(config?: CcspConfig): Promise<void> {
 
     if (result.type === 'create') {
       await applyLaunchDisableRemovals(result.disableRemovals)
+      await writeChangedProjectLaunchPresets(result)
       await launchPresetService.createPreset(result.saveAs, launchResultToSettings(result))
       continue
     }

@@ -7,15 +7,22 @@ export function countToggleColumnContentLines(items: ToggleColumnItem[]): number
   return Math.max(items.length, 1)
 }
 
+export const SOURCE_BADGE_ITEMS: Array<{
+  sources: ToggleColumnItem['source'][]
+  badge: string
+  label: string
+}> = [
+  { sources: ['local', 'project-local'], badge: '[L]', label: '[L] local/project-local' },
+  { sources: ['project'], badge: '[P]', label: '[P] project' },
+  { sources: ['user'], badge: '[U]', label: '[U] user' },
+  { sources: ['command'], badge: '[C]', label: '[C] command' },
+  { sources: ['plugin'], badge: '[PL]', label: '[PL] plugin' },
+  { sources: ['connector'], badge: '[CN]', label: '[CN] connector' },
+  { sources: ['preset'], badge: '[D]', label: '[D] default/discovered' },
+]
+
 function sourceBadge(source: ToggleColumnItem['source']): string {
-  if (source === 'project-local') return '[L]'
-  if (source === 'project') return '[P]'
-  if (source === 'user') return '[U]'
-  if (source === 'command') return '[C]'
-  if (source === 'plugin') return '[PL]'
-  if (source === 'local') return '[L]'
-  if (source === 'connector') return '[CN]'
-  return '[D]'
+  return SOURCE_BADGE_ITEMS.find(item => item.sources.includes(source))?.badge ?? '[D]'
 }
 
 export function ToggleColumn({

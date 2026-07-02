@@ -243,9 +243,101 @@ describe('ProjectLaunchApp interactions', () => {
         skills: [],
         mcps: [],
       },
+      changedPresets: {
+        'my-preset': {
+          plugins: [{ name: 'alpha', enabled: false, source: 'user' }],
+          skills: [],
+          mcps: [],
+        },
+      },
     })
     expect(exitMock).toHaveBeenCalled()
     expect(flattenJson(output!.toJSON())).not.toContain('Save changes as a new project launch preset?')
+  })
+
+  it('submits all modified saved presets when launching from one of them', () => {
+    const onSubmit = vi.fn()
+
+    act(() => {
+      TestRenderer.create(
+        <ProjectLaunchApp
+          presets={[
+            { name: 'web', fileName: 'web.json', createdAt: '', updatedAt: '' },
+            { name: 'api', fileName: 'api.json', createdAt: '', updatedAt: '' },
+          ]}
+          detected={{
+            plugins: [{ name: 'alpha', enabled: true, source: 'user' }],
+            skills: [],
+            mcps: [],
+          }}
+          statesByPreset={{
+            web: {
+              plugins: [{ name: 'alpha', enabled: true, source: 'user' }],
+              skills: [],
+              mcps: [],
+            },
+            api: {
+              plugins: [{ name: 'beta', enabled: true, source: 'user' }],
+              skills: [],
+              mcps: [],
+            },
+          }}
+          lastUsedName="web"
+          onSubmit={onSubmit}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('', { rightArrow: true })
+    })
+
+    act(() => {
+      latestInputHandler()?.(' ', {})
+    })
+
+    act(() => {
+      latestInputHandler()?.('h', {})
+    })
+
+    act(() => {
+      latestInputHandler()?.('j', {})
+    })
+
+    act(() => {
+      latestInputHandler()?.('', { rightArrow: true })
+    })
+
+    act(() => {
+      latestInputHandler()?.(' ', {})
+    })
+
+    act(() => {
+      latestInputHandler()?.('', { return: true })
+    })
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      type: 'launch',
+      presetName: 'api',
+      toggles: {
+        plugins: [{ name: 'beta', enabled: false, source: 'user' }],
+        skills: [],
+        mcps: [],
+      },
+      changedPresets: {
+        web: {
+          plugins: [{ name: 'alpha', enabled: false, source: 'user' }],
+          skills: [],
+          mcps: [],
+        },
+        api: {
+          plugins: [{ name: 'beta', enabled: false, source: 'user' }],
+          skills: [],
+          mcps: [],
+        },
+      },
+    })
+    expect(exitMock).toHaveBeenCalled()
   })
 
   it('shows unlock confirmation with file path and confirms on y', () => {

@@ -2,7 +2,13 @@ import { useState } from 'react'
 import { Box, useApp, useInput } from 'ink'
 import { TruncateText } from './components/truncate-text.js'
 import type { LaunchPresetMeta } from '../core/schema.js'
-import type { DisableRemovalMark, ProjectLaunchToggleState } from '../flows/project-launch-flow.js'
+import {
+  changedProjectLaunchPresetProps,
+  getChangedProjectLaunchPresets,
+  type ChangedProjectLaunchPresets,
+  type DisableRemovalMark,
+  type ProjectLaunchToggleState,
+} from '../flows/project-launch-flow.js'
 import type { DisableLockSource } from '../services/disable-lock-service.js'
 import { ConfirmEnableUnlock } from './components/confirm-enable-unlock.js'
 import { ProjectLaunchColumnsView } from './components/project-launch-columns-view.js'
@@ -14,8 +20,8 @@ import { useProjectLaunchBrowserController } from './use-project-launch-browser-
 type SaveChoice = 'none' | 'confirm-save' | 'name-new'
 
 export type ProjectLaunchResult =
-  | { type: 'launch'; presetName?: string; toggles: ProjectLaunchToggleState; saveAs?: string; disableRemovals?: DisableRemovalMark[] }
-  | { type: 'temp-launch'; toggles: ProjectLaunchToggleState; disableRemovals?: DisableRemovalMark[] }
+  | { type: 'launch'; presetName?: string; toggles: ProjectLaunchToggleState; saveAs?: string; disableRemovals?: DisableRemovalMark[]; changedPresets?: ChangedProjectLaunchPresets; savedPresets?: string[] }
+  | { type: 'temp-launch'; toggles: ProjectLaunchToggleState; disableRemovals?: DisableRemovalMark[]; changedPresets?: ChangedProjectLaunchPresets; savedPresets?: string[] }
   | { type: 'back' }
 
 export type ProjectLaunchAppProps = {
@@ -51,6 +57,7 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, disableLoc
       type: 'launch',
       toggles: activeToggleState,
       ...controller.disableRemovalsProps(),
+      ...changedProjectLaunchPresetProps(getChangedProjectLaunchPresets(state)),
       ...(activeItem?.type === 'preset' ? { presetName: activeItem.name } : {}),
       ...(normalizedSaveAs ? { saveAs: normalizedSaveAs } : {}),
     })
@@ -108,6 +115,7 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, disableLoc
               type: 'temp-launch',
               toggles: activeToggleState,
               ...controller.disableRemovalsProps(),
+              ...changedProjectLaunchPresetProps(getChangedProjectLaunchPresets(state)),
             })
             exit()
           }}
@@ -146,6 +154,7 @@ export function ProjectLaunchApp({ presets, detected, statesByPreset, disableLoc
                 presetName: normalizePresetName(saveAs, { preserveCase: true }),
                 toggles: activeToggleState,
                 ...controller.disableRemovalsProps(),
+                ...changedProjectLaunchPresetProps(getChangedProjectLaunchPresets(state)),
               })
               exit()
               return

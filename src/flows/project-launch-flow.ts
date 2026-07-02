@@ -21,6 +21,8 @@ export type ProjectLaunchToggleState = {
   mcps: McpState[]
 }
 
+export type ChangedProjectLaunchPresets = Record<string, ProjectLaunchToggleState>
+
 export type ProjectLaunchPresetItem =
   | { type: 'detected'; name: 'Detected' }
   | { type: 'preset'; name: string; preset: LaunchPresetMeta }
@@ -486,6 +488,16 @@ export function getActiveProjectLaunchState(state: ProjectLaunchFlowState): Proj
 
 export function getActiveProjectLaunchItem(state: ProjectLaunchFlowState): ProjectLaunchPresetItem | undefined {
   return activeItem(state)
+}
+
+export function getChangedProjectLaunchPresets(state: ProjectLaunchFlowState): ChangedProjectLaunchPresets {
+  return Object.fromEntries(
+    Object.entries(state.draftsByPreset).filter(([name]) => name !== 'Detected' && state.statesByPreset[name]),
+  )
+}
+
+export function changedProjectLaunchPresetProps(changedPresets: ChangedProjectLaunchPresets): { changedPresets?: ChangedProjectLaunchPresets } {
+  return Object.keys(changedPresets).length > 0 ? { changedPresets } : {}
 }
 
 export function focusProjectLaunchPreset(state: ProjectLaunchFlowState, presetName: string): ProjectLaunchFlowState {

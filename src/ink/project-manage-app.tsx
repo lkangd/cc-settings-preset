@@ -2,7 +2,10 @@ import { useState } from 'react'
 import { Box, Text, useApp, useInput } from 'ink'
 import type { DisableRemovalMark } from '../flows/project-launch-flow.js'
 import {
+  changedProjectLaunchPresetProps,
   focusProjectLaunchPreset,
+  getChangedProjectLaunchPresets,
+  type ChangedProjectLaunchPresets,
   type ProjectLaunchFlowState,
 } from '../flows/project-launch-flow.js'
 import type { DisableLockSource } from '../services/disable-lock-service.js'
@@ -16,7 +19,7 @@ import { buildLaunchPresetFileName, normalizePresetName } from '../core/name.js'
 export type ProjectManageResult =
   | ProjectLaunchResult
   | { type: 'save'; presetName: string; toggles: ProjectLaunchToggleState; disableRemovals?: DisableRemovalMark[] }
-  | { type: 'create'; toggles: ProjectLaunchToggleState; saveAs: string; disableRemovals?: DisableRemovalMark[] }
+  | { type: 'create'; toggles: ProjectLaunchToggleState; saveAs: string; disableRemovals?: DisableRemovalMark[]; changedPresets?: ChangedProjectLaunchPresets; savedPresets?: string[] }
   | { type: 'rename'; presetName: string; newName: string }
   | { type: 'delete'; presetName: string }
   | { type: 'refresh' }
@@ -78,6 +81,20 @@ export function ProjectManageApp({ presets, detected, statesByPreset, disableLoc
   const [newName, setNewName] = useState('')
   const [renameError, setRenameError] = useState<string | null>(null)
 
+  async function saveChangedPresets(changedPresets: ChangedProjectLaunchPresets): Promise<string[] | undefined> {
+    if (!onSaveSubmit) return []
+    const savedPresets: string[] = []
+    for (const [presetName, toggles] of Object.entries(changedPresets)) {
+      const error = await onSaveSubmit(presetName, toggles)
+      if (error) {
+        setMessage({ text: error, color: 'red' })
+        return undefined
+      }
+      savedPresets.push(presetName)
+    }
+    return savedPresets
+  }
+
   useInput((input, key) => {
     if (mode !== 'browse' || saveMode !== 'none' || state.pendingEnableUnlock) return
     if (input === 'q') {
@@ -117,19 +134,17 @@ export function ProjectManageApp({ presets, detected, statesByPreset, disableLoc
     if (input === 'l' && !key.ctrl && !key.meta) {
       if (state.dirty) {
         if (activeItem?.type === 'preset') {
+          const changedPresets = getChangedProjectLaunchPresets(state)
           if (onSaveSubmit) {
             void (async () => {
-              const error = await onSaveSubmit(activeItem.name, activeToggleState)
-              if (error) {
-                setMessage({ text: error, color: 'red' })
-                return
-              }
-              onSubmit({ type: 'launch', presetName: activeItem.name, toggles: activeToggleState, ...controller.disableRemovalsProps() })
+              const savedPresets = await saveChangedPresets(changedPresets)
+              if (!savedPresets) return
+              onSubmit({ type: 'launch', presetName: activeItem.name, toggles: activeToggleState, ...controller.disableRemovalsProps(), savedPresets })
               exit()
             })()
             return
           }
-          onSubmit({ type: 'launch', presetName: activeItem.name, toggles: activeToggleState, ...controller.disableRemovalsProps() })
+          onSubmit({ type: 'launch', presetName: activeItem.name, toggles: activeToggleState, ...controller.disableRemovalsProps(), ...changedProjectLaunchPresetProps(changedPresets) })
           exit()
           return
         }
@@ -202,7 +217,10 @@ export function ProjectManageApp({ presets, detected, statesByPreset, disableLoc
           onSubmit={async () => {
             const saveAs = newName.trim()
             if (!saveAs) return
+            const changedPresets = getChangedProjectLaunchPresets(state)
             if (onCreateSubmit) {
+              const savedPresets = await saveChangedPresets(changedPresets)
+              if (!savedPresets) return
               const error = await onCreateSubmit(saveAs, activeToggleState)
               if (error) {
                 setMessage({ text: error, color: 'red' })
@@ -219,6 +237,7 @@ export function ProjectManageApp({ presets, detected, statesByPreset, disableLoc
               toggles: activeToggleState,
               saveAs,
               ...controller.disableRemovalsProps(),
+              ...changedProjectLaunchPresetProps(changedPresets),
             })
             exit()
           }}

@@ -53,6 +53,19 @@ describe('ProjectLaunchApp', () => {
     expect(longestLineLength(output)).toBeGreaterThanOrEqual(145)
   })
 
+  it('describes only source badges that appear in the current lists', () => {
+    const output = withStdoutColumns(160, () => renderToString(<ProjectLaunchApp {...props} />, { columns: 160 }))
+
+    expect(output).toContain('Source badges:')
+    expect(output).toContain('[P] project')
+    expect(output).toContain('[U] user')
+    expect(output).not.toContain('[L] local/project-local')
+    expect(output).not.toContain('[C] command')
+    expect(output).not.toContain('[PL] plugin')
+    expect(output).not.toContain('[CN] connector')
+    expect(output).not.toContain('[D] default/discovered')
+  })
+
   it('uses equal visible gaps between all four columns', () => {
     const output = withStdoutColumns(160, () => renderToString(<ProjectLaunchApp {...props} />, { columns: 160 }))
 

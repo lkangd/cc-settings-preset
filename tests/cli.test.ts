@@ -22,6 +22,7 @@ const deletePresetMock = vi.fn()
 const renamePresetMock = vi.fn()
 const writePresetSettingsByNameMock = vi.fn()
 const createProjectLaunchPresetMock = vi.fn()
+const writeProjectLaunchPresetSettingsMock = vi.fn()
 const writeLastUsedLaunchPresetMock = vi.fn()
 const listLaunchPresetsWithSettingsMock = vi.fn()
 const readLastUsedGlobalSettingsMock = vi.fn()
@@ -148,7 +149,7 @@ vi.mock('../src/services/launch-preset-service.js', () => ({
     listPresetsWithSettings: listLaunchPresetsWithSettingsMock,
     readPresetSettings: vi.fn().mockResolvedValue({}),
     createPreset: createProjectLaunchPresetMock,
-    writePresetSettings: vi.fn(),
+    writePresetSettings: writeProjectLaunchPresetSettingsMock,
     renamePreset: vi.fn(),
     deletePreset: vi.fn(),
     readLastUsed: vi.fn().mockResolvedValue(undefined),
@@ -505,6 +506,8 @@ describe('run command', () => {
     renamePresetMock.mockReset()
     createProjectLaunchPresetMock.mockReset()
     createProjectLaunchPresetMock.mockResolvedValue({ name: 'web', fileName: 'web-launch.json', createdAt: '2026-05-19T00:00:00.000Z', updatedAt: '2026-05-19T00:00:00.000Z' })
+    writeProjectLaunchPresetSettingsMock.mockReset()
+    writeProjectLaunchPresetSettingsMock.mockResolvedValue({ name: 'web', fileName: 'web-launch.json', createdAt: '2026-05-19T00:00:00.000Z', updatedAt: '2026-05-19T00:00:00.000Z' })
     writeLastUsedLaunchPresetMock.mockReset()
     listLaunchPresetsWithSettingsMock.mockReset()
     listLaunchPresetsWithSettingsMock.mockResolvedValue([])
@@ -682,6 +685,206 @@ describe('run command', () => {
       skillOverrides: { personal: 'off' },
       deniedMcpServers: [{ serverName: 'github' }],
     }, expect.any(String))
+    expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
+  })
+
+  it('saves every changed project launch preset before launching', async () => {
+    const basePreset = {
+      type: 'base' as const,
+      name: 'base',
+      fileName: 'base-settings.json',
+      createdAt: '2026-05-17T00:00:00.000Z',
+      updatedAt: '2026-05-17T00:00:00.000Z',
+    }
+    listPresetsMock.mockResolvedValue([basePreset])
+
+    renderMock
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          name: 'base',
+          sourcePath: '/tmp/.ccsp/settings/base-settings.json',
+          settings: {},
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          type: 'launch',
+          presetName: 'api',
+          toggles: {
+            plugins: [{ name: 'beta', enabled: false, source: 'user' }],
+            skills: [],
+            mcps: [],
+          },
+          changedPresets: {
+            web: {
+              plugins: [{ name: 'alpha', enabled: false, source: 'user' }],
+              skills: [],
+              mcps: [],
+            },
+            api: {
+              plugins: [{ name: 'beta', enabled: false, source: 'user' }],
+              skills: [],
+              mcps: [],
+            },
+          },
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli'])
+
+    expect(writeProjectLaunchPresetSettingsMock).toHaveBeenCalledWith('web', {
+      enabledPlugins: { alpha: false },
+      skillOverrides: {},
+      deniedMcpServers: [],
+    })
+    expect(writeProjectLaunchPresetSettingsMock).toHaveBeenCalledWith('api', {
+      enabledPlugins: { beta: false },
+      skillOverrides: {},
+      deniedMcpServers: [],
+    })
+    expect(writeLastUsedLaunchPresetMock).toHaveBeenCalledWith('api')
+    expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
+  })
+
+  it('continues launching when the active project preset was deleted before save', async () => {
+    const { CliError } = await import('../src/core/errors.js')
+    const basePreset = {
+      type: 'base' as const,
+      name: 'base',
+      fileName: 'base-settings.json',
+      createdAt: '2026-05-17T00:00:00.000Z',
+      updatedAt: '2026-05-17T00:00:00.000Z',
+    }
+    listPresetsMock.mockResolvedValue([basePreset])
+    writeProjectLaunchPresetSettingsMock.mockRejectedValueOnce(new CliError('Launch preset not found: web', 1, 'launch_preset_not_found'))
+    writeLastUsedLaunchPresetMock.mockRejectedValueOnce(new CliError('Launch preset not found: web', 1, 'launch_preset_not_found'))
+
+    renderMock
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          name: 'base',
+          sourcePath: '/tmp/.ccsp/settings/base-settings.json',
+          settings: {},
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          type: 'launch',
+          presetName: 'web',
+          toggles: {
+            plugins: [{ name: 'alpha', enabled: false, source: 'user' }],
+            skills: [],
+            mcps: [],
+          },
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli'])
+
+    expect(writeProjectLaunchPresetSettingsMock).toHaveBeenCalledWith('web', {
+      enabledPlugins: { alpha: false },
+      skillOverrides: {},
+      deniedMcpServers: [],
+    })
+    expect(writeLastUsedLaunchPresetMock).toHaveBeenCalledWith('web')
+    expect(writeTempSettingsMock).toHaveBeenCalledWith({
+      enabledPlugins: { alpha: false },
+    }, expect.any(String))
+    expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
+  })
+
+  it('continues launching when a changed non-active preset was deleted before save', async () => {
+    const { CliError } = await import('../src/core/errors.js')
+    const basePreset = {
+      type: 'base' as const,
+      name: 'base',
+      fileName: 'base-settings.json',
+      createdAt: '2026-05-17T00:00:00.000Z',
+      updatedAt: '2026-05-17T00:00:00.000Z',
+    }
+    listPresetsMock.mockResolvedValue([basePreset])
+    writeProjectLaunchPresetSettingsMock.mockRejectedValueOnce(new CliError('Launch preset not found: stale', 1, 'launch_preset_not_found'))
+
+    renderMock
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          name: 'base',
+          sourcePath: '/tmp/.ccsp/settings/base-settings.json',
+          settings: {},
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          type: 'temp-launch',
+          toggles: { plugins: [], skills: [], mcps: [] },
+          changedPresets: {
+            stale: {
+              plugins: [{ name: 'alpha', enabled: false, source: 'user' }],
+              skills: [],
+              mcps: [],
+            },
+          },
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli'])
+
+    expect(writeProjectLaunchPresetSettingsMock).toHaveBeenCalledWith('stale', {
+      enabledPlugins: { alpha: false },
+      skillOverrides: {},
+      deniedMcpServers: [],
+    })
+    expect(writeTempSettingsMock).toHaveBeenCalledWith({}, expect.any(String))
+    expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
+  })
+
+  it('does not rewrite project launch presets already saved by the UI', async () => {
+    const basePreset = {
+      type: 'base' as const,
+      name: 'base',
+      fileName: 'base-settings.json',
+      createdAt: '2026-05-17T00:00:00.000Z',
+      updatedAt: '2026-05-17T00:00:00.000Z',
+    }
+    listPresetsMock.mockResolvedValue([basePreset])
+
+    renderMock
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          name: 'base',
+          sourcePath: '/tmp/.ccsp/settings/base-settings.json',
+          settings: {},
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          type: 'launch',
+          presetName: 'web',
+          toggles: {
+            plugins: [{ name: 'alpha', enabled: false, source: 'user' }],
+            skills: [],
+            mcps: [],
+          },
+          savedPresets: ['web'],
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli'])
+
+    expect(writeProjectLaunchPresetSettingsMock).not.toHaveBeenCalled()
+    expect(writeLastUsedLaunchPresetMock).toHaveBeenCalledWith('web')
     expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
   })
 
