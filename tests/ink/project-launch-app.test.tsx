@@ -40,7 +40,7 @@ describe('ProjectLaunchApp', () => {
   it('renders four columns within a narrow terminal width', () => {
     const output = withStdoutColumns(100, () => renderToString(<ProjectLaunchApp {...props} />, { columns: 100 }))
 
-    expect(output).toContain('Detected')
+    expect(output).toContain('Current preset: Detected')
     expect(output).toContain('Plugins')
     expect(output).toContain('Skills')
     expect(output).toContain('MCPs')

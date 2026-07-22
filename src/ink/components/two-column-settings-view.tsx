@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Box, useStdout } from 'ink'
+import { Box, Text, useStdout } from 'ink'
 import type { SettingsSelectItem } from '../../flows/settings-select-flow.js'
 import type { SettingsDisplayFormat } from '../../core/schema.js'
 import { BORDERED_TITLE_BOX_FRAME_LINES, BorderedTitleBox } from './bordered-title-box.js'
@@ -63,6 +63,12 @@ export function TwoColumnSettingsView({ title, help, items, cursor, envOnly = fa
     <Box flexDirection="column">
       <TruncateText bold color="cyan">{title}</TruncateText>
       <TruncateText dimColor>{help}</TruncateText>
+      {selected ? (
+        <Text wrap="wrap">
+          <Text dimColor>Current settings: </Text>
+          {selected.name}{selected.temporary ? ' (detected)' : ''} · {selected.sourcePath}
+        </Text>
+      ) : null}
       <Box marginTop={0.5} width={innerWidth}>
         <Box marginRight={0.5}>
           <BorderedTitleBox title={`Settings(${items.length})`} width={listWidth} height={columnHeight} borderColor="cyan">

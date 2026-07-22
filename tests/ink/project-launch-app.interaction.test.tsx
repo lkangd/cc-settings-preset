@@ -145,6 +145,52 @@ describe('ProjectLaunchApp interactions', () => {
     expect(flattenJson(output!.toJSON())).toMatch(/❯\s+Detected/)
   })
 
+  it('updates current item details with focus and cursor movement', () => {
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <ProjectLaunchApp
+          presets={[]}
+          detected={{
+            plugins: [
+              { name: 'alpha-plugin-with-a-complete-name', enabled: true, source: 'user' },
+              { name: 'beta-plugin-with-a-complete-name', enabled: false, source: 'project' },
+            ],
+            skills: [],
+            mcps: [],
+          }}
+          statesByPreset={{}}
+          onSubmit={vi.fn()}
+        />,
+      )
+    })
+
+    expect(flattenJson(output!.toJSON())).toContain('Current preset: Detected')
+
+    act(() => {
+      latestInputHandler()?.('', { rightArrow: true })
+    })
+
+    expect(flattenJson(output!.toJSON())).toMatch(
+      /Current plugin:\s+text\s+ON\s+text\s+\[U]\s+text\s+alpha-plugin-with-a-complete-name/,
+    )
+
+    act(() => {
+      latestInputHandler()?.('j', {})
+    })
+
+    expect(flattenJson(output!.toJSON())).toMatch(
+      /Current plugin:\s+text\s+OFF\s+text\s+\[P]\s+text\s+beta-plugin-with-a-complete-name/,
+    )
+
+    act(() => {
+      latestInputHandler()?.('', { rightArrow: true })
+    })
+
+    expect(flattenJson(output!.toJSON())).not.toContain('Current skill:')
+  })
+
   it('keeps create errors in the input when the new preset name conflicts', async () => {
     const onSubmit = vi.fn()
     const onCreateSubmit = vi.fn().mockResolvedValue('Launch preset already exists: fff')

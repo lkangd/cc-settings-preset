@@ -25,6 +25,19 @@ function sourceBadge(source: ToggleColumnItem['source']): string {
   return SOURCE_BADGE_ITEMS.find(item => item.sources.includes(source))?.badge ?? '[D]'
 }
 
+export function ToggleItemText({ item }: { item: ToggleColumnItem }) {
+  const dimProps = item.enableLocked && !item.enabled ? { dimColor: true as const } : {}
+
+  return (
+    <>
+      <Text {...dimProps} color={item.enabled ? 'green' : 'red'}>{item.enabled ? 'ON ' : 'OFF'}</Text>{' '}
+      <Text {...dimProps}>{sourceBadge(item.source)}</Text>{' '}
+      <Text {...dimProps}>{item.name}</Text>
+      {item.toggleable === false ? <Text {...dimProps}> (plugin)</Text> : null}
+    </>
+  )
+}
+
 export function ToggleColumn({
   title,
   focused,
@@ -60,10 +73,7 @@ export function ToggleColumn({
             {...(focusedLine ? { color: 'cyan' as const } : {})}
           >
             {focusedLine ? '❯ ' : '  '}
-            <Text {...dimProps} color={item.enabled ? 'green' : 'red'}>{item.enabled ? 'ON ' : 'OFF'}</Text>{' '}
-            <Text {...dimProps}>{sourceBadge(item.source)}</Text>{' '}
-            <Text {...dimProps}>{item.name}</Text>
-            {item.toggleable === false ? <Text {...dimProps}> (plugin)</Text> : null}
+            <ToggleItemText item={item} />
           </Line>
         )
       })}

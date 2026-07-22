@@ -1,8 +1,8 @@
-import { Box, useStdout } from 'ink'
+import { Box, Text, useStdout } from 'ink'
 import type { ProjectLaunchFocus, ProjectLaunchPresetItem, ToggleColumnItem } from '../../flows/project-launch-flow.js'
 import { enabledToggleCount } from '../../flows/toggle-utils.js'
 import { BORDERED_TITLE_BOX_FRAME_LINES, BorderedTitleBox } from './bordered-title-box.js'
-import { countToggleColumnContentLines, SOURCE_BADGE_ITEMS, ToggleColumn } from './toggle-column.js'
+import { countToggleColumnContentLines, SOURCE_BADGE_ITEMS, ToggleColumn, ToggleItemText } from './toggle-column.js'
 import { useInkResizeVersion } from './resize-context.js'
 import { TruncateText } from './truncate-text.js'
 
@@ -69,6 +69,26 @@ export function ProjectLaunchColumnsView({
   const innerWidth = Math.max(minWidth ?? 0, stdout.columns ?? 120)
   const { presetWidth, detailWidth, mcpWidth } = computeProjectLaunchColumnWidths(innerWidth)
   const sourceBadgeHelp = buildSourceBadgeHelp([...pluginItems, ...skillItems, ...mcpItems])
+  const selectedDetail = (() => {
+    switch (focus) {
+      case 'presets': {
+        const item = presetItems[presetCursor]
+        return item ? <><Text dimColor>Current preset: </Text>{item.name}</> : null
+      }
+      case 'plugins': {
+        const item = pluginItems[pluginCursor]
+        return item ? <><Text dimColor>Current plugin: </Text><ToggleItemText item={item} /></> : null
+      }
+      case 'skills': {
+        const item = skillItems[skillCursor]
+        return item ? <><Text dimColor>Current skill: </Text><ToggleItemText item={item} /></> : null
+      }
+      case 'mcps': {
+        const item = mcpItems[mcpCursor]
+        return item ? <><Text dimColor>Current MCP: </Text><ToggleItemText item={item} /></> : null
+      }
+    }
+  })()
   const columnContentHeight = Math.max(
     presetItems.length,
     countToggleColumnContentLines(pluginItems),
@@ -82,6 +102,7 @@ export function ProjectLaunchColumnsView({
       <TruncateText bold color="cyan">{title}</TruncateText>
       <TruncateText dimColor>{help}</TruncateText>
       {sourceBadgeHelp ? <TruncateText dimColor>{sourceBadgeHelp}</TruncateText> : null}
+      {selectedDetail ? <Text wrap="wrap">{selectedDetail}</Text> : null}
       <Box marginTop={0.5} width={innerWidth} flexDirection="row">
         <BorderedTitleBox
           title={`Presets(${presetItems.length})`}

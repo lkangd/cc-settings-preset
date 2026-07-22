@@ -29,7 +29,7 @@ describe('TwoColumnSettingsView', () => {
       { columns: 120 },
     )
 
-    expect(output).toContain('base')
+    expect(output).toContain('Current settings: base · /tmp/base.json')
     expect(output).toContain('enabledPlugins')
     expect(output).toContain('alpha')
     expect(output).toContain('true')
@@ -53,6 +53,28 @@ describe('TwoColumnSettingsView', () => {
     ))
 
     expect(output).toContain('…')
+    expect(output.replace(/\n/g, '')).toContain(
+      'Current settings: very-long-preset-name-that-should-truncate · /tmp/project/.claude/settings/very-long-file-name.json',
+    )
+  })
+
+  it('shows detected status and omits details without a selected item', () => {
+    const detectedOutput = renderToString(
+      <TwoColumnSettingsView
+        title="Settings"
+        help="Preview"
+        items={[{ name: 'detected', sourcePath: '/tmp/detected.json', settings: {}, temporary: true }]}
+        cursor={0}
+      />,
+      { columns: 120 },
+    )
+    const emptyOutput = renderToString(
+      <TwoColumnSettingsView title="Settings" help="Preview" items={[]} cursor={0} />,
+      { columns: 120 },
+    )
+
+    expect(detectedOutput).toContain('Current settings: detected (detected) · /tmp/detected.json')
+    expect(emptyOutput).not.toContain('Current settings:')
   })
 
   it('truncates long JSON preview values instead of wrapping them', () => {
