@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0 (2026-07-23)
+
+### Features
+* **settings**: quick cycle mode and effort for selected preset
+* **launch**: show current item details in launch and settings views
+
 ## 1.2.6 (2026-07-02)
 
 ### Features
