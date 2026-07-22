@@ -261,10 +261,26 @@ claude --settings <temp-file> [your other args]
 - **Non-destructive launch** — inject config via temp files; does not force-overwrite your main settings.
 - **Two-layer split** — global “base environment” vs project “launch delta” for multi-repo work.
 - **Visual toggles** — terminal TUI to browse JSON and flip plugins / skills / MCP.
+- **Quick settings** — cycle `permissions.defaultMode` and `effortLevel` for the selected preset right from the base screen; only fields you touch persist (to the preset, or `~/.claude/settings.json` for Claude Official).
 - **Direct run** — `-g` / `-p` / `--dry-run` for scripts and CI; combine with `claude -p` for headless agent tasks.
 - **Remembers last choice** — per project directory for base and launch presets.
 - **Resumable sessions** — every launch is bound to its preset/launch config; `ccsp --continue` and `ccsp --resume <id>` restore the original config and resume the matching Claude session in one shot.
 - **Safer defaults** — `.claude/.ccsp/` gets a `.gitignore` that ignores everything on init.
+
+### Quick settings (mode & effort)
+
+The base preset selection screen has a middle **Quick Settings** column. Move focus there (`h`/`l` or ←/→) and press `space` to cycle two Claude Code options for the selected preset:
+
+- **mode** — `permissions.defaultMode`: `manual` → `acceptEdits` → `plan` → `auto` → `dontAsk` → `bypassPermissions`.
+- **effort** — `effortLevel`: `low` → `medium` → `high` → `xhigh` → `max` → `ultracode`.
+
+Fields you don't touch show the effective default resolved by precedence (managed → local → project → user). Only fields you actually cycle are written, and each persists to the right place:
+
+- `low` / `medium` / `high` / `xhigh` — saved as `effortLevel` in the preset.
+- `max` — saved as `env.CLAUDE_CODE_EFFORT_LEVEL` (`effortLevel: "max"` is rejected in settings files).
+- `ultracode` — **not persisted**; applied to that launch via `claude --effort ultracode` (it can only be set inside a Claude Code session).
+
+Edits are written to the preset file on confirm. Editing the temporary **Claude Official** entry writes straight back to `~/.claude/settings.json`.
 
 ### Session resume
 
@@ -311,7 +327,7 @@ After Claude exits, CCSP records the **real** Claude session id (discovered by d
 
 ### TUI shortcuts
 
-**Base preset selection:** `j`/`k` or arrows to move, `f` toggle between env-only and full settings preview, `Enter` to confirm, `q` to quit.
+**Base preset selection:** `h`/`l` or ←/→ switch between the Settings and Quick Settings columns, `j`/`k` or ↑/↓ to move, `space` to cycle the focused quick setting, `t` to change sort order, `f` toggle between env-only and full settings preview, `Enter` to confirm, `q` to quit.
 
 **Global manage (`ccsp manage`):** `l` launch, `r` rename, `d` delete, `c` create, `o` reveal in Finder, `q` quit.
 

@@ -17,6 +17,13 @@ function bottomBorderLine(output: string): string {
   return output.split(/\n/).find(line => (line.match(/╰/g) ?? []).length === 2) ?? ''
 }
 
+// eslint-disable-next-line no-control-regex
+const ANSI_PATTERN = /\u001b\[[0-9;]*m/g
+
+function stripAnsi(output: string): string {
+  return output.replace(ANSI_PATTERN, '')
+}
+
 describe('TwoColumnSettingsView', () => {
   it('renders settings names and JSON tree values', () => {
     const output = renderToString(
@@ -129,5 +136,77 @@ describe('TwoColumnSettingsView', () => {
     ))
 
     expect((bottomBorderLine(output).match(/╰/g) ?? []).length).toBe(2)
+  })
+
+  it('renders an aligned quick settings column with values, sources, and pending marks', () => {
+    const output = withStdoutColumns(120, () => renderToString(
+      <TwoColumnSettingsView
+        title="Settings"
+        help="space cycle"
+        items={[{ name: 'base', sourcePath: '/tmp/base.json', settings: { model: 'sonnet' } }]}
+        cursor={0}
+        quickSettings={{
+          focus: 'quick-settings',
+          cursor: 1,
+          modifiedPresetNames: ['base'],
+          items: [
+            { field: 'defaultMode', label: 'mode', value: 'plan', source: 'preset', touched: false },
+            { field: 'effortLevel', label: 'effort', value: 'xhigh', source: 'pending', touched: true },
+          ],
+        }}
+      />,
+      { columns: 120 },
+    ))
+    const plain = stripAnsi(output)
+
+    expect(plain).toContain('Quick Settings')
+    expect(plain).toContain('mode: plan [preset]')
+    expect(plain).toContain('effort: xhigh [pending] *')
+    expect(plain).toContain('base *')
+    expect(output.split(/\n/).some(line => (line.match(/╰/g) ?? []).length === 3)).toBe(true)
+  })
+
+  it('shows a resident line for the highlighted quick setting and drops the path from the preview title', () => {
+    const output = withStdoutColumns(120, () => renderToString(
+      <TwoColumnSettingsView
+        title="Settings"
+        help="space cycle"
+        items={[{ name: 'base', sourcePath: '/tmp/base.json', settings: { model: 'sonnet' } }]}
+        cursor={0}
+        quickSettings={{
+          focus: 'presets',
+          cursor: 1,
+          items: [
+            { field: 'defaultMode', label: 'mode', value: 'plan', source: 'preset', touched: false },
+            { field: 'effortLevel', label: 'effort', value: 'xhigh', source: 'pending', touched: true },
+          ],
+        }}
+      />,
+      { columns: 120 },
+    ))
+
+    expect(stripAnsi(output)).toContain('Quick setting: effort: xhigh [pending] *')
+    expect(output).toContain('Preview')
+    expect(output).not.toContain('/tmp/base.json ┌')
+  })
+
+  it('renders max and ultracode effort levels', () => {
+    const build = (value: string) => stripAnsi(withStdoutColumns(120, () => renderToString(
+      <TwoColumnSettingsView
+        title="Settings"
+        help="space cycle"
+        items={[{ name: 'base', sourcePath: '/tmp/base.json', settings: {} }]}
+        cursor={0}
+        quickSettings={{
+          focus: 'quick-settings',
+          cursor: 0,
+          items: [{ field: 'effortLevel', label: 'effort', value, source: 'pending', touched: true }],
+        }}
+      />,
+      { columns: 120 },
+    )))
+
+    expect(build('max')).toContain('effort: max [pending] *')
+    expect(build('ultracode')).toContain('effort: ultracode [pending] *')
   })
 })

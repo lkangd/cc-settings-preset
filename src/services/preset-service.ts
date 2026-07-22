@@ -342,6 +342,10 @@ export function createPresetService(globalRoot: string) {
         temporary: true,
       }
     },
+
+    async writeClaudeOfficialSettings(settingsPath: string, settingsInput: unknown): Promise<void> {
+      await writeJsonFile(settingsPath, parseSettings(settingsInput))
+    },
   }
 
   return service

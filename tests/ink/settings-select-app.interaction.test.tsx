@@ -3,7 +3,14 @@ import TestRenderer, { act } from 'react-test-renderer'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SettingsSelectApp } from '../../src/ink/settings-select-app.js'
 
-type InputHandler = (input: string, key: { return?: boolean; upArrow?: boolean; downArrow?: boolean; escape?: boolean }) => void
+type InputHandler = (input: string, key: {
+  return?: boolean
+  upArrow?: boolean
+  downArrow?: boolean
+  leftArrow?: boolean
+  rightArrow?: boolean
+  escape?: boolean
+}) => void
 
 const inputHandlers: InputHandler[] = []
 const exitMock = vi.fn()
@@ -126,6 +133,85 @@ describe('SettingsSelectApp interactions', () => {
     })
 
     expect(selectedName).toBe('*Claude Official*')
+    expect(exitMock).toHaveBeenCalledOnce()
+  })
+
+  it('edits quick settings across presets and submits all changed drafts', () => {
+    const onSubmit = vi.fn()
+
+    act(() => {
+      TestRenderer.create(
+        <SettingsSelectApp
+          items={[
+            { name: 'alpha', sourcePath: '/tmp/alpha.json', settings: {}, isLastUsed: true },
+            { name: 'beta', sourcePath: '/tmp/beta.json', settings: { effortLevel: 'high' } },
+          ]}
+          onSubmit={onSubmit}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('l', {})
+      latestInputHandler()?.(' ', {})
+      latestInputHandler()?.('h', {})
+      latestInputHandler()?.('j', {})
+      latestInputHandler()?.('l', {})
+      latestInputHandler()?.('j', {})
+      latestInputHandler()?.(' ', {})
+      latestInputHandler()?.('', { return: true })
+    })
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'beta',
+      settings: { effortLevel: 'xhigh' },
+      changedPresets: {
+        alpha: { defaultMode: 'acceptEdits' },
+        beta: { effortLevel: 'xhigh' },
+      },
+    }))
+    expect(exitMock).toHaveBeenCalledOnce()
+  })
+
+  it('ignores space while the presets column is focused', () => {
+    const onSubmit = vi.fn()
+
+    act(() => {
+      TestRenderer.create(
+        <SettingsSelectApp
+          items={[{ name: 'alpha', sourcePath: '/tmp/alpha.json', settings: {}, isLastUsed: true }]}
+          onSubmit={onSubmit}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.(' ', {}) // focus is on presets: must not create a draft
+      latestInputHandler()?.('', { return: true })
+    })
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.not.objectContaining({ changedPresets: expect.anything() }))
+  })
+
+  it('returns focus to presets on the first escape from quick settings, then exits', () => {
+    act(() => {
+      TestRenderer.create(
+        <SettingsSelectApp
+          items={[{ name: 'base', sourcePath: '/tmp/base.json', settings: {} }]}
+          onSubmit={vi.fn()}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('l', {})
+      latestInputHandler()?.('', { escape: true })
+    })
+    expect(exitMock).not.toHaveBeenCalled()
+
+    act(() => {
+      latestInputHandler()?.('', { escape: true })
+    })
     expect(exitMock).toHaveBeenCalledOnce()
   })
 })

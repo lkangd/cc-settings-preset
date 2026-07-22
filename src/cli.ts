@@ -26,7 +26,12 @@ import { ManageApp, type ManageResult } from './ink/manage-app.js'
 import { ProjectLaunchApp, type ProjectLaunchResult } from './ink/project-launch-app.js'
 import { ProjectManageApp, type ProjectManageResult } from './ink/project-manage-app.js'
 import { DirectRunPreviewApp } from './ink/direct-run-preview-app.js'
-import { createSettingsSelectFlowState } from './flows/settings-select-flow.js'
+import {
+  applyQuickSettingsDraft,
+  createSettingsSelectFlowState,
+  draftHasPersistableChange,
+  type QuickSettingsSource,
+} from './flows/settings-select-flow.js'
 import { SettingsSelectApp, type SettingsSelectResult } from './ink/settings-select-app.js'
 import { discoverCachedClaudePlugins } from './services/plugin-cache-service.js'
 import { applyPluginOverrides, pluginStatesToEnabledPlugins, resolvePluginStates } from './services/plugin-service.js'
@@ -44,6 +49,7 @@ import {
 import { createClaudeLoginService } from './services/claude-login-service.js'
 import { CLAUDE_OFFICIAL_PRESET_NAME, createPresetService } from './services/preset-service.js'
 import { createSettingsSourceService, type SettingsSource } from './services/settings-source-service.js'
+import { readManagedSettings } from './services/managed-settings-service.js'
 import { createUpdateCheckService } from './services/update-check-service.js'
 import { createUpdateService } from './services/update-service.js'
 import {
@@ -383,6 +389,7 @@ async function renderSettingsSelectApp(
     displayFormat?: SettingsDisplayFormat
     headerNotice?: string
     headerUpdateNotice?: string
+    quickSettingsSources?: QuickSettingsSource[]
   } = {}
 ): Promise<SettingsSelectResult | undefined> {
   let result: SettingsSelectResult | undefined
@@ -427,28 +434,68 @@ async function resolveProjectManageBaseSettings(): Promise<SettingsSelectResult 
   }
 }
 
+async function persistQuickSettingsChanges(
+  selected: SettingsSelectResult,
+  presetItems: SettingsSelectResult[],
+): Promise<SettingsSelectResult> {
+  const changedPresets = selected.changedPresets
+  if (!changedPresets) return selected
+
+  const itemsByName = new Map(presetItems.map(item => [item.name, item]))
+  let selectedSettings = selected.settings
+  for (const [name, draft] of Object.entries(changedPresets)) {
+    // ultracode-only drafts carry no persistable change; they are applied via --effort at launch.
+    if (!draftHasPersistableChange(draft)) continue
+
+    const item = itemsByName.get(name)
+    let nextSettings
+    if (item?.temporary) {
+      // Claude Official maps to ~/.claude/settings.json and has no preset metadata, so write it directly.
+      const fresh = await presetService.buildClaudeOfficialItem(item.sourcePath)
+      nextSettings = applyQuickSettingsDraft(fresh.settings, draft)
+      await presetService.writeClaudeOfficialSettings(item.sourcePath, nextSettings)
+    } else {
+      const currentSettings = await presetService.readPresetSettings(name)
+      nextSettings = applyQuickSettingsDraft(currentSettings, draft)
+      await presetService.writePresetSettingsByName(name, nextSettings)
+    }
+    if (name === selected.name) selectedSettings = nextSettings
+  }
+
+  return { ...selected, settings: selectedSettings }
+}
+
 async function resolveInteractiveBaseSettings(
   config?: CcspConfig,
   header?: { headerNotice: string; headerUpdateNotice?: string },
 ): Promise<SettingsSelectResult | undefined> {
-  const [officialItem, rememberedName] = await Promise.all([
+  const [officialItem, rememberedName, managedSettings, settingsSources] = await Promise.all([
     profileStep('claude-official-preset', buildClaudeOfficialPresetItem),
     profileStep('global-last-used', () => globalLastSettingsService.readLastUsed(context.cwd)),
+    readManagedSettings(),
+    settingsSourceService.discoverSettingsSources(),
   ])
   const presetItems = [...(officialItem ? [officialItem] : []), ...(await buildGlobalSettingsPresetItems(rememberedName))]
   if (presetItems.length > 0) {
     const initialName =
       rememberedName && presetItems.some(preset => preset.name === rememberedName) ? rememberedName : undefined
     const { globalPresetEnvOnly, settingsDisplayFormat } = config ?? await ccspConfigService.read()
+    const quickSettingsSources: QuickSettingsSource[] = [
+      ...(managedSettings ? [{ scope: 'managed', settings: parseSettings(managedSettings) }] : []),
+      ...settingsSources,
+    ]
     const selected = await renderSettingsSelectApp(presetItems, {
       ...(initialName ? { initialName } : {}),
       ...(header ? { headerNotice: header.headerNotice } : {}),
       ...(header?.headerUpdateNotice ? { headerUpdateNotice: header.headerUpdateNotice } : {}),
       initialEnvOnly: globalPresetEnvOnly,
       displayFormat: settingsDisplayFormat,
+      quickSettingsSources,
     })
-    if (selected) await globalLastSettingsService.writeLastUsed(context.cwd, selected.name)
-    return selected
+    if (!selected) return undefined
+    const persisted = await persistQuickSettingsChanges(selected, presetItems)
+    await globalLastSettingsService.writeLastUsed(context.cwd, persisted.name)
+    return persisted
   }
 
   return {
@@ -801,6 +848,10 @@ async function launchClaudeWithFinalizedSettings(input: {
   }
 }
 
+function withEffortLaunchArg(args: string[], selectedSettings: SettingsSelectResult): string[] {
+  return selectedSettings.effortArg ? [...args, '--effort', selectedSettings.effortArg] : args
+}
+
 async function launchWithSelectedSettings(
   selectedSettings: SettingsSelectResult,
   rawClaudeArgs: string[],
@@ -847,7 +898,7 @@ async function launchWithSelectedSettings(
     ),
     toggles: launchResult.toggles,
     launchSettings,
-    args: sanitized.args,
+    args: withEffortLaunchArg(sanitized.args, selectedSettings),
     ...(config ? { statusLineEnabled: config.statusLineEnabled } : {}),
   })
   return 'done'
@@ -870,7 +921,7 @@ async function launchGlobalOnly(
     presetLabel: combinePresetLabel('global-only', selectedSettings.name, 'Detected'),
     toggles: detected,
     launchSettings: selectedSettings.settings,
-    args: sanitized.args,
+    args: withEffortLaunchArg(sanitized.args, selectedSettings),
     statusLineEnabled: config.statusLineEnabled,
   })
 }
@@ -936,6 +987,8 @@ async function launchFromBinding(binding: SessionBinding, extraArgs: string[]): 
     presetLabel: bindingPresetLabel(binding),
     toggles: binding.toggles as unknown as ProjectLaunchToggleState,
     launchSettings: binding.launchSettings,
+    // A one-off `--effort ultracode` is intentionally not restored on resume: it is a transient
+    // per-launch choice that is never persisted (see withEffortLaunchArg / EFFORT_LAUNCH_ARG_ONLY).
     args: ['--resume', binding.sessionId, ...filteredArgs],
   })
 }

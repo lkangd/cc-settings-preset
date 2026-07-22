@@ -21,6 +21,10 @@ const listPresetsWithSettingsMock = vi.fn()
 const deletePresetMock = vi.fn()
 const renamePresetMock = vi.fn()
 const writePresetSettingsByNameMock = vi.fn()
+const readPresetSettingsMock = vi.fn().mockResolvedValue({})
+const buildClaudeOfficialItemMock = vi.fn()
+const writeClaudeOfficialSettingsMock = vi.fn()
+const isLoggedInMock = vi.fn().mockResolvedValue(false)
 const createProjectLaunchPresetMock = vi.fn()
 const writeProjectLaunchPresetSettingsMock = vi.fn()
 const writeLastUsedLaunchPresetMock = vi.fn()
@@ -107,9 +111,11 @@ vi.mock('../src/services/preset-service.js', () => ({
     deletePreset: deletePresetMock,
     renamePreset: renamePresetMock,
     getPresetPath: vi.fn((name: string) => Promise.resolve(`/tmp/.ccsp/settings/${name}.json`)),
-    readPresetSettings: vi.fn().mockResolvedValue({}),
+    readPresetSettings: readPresetSettingsMock,
     writePresetSettingsByName: writePresetSettingsByNameMock,
     createBasePreset: createBasePresetMock,
+    buildClaudeOfficialItem: buildClaudeOfficialItemMock,
+    writeClaudeOfficialSettings: writeClaudeOfficialSettingsMock,
   }),
 }))
 
@@ -117,6 +123,10 @@ vi.mock('../src/services/settings-source-service.js', () => ({
   createSettingsSourceService: () => ({
     discoverSettingsSources: discoverSettingsSourcesMock,
   }),
+}))
+
+vi.mock('../src/services/managed-settings-service.js', () => ({
+  readManagedSettings: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('../src/core/spawn.js', () => ({
@@ -187,7 +197,7 @@ vi.mock('../src/services/ccsp-config-service.js', () => ({
 
 vi.mock('../src/services/claude-login-service.js', () => ({
   createClaudeLoginService: () => ({
-    isLoggedIn: vi.fn().mockResolvedValue(false),
+    isLoggedIn: isLoggedInMock,
   }),
 }))
 
@@ -503,6 +513,12 @@ describe('run command', () => {
     })))
     deletePresetMock.mockReset()
     writePresetSettingsByNameMock.mockReset()
+    readPresetSettingsMock.mockReset()
+    readPresetSettingsMock.mockResolvedValue({})
+    buildClaudeOfficialItemMock.mockReset()
+    writeClaudeOfficialSettingsMock.mockReset()
+    isLoggedInMock.mockReset()
+    isLoggedInMock.mockResolvedValue(false)
     renamePresetMock.mockReset()
     createProjectLaunchPresetMock.mockReset()
     createProjectLaunchPresetMock.mockResolvedValue({ name: 'web', fileName: 'web-launch.json', createdAt: '2026-05-19T00:00:00.000Z', updatedAt: '2026-05-19T00:00:00.000Z' })
@@ -935,6 +951,142 @@ describe('run command', () => {
     expect(writeLastUsedGlobalSettingsMock).toHaveBeenCalledWith('/tmp/project', 'base')
   })
 
+  it('persists all changed presets before remembering the selection', async () => {
+    const basePreset = {
+      type: 'base' as const,
+      name: 'base',
+      fileName: 'base-settings.json',
+      createdAt: '2026-05-17T00:00:00.000Z',
+      updatedAt: '2026-05-17T00:00:00.000Z',
+    }
+    const workPreset = {
+      type: 'base' as const,
+      name: 'work',
+      fileName: 'work-settings.json',
+      createdAt: '2026-05-17T00:00:00.000Z',
+      updatedAt: '2026-05-17T00:00:00.000Z',
+    }
+    listPresetsMock.mockResolvedValue([basePreset, workPreset])
+    readPresetSettingsMock.mockImplementation(async (name: string) =>
+      name === 'work' ? { permissions: { allow: ['Read(*)'] } } : {})
+
+    renderMock
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          name: 'base',
+          sourcePath: '/tmp/.ccsp/settings/base-settings.json',
+          settings: { effortLevel: 'high' },
+          changedPresets: {
+            base: { effortLevel: 'high' },
+            work: { defaultMode: 'plan' },
+          },
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          type: 'launch',
+          presetName: 'base',
+          toggles: { plugins: [], skills: [], mcps: [] },
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli'])
+
+    expect(writePresetSettingsByNameMock).toHaveBeenCalledWith('base', { effortLevel: 'high' })
+    expect(writePresetSettingsByNameMock).toHaveBeenCalledWith('work', {
+      permissions: { allow: ['Read(*)'], defaultMode: 'plan' },
+    })
+
+    const writeSaveOrder = writePresetSettingsByNameMock.mock.invocationCallOrder.at(-1) ?? 0
+    const rememberOrder = writeLastUsedGlobalSettingsMock.mock.invocationCallOrder[0] ?? 0
+    expect(writeSaveOrder).toBeLessThan(rememberOrder)
+    expect(writeLastUsedGlobalSettingsMock).toHaveBeenCalledWith('/tmp/project', 'base')
+  })
+
+  it('writes edited Claude Official quick settings back to the user settings file', async () => {
+    listPresetsMock.mockResolvedValue([])
+    isLoggedInMock.mockResolvedValue(true)
+    buildClaudeOfficialItemMock.mockResolvedValue({
+      name: '*Claude Official*',
+      sourcePath: '/tmp/user/settings.json',
+      settings: { permissions: { allow: ['Read(*)'] } },
+      temporary: true,
+    })
+
+    renderMock
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          name: '*Claude Official*',
+          sourcePath: '/tmp/user/settings.json',
+          settings: { permissions: { allow: ['Read(*)'] }, effortLevel: 'high' },
+          temporary: true,
+          changedPresets: { '*Claude Official*': { effortLevel: 'high' } },
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          type: 'launch',
+          presetName: '*Claude Official*',
+          toggles: { plugins: [], skills: [], mcps: [] },
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli'])
+
+    expect(writeClaudeOfficialSettingsMock).toHaveBeenCalledWith('/tmp/user/settings.json', {
+      permissions: { allow: ['Read(*)'] },
+      effortLevel: 'high',
+    })
+    expect(writePresetSettingsByNameMock).not.toHaveBeenCalled()
+    expect(writeLastUsedGlobalSettingsMock).toHaveBeenCalledWith('/tmp/project', '*Claude Official*')
+  })
+
+  it('applies an ultracode effort via --effort without persisting it to the preset', async () => {
+    const basePreset = {
+      type: 'base' as const,
+      name: 'base',
+      fileName: 'base-settings.json',
+      createdAt: '2026-05-17T00:00:00.000Z',
+      updatedAt: '2026-05-17T00:00:00.000Z',
+    }
+    listPresetsMock.mockResolvedValue([basePreset])
+
+    renderMock
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          name: 'base',
+          sourcePath: '/tmp/.ccsp/settings/base-settings.json',
+          settings: {},
+          changedPresets: { base: { effortLevel: 'ultracode' } },
+          effortArg: 'ultracode',
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          type: 'launch',
+          presetName: 'base',
+          toggles: { plugins: [], skills: [], mcps: [] },
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli'])
+
+    expect(writePresetSettingsByNameMock).not.toHaveBeenCalled()
+    expect(spawnClaudeMock).toHaveBeenCalledWith(
+      '/tmp/project/.claude/.ccsp/tmp/temp-settings.json',
+      ['--effort', 'ultracode'],
+    )
+  })
+
   it('ignores a remembered preset that no longer exists', async () => {
     const basePreset = {
       type: 'base' as const,
@@ -1106,6 +1258,12 @@ describe('manage command', () => {
     })))
     deletePresetMock.mockReset()
     writePresetSettingsByNameMock.mockReset()
+    readPresetSettingsMock.mockReset()
+    readPresetSettingsMock.mockResolvedValue({})
+    buildClaudeOfficialItemMock.mockReset()
+    writeClaudeOfficialSettingsMock.mockReset()
+    isLoggedInMock.mockReset()
+    isLoggedInMock.mockResolvedValue(false)
     renamePresetMock.mockReset()
     createBasePresetMock.mockReset()
     readJsonFileMock.mockReset()

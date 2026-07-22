@@ -261,10 +261,26 @@ claude --settings <临时文件> [你传入的其它参数]
 - **非破坏性启动**：通过临时 settings 文件注入配置，不强制覆盖你的主 settings 文件。
 - **两层分离**：全局「基础环境」与项目「启动差异」解耦，适合多仓库并行开发。
 - **可视化开关**：在终端 TUI 中浏览 JSON、切换插件 / Skill / MCP，比手改数组更不易出错。
+- **快捷设置**：在基础预设选择页即可循环切换所选预设的 `permissions.defaultMode` 与 `effortLevel`，仅写回你改过的字段（写入预设文件；Claude Official 则写回 `~/.claude/settings.json`）。
 - **直接运行**：`-g` / `-p` / `--dry-run` 供脚本与 CI 使用；配合 `claude -p` 做无头 agent 任务。
 - **记忆上次选择**：按项目目录记住上次使用的基础预设与启动预设。
 - **可恢复会话**：每次启动都会把会话与所用预设 / 启动配置绑定，`ccsp --continue` 与 `ccsp --resume <id>` 可一键恢复原配置并续上对应 Claude 会话。
 - **安全默认值**：`.claude/.ccsp/` 初始化时写入 `.gitignore`（忽略全部），降低临时文件与本地预设误提交概率。
+
+### 快捷设置（mode 与 effort）
+
+基础预设选择页中间新增一栏 **Quick Settings**。用 `h`/`l` 或 ←/→ 把焦点切到该栏，按 `space` 循环切换所选预设的两项 Claude Code 配置：
+
+- **mode** —— `permissions.defaultMode`：`manual` → `acceptEdits` → `plan` → `auto` → `dontAsk` → `bypassPermissions`。
+- **effort** —— `effortLevel`：`low` → `medium` → `high` → `xhigh` → `max` → `ultracode`。
+
+未改动的字段会展示按优先级（managed → local → project → user）解析出的有效默认值。只有你**实际切换过**的字段才会被写入，且各自落到正确位置：
+
+- `low` / `medium` / `high` / `xhigh` —— 作为 `effortLevel` 写入预设。
+- `max` —— 写入 `env.CLAUDE_CODE_EFFORT_LEVEL`（settings 文件不接受 `effortLevel: "max"`）。
+- `ultracode` —— **不持久化**；仅对本次启动通过 `claude --effort ultracode` 生效（该级别只能在 Claude Code 会话内设置）。
+
+确认时写回对应预设文件；若编辑临时的 **Claude Official** 条目，则直接写回 `~/.claude/settings.json`。
 
 ### 会话恢复（Session Resume）
 
@@ -311,7 +327,7 @@ Claude 退出后，CCSP 会**主动发现** Claude 真实分配的 session id（
 
 ### 常用快捷键（TUI）
 
-**选择基础预设：** `j`/`k` 或方向键移动，`f` 在「仅 env」与「完整配置」预览间切换，`Enter` 确认，`q` 退出。
+**选择基础预设：** `h`/`l` 或 ←/→ 在「Settings」与「Quick Settings」两栏间切换，`j`/`k` 或 ↑/↓ 移动，`space` 循环切换当前聚焦的快捷设置，`t` 切换排序，`f` 在「仅 env」与「完整配置」预览间切换，`Enter` 确认，`q` 退出。
 
 **管理全局预设（`ccsp manage`）：** `l` 启动，`r` 重命名，`d` 删除，`c` 新建，`o` 在 Finder 中打开文件，`q` 退出。
 
