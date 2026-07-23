@@ -1339,6 +1339,10 @@ function buildProgramArgv(argv: string[], runArgs: string[]): string[] {
   return [argv[0] ?? 'node', argv[1] ?? 'cli', ...runArgs]
 }
 
+function normalizeTopLevelSessionArgs(args: string[]): string[] {
+  return args[0] === 'claude' ? args.slice(1) : args
+}
+
 export async function main(argv = process.argv): Promise<void> {
   const args = argv.slice(2)
   if (args.length === 0) {
@@ -1347,14 +1351,14 @@ export async function main(argv = process.argv): Promise<void> {
   }
 
   if (args[0] === '--continue' || args[0] === '-c') {
-    await runContinue(args.slice(1))
+    await runContinue(normalizeTopLevelSessionArgs(args.slice(1)))
     return
   }
 
   if (args[0] === '--resume' || args[0] === '-r') {
     const id = args[1]
     if (id && isUuid(id)) {
-      await runResume(id, args.slice(2))
+      await runResume(id, normalizeTopLevelSessionArgs(args.slice(2)))
       return
     }
     await runInteractive(args)
@@ -1364,7 +1368,7 @@ export async function main(argv = process.argv): Promise<void> {
   if (args[0]?.startsWith('--resume=')) {
     const id = args[0].slice('--resume='.length)
     if (isUuid(id)) {
-      await runResume(id, args.slice(1))
+      await runResume(id, normalizeTopLevelSessionArgs(args.slice(1)))
       return
     }
     await runInteractive(args)
@@ -1384,26 +1388,7 @@ export async function main(argv = process.argv): Promise<void> {
   }
 
   if (runArgs[0] === 'claude') {
-    const claudeArgs = runArgs.slice(1)
-    if (claudeArgs[0] === '--continue' || claudeArgs[0] === '-c') {
-      await runContinue(claudeArgs.slice(1))
-      return
-    }
-    if (claudeArgs[0] === '--resume' || claudeArgs[0] === '-r') {
-      const id = claudeArgs[1]
-      if (id && isUuid(id)) {
-        await runResume(id, claudeArgs.slice(2))
-        return
-      }
-    }
-    if (claudeArgs[0]?.startsWith('--resume=')) {
-      const id = claudeArgs[0].slice('--resume='.length)
-      if (isUuid(id)) {
-        await runResume(id, claudeArgs.slice(1))
-        return
-      }
-    }
-    await runInteractive(claudeArgs)
+    await runInteractive(runArgs.slice(1))
     return
   }
 

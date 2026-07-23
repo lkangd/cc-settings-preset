@@ -423,6 +423,11 @@ truth; `ccsp` is a *layer over* them, not an editor of them.
 launch writes a `SessionBinding` (preset names + toggle state +
 resolved settings) keyed by Claude's session id, and later `ccsp
 --resume` re-runs the same composition without going through the TUI.
+The argv position selects the route: `ccsp --resume <uuid> claude` and
+`ccsp --continue claude` reuse the saved binding, while
+`ccsp claude --resume <uuid>` and `ccsp claude --continue` enter the
+interactive preset flow. The trailing `claude` in the top-level forms is
+an internal routing token and is removed before spawning Claude.
 Session ids are discovered by diffing `~/.claude/projects/<cwd>/*.jsonl`
 across the spawn rather than injected (Claude ignores `--session-id` in
 interactive mode).

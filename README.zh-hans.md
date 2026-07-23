@@ -288,7 +288,10 @@ Claude 退出后，CCSP 会**主动发现** Claude 真实分配的 session id（
 
 - `ccsp --resume <uuid>`：用绑定里的输入重新 finalize 启动配置，并以 `claude --resume <uuid>` 一步启动。
 - `ccsp --continue`：选取本项目里**最近退出**的 ccsp 会话，按其 id 确定性地恢复。具体例子：先启 A 再启 B，先退出 A，再 `ccsp --continue`，恢复的是 A（带 A 当时的预设 / 启动配置），不是 B。
+- `ccsp claude --resume <uuid>` 与 `ccsp claude --continue`：保留 Claude 参数透传写法，但会重新选择全局 / 项目预设。
 - 若绑定对应的 Claude 会话已不存在（如旧版本残留），CCSP 会丢弃该绑定并回退到交互式选择。
+
+会话参数的位置决定路由：写在 `claude` 前表示复用 CCSP 保存的绑定，写在 `claude` 后表示选择预设；顶层形式末尾的 `claude` 只是 CCSP 路由标记，不会传给 Claude。
 
 ### 局限与误解澄清（请务必阅读）
 
@@ -320,6 +323,8 @@ Claude 退出后，CCSP 会**主动发现** Claude 真实分配的 session id（
 | `ccsp claude [args...]` | 同上，并将 `args` 传给 `claude`（不含 `--settings`） |
 | `ccsp --continue` | 恢复本项目最近退出的 ccsp 会话，复用原始预设 / 启动配置 |
 | `ccsp --resume <uuid>` | 按 session id 精确恢复某个会话，复用启动时所用的预设 / 启动配置（未知绑定时回退到交互式选择） |
+| `ccsp claude --continue` / `ccsp claude --resume <uuid>` | 选择全局 / 项目预设，再透传 Claude 会话参数 |
+| `ccsp --continue claude` / `ccsp --resume <uuid> claude` | 跳过预设选择，复用对应的已保存会话绑定 |
 | `ccsp create` | 交互式创建全局基础预设 |
 | `ccsp manage` | 管理全局基础预设（预览 / 重命名 / 删除 / 新建 / 启动） |
 | `ccsp manage --project` | 管理当前项目的启动预设 |

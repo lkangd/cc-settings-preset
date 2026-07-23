@@ -362,6 +362,10 @@ TUI 的纯 reducer。不 import `ink/` 或 `react`。每个导出函数都接受
 `--continue` 与 `--resume <uuid>` 是一等公民：每次 launch 成功后都会以
 Claude 的 session id 为键写一份 `SessionBinding`（预设名 + 开关状态 + 解析
 出的 settings）；之后 `ccsp --resume` 不再走 TUI，直接重放同一份合成结果。
+参数位置决定路由：`ccsp --resume <uuid> claude` 与 `ccsp --continue claude`
+复用已保存绑定；`ccsp claude --resume <uuid>` 与 `ccsp claude --continue`
+进入交互式预设选择。顶层形式末尾的 `claude` 是内部路由标记，启动 Claude
+前会移除它。
 session id 由 spawn 前后对 `~/.claude/projects/<cwd>/*.jsonl` 做 diff 得出，
 而不是注入 `--session-id`（Claude 在交互模式里会忽略它）。
 

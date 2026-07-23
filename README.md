@@ -288,7 +288,10 @@ After Claude exits, CCSP records the **real** Claude session id (discovered by d
 
 - `ccsp --resume <uuid>` — re-finalize that session's stored config and run `claude --resume <uuid>` in one step.
 - `ccsp --continue` — pick the **most recently exited** ccsp session in this project and resume it deterministically by id. Concretely: launch A, then B, exit A first, run `ccsp --continue` — you get A back with A's original preset/launch config (not B's).
+- `ccsp claude --resume <uuid>` and `ccsp claude --continue` keep Claude passthrough syntax but open the global/project preset selectors for a new configuration.
 - If the stored binding points at a Claude session that no longer exists, CCSP discards it and falls back to interactive preset selection.
+
+The position of the session flag controls the route: put it before `claude` to reuse CCSP's saved binding, or after `claude` to choose presets. In the top-level form, the trailing `claude` is a CCSP routing token and is not passed to Claude.
 
 ### Limitations (read before assuming)
 
@@ -320,6 +323,8 @@ After Claude exits, CCSP records the **real** Claude session id (discovered by d
 | `ccsp claude [args...]` | Same, forwarding `args` to `claude` (without `--settings`) |
 | `ccsp --continue` | Resume the most recently exited ccsp session in this project with its original preset / launch config |
 | `ccsp --resume <uuid>` | Resume a specific session by id, reusing the preset / launch config it was launched with (falls back to interactive if the binding is unknown) |
+| `ccsp claude --continue` / `ccsp claude --resume <uuid>` | Choose global/project presets, then pass the Claude session flag through |
+| `ccsp --continue claude` / `ccsp --resume <uuid> claude` | Skip preset selection and reuse the matching saved session binding |
 | `ccsp create` | Interactively create a global base preset |
 | `ccsp manage` | Manage global base presets (preview / rename / delete / create / launch) |
 | `ccsp manage --project` | Manage launch presets for the current project |

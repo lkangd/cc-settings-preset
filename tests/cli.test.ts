@@ -39,6 +39,7 @@ const readSessionBindingMock = vi.fn().mockResolvedValue(undefined)
 const findLatestExitedSessionMock = vi.fn().mockResolvedValue(undefined)
 const claudeSessionSnapshotMock = vi.fn().mockResolvedValue(new Set<string>())
 const findNewClaudeSessionIdMock = vi.fn().mockResolvedValue(undefined)
+const hasSessionMock = vi.fn().mockResolvedValue(true)
 const discoverSettingsSourcesMock = vi.fn().mockResolvedValue([])
 const discoverMcpStatesMock = vi.fn().mockResolvedValue([])
 const spawnClaudeMock = vi.fn().mockResolvedValue(0)
@@ -177,6 +178,7 @@ vi.mock('../src/services/claude-session-service.js', () => ({
   createClaudeSessionService: () => ({
     snapshot: claudeSessionSnapshotMock,
     findNewSessionId: findNewClaudeSessionIdMock,
+    hasSession: hasSessionMock,
   }),
 }))
 
@@ -538,6 +540,10 @@ describe('run command', () => {
     discoverMcpStatesMock.mockResolvedValue([])
     spawnClaudeMock.mockReset()
     spawnClaudeMock.mockResolvedValue(0)
+    readSessionBindingMock.mockReset()
+    readSessionBindingMock.mockResolvedValue(undefined)
+    hasSessionMock.mockReset()
+    hasSessionMock.mockResolvedValue(true)
     readCcspConfigMock.mockReset()
     readCcspConfigMock.mockResolvedValue({
       globalPresetEnvOnly: true,
@@ -1492,6 +1498,67 @@ describe('manage command', () => {
     expect(stderrWriteSpy).toHaveBeenCalledWith('No project settings sources found for project preset management.\n')
 
     stderrWriteSpy.mockRestore()
+  })
+
+  it('uses saved session settings only for top-level resume routing', async () => {
+    const sessionId = '11111111-1111-4111-8111-111111111111'
+    readSessionBindingMock.mockResolvedValue({
+      sessionId,
+      globalName: 'work',
+      projectPresetName: 'web',
+      presetLabel: 'work / web',
+      baseSettings: {},
+      launchSettings: {},
+      toggles: { plugins: [], skills: [], mcps: [] },
+      createdAt: '2026-05-17T00:00:00.000Z',
+      lastUsedAt: '2026-05-17T00:00:00.000Z',
+    })
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli', '--resume', sessionId, 'claude', '--model', 'opus'])
+
+    expect(readSessionBindingMock).toHaveBeenCalledWith(sessionId)
+    expect(renderMock).not.toHaveBeenCalled()
+    expect(spawnClaudeMock).toHaveBeenCalledWith(
+      '/tmp/project/.claude/.ccsp/tmp/temp-settings.json',
+      ['--resume', sessionId, '--model', 'opus'],
+    )
+  })
+
+  it('selects presets when resume follows the claude command', async () => {
+    const sessionId = '11111111-1111-4111-8111-111111111111'
+    const basePreset = {
+      type: 'base' as const,
+      name: 'base',
+      fileName: 'base-settings.json',
+      createdAt: '2026-05-17T00:00:00.000Z',
+      updatedAt: '2026-05-17T00:00:00.000Z',
+    }
+    listPresetsMock.mockResolvedValue([basePreset])
+    readCcspConfigMock.mockResolvedValue({
+      globalPresetEnvOnly: true,
+      statusLineEnabled: true,
+      settingsDisplayFormat: 'yaml',
+      runMode: 'global-only',
+      bannerEnabled: true,
+    })
+    renderMock.mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+      element.props.onSubmit({
+        name: 'base',
+        sourcePath: '/tmp/.ccsp/settings/base-settings.json',
+        settings: {},
+      })
+      return { waitUntilExit: async () => undefined }
+    })
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli', 'claude', '--resume', sessionId])
+
+    expect(renderMock).toHaveBeenCalledTimes(1)
+    expect(spawnClaudeMock).toHaveBeenCalledWith(
+      '/tmp/project/.claude/.ccsp/tmp/temp-settings.json',
+      ['--resume', sessionId],
+    )
   })
 
   it('prefills the current rename value in a real tty', async () => {
