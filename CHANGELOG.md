@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.1 (2026-07-23)
+
+### Features
+* **cli**: route resume/continue by claude flag position
+
 ## 1.3.0 (2026-07-23)
 
 ### Features
