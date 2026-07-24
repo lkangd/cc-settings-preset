@@ -188,6 +188,10 @@ discoverable. Pruning keeps the directory from growing unbounded.
   effective enabled state. The precedence is documented in code as
   `ownershipPrecedence`: `user < project < project-local`, with the
   `preset` source treated as a separate, lower-priority origin.
+- [`src/services/claude-plugin-installation-service.ts`](src/services/claude-plugin-installation-service.ts)
+  — checks `~/.claude/plugins/installed_plugins.json` before launch and runs
+  `claude plugin install --scope project` for enabled non-user-scope plugins
+  that have no valid installation record for the current project path.
 - [`src/services/skill-service.ts`](src/services/skill-service.ts) —
   walks four skill sources: project (`<cwd>/.claude/skills/`, plus
   every ancestor directory), command-style skills

@@ -67,6 +67,10 @@ export function resolveClaudePluginCacheDir(homeDir: string): string {
   return join(homeDir, '.claude', 'plugins', 'cache')
 }
 
+export function resolveUserClaudeInstalledPluginsPath(homeDir: string): string {
+  return join(homeDir, '.claude', 'plugins', 'installed_plugins.json')
+}
+
 export function resolveProjectCcspRoot(cwd: string): string {
   return join(cwd, '.claude', '.ccsp')
 }

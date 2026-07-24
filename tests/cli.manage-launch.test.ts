@@ -15,6 +15,12 @@ const launchPreset = {
   updatedAt: '2026-05-20T00:00:00.000Z',
 }
 
+vi.mock('../src/services/claude-plugin-installation-service.js', () => ({
+  createClaudePluginInstallationService: () => ({
+    synchronizeProjectPlugins: vi.fn().mockResolvedValue({ failures: [] }),
+  }),
+}))
+
 function unwrapRenderedElement(element: unknown): unknown {
   if (!React.isValidElement(element)) return element
 

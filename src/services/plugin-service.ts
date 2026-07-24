@@ -76,6 +76,14 @@ export function pluginStatesToEnabledPlugins(states: PluginState[]): Record<stri
   return enabledPlugins
 }
 
+function matchesPluginRegistryKey(manifestName: string, pluginName: string): boolean {
+  return pluginName === manifestName || pluginName.startsWith(`${manifestName}@`)
+}
+
+export function resolvePluginRegistryKeys(manifestName: string, pluginNames: string[]): string[] {
+  return pluginNames.filter(name => matchesPluginRegistryKey(manifestName, name))
+}
+
 export function resolvePluginRegistryKey(manifestName: string, pluginNames: string[]): string | undefined {
-  return pluginNames.find(name => name === manifestName || name.startsWith(`${manifestName}@`))
+  return pluginNames.find(name => matchesPluginRegistryKey(manifestName, name))
 }

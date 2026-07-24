@@ -166,6 +166,10 @@ import 自身没有副作用。
   给定一组 `{ scope, settings }` 源，求解每个插件最终的启用状态。优先级在代
   码中以 `ownershipPrecedence` 命名记录：`user < project < project-local`，
   并把 `preset` 视为单独的、较低优先级的来源。
+- [`src/services/claude-plugin-installation-service.ts`](src/services/claude-plugin-installation-service.ts)
+  —— 在 launch 前检查 `~/.claude/plugins/installed_plugins.json`，并对当前项目
+  路径没有有效安装记录、且不是 user 来源的已启用插件执行
+  `claude plugin install --scope project`。
 - [`src/services/skill-service.ts`](src/services/skill-service.ts) —— 遍历
   四种 skill 来源：project（`<cwd>/.claude/skills/` 及其每一级祖先目录）、
   command 形态（`<cwd>/.claude/commands/*.md`）、user

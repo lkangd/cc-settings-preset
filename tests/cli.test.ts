@@ -134,6 +134,12 @@ vi.mock('../src/core/spawn.js', () => ({
   spawnClaude: spawnClaudeMock,
 }))
 
+vi.mock('../src/services/claude-plugin-installation-service.js', () => ({
+  createClaudePluginInstallationService: () => ({
+    synchronizeProjectPlugins: vi.fn().mockResolvedValue({ failures: [] }),
+  }),
+}))
+
 vi.mock('../src/services/plugin-service.js', () => ({
   applyPluginOverrides: vi.fn((plugins) => plugins),
   resolvePluginStates: vi.fn(() => []),

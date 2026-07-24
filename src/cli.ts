@@ -47,6 +47,7 @@ import {
   resolveDeniedMcpServers
 } from './services/mcp-service.js'
 import { createClaudeLoginService } from './services/claude-login-service.js'
+import { createClaudePluginInstallationService } from './services/claude-plugin-installation-service.js'
 import { CLAUDE_OFFICIAL_PRESET_NAME, createPresetService } from './services/preset-service.js'
 import { createSettingsSourceService, type SettingsSource } from './services/settings-source-service.js'
 import { readManagedSettings } from './services/managed-settings-service.js'
@@ -75,6 +76,7 @@ const ccspConfigService = createCcspConfigService(globalRoot)
 const launchPresetService = createLaunchPresetService(context.cwd)
 const claudeSessionService = createClaudeSessionService(context.homeDir, context.cwd)
 const claudeLoginService = createClaudeLoginService(context)
+const claudePluginInstallationService = createClaudePluginInstallationService(context.homeDir)
 const updateCheckService = createUpdateCheckService({ homeDir: context.homeDir, currentVersion: VERSION })
 
 async function buildClaudeOfficialPresetItem(): Promise<SettingsSelectResult | undefined> {
@@ -825,6 +827,17 @@ async function launchClaudeWithFinalizedSettings(input: {
   if (session.sessionId) {
     await launchPresetService.writeSessionBinding({ sessionId: session.sessionId, ...bindingInput })
   }
+  const pluginSync = await profileStep('sync-installed-plugins', () =>
+    claudePluginInstallationService.synchronizeProjectPlugins(context.cwd, input.toggles.plugins),
+  )
+  if (pluginSync.warning) process.stderr.write(`Warning: ${pluginSync.warning}\n`)
+  for (const failure of pluginSync.failures) {
+    const detail = failure.stderr ? `: ${failure.stderr}` : '.'
+    process.stderr.write(
+      `Warning: Failed to install Claude plugin "${failure.pluginName}"${detail}\n`,
+    )
+  }
+
   if (launchPrepStartedAt !== undefined) {
     writeProfileLine('prepare-claude-launch', performance.now() - launchPrepStartedAt)
   }

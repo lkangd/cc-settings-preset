@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { applyPluginOverrides, pluginStatesToEnabledPlugins, resolvePluginRegistryKey, resolvePluginStates } from '../../src/services/plugin-service.js'
+import {
+  applyPluginOverrides,
+  pluginStatesToEnabledPlugins,
+  resolvePluginRegistryKey,
+  resolvePluginRegistryKeys,
+  resolvePluginStates,
+} from '../../src/services/plugin-service.js'
 
 describe('resolvePluginStates', () => {
   it('uses higher-priority settings sources to override lower-priority ones', () => {
@@ -30,6 +36,15 @@ describe('resolvePluginRegistryKey', () => {
   it('matches manifest names to registry keys with marketplace suffix', () => {
     expect(resolvePluginRegistryKey('plugin-a', ['other@vendor', 'plugin-a@vendor'])).toBe('plugin-a@vendor')
     expect(resolvePluginRegistryKey('missing', ['plugin-a@vendor'])).toBeUndefined()
+  })
+
+  it('returns every matching registry key when callers need to check all installations', () => {
+    expect(resolvePluginRegistryKeys('plugin-a', [
+      'plugin-a',
+      'other@vendor',
+      'plugin-a@vendor-one',
+      'plugin-a@vendor-two',
+    ])).toEqual(['plugin-a', 'plugin-a@vendor-one', 'plugin-a@vendor-two'])
   })
 })
 

@@ -19,6 +19,12 @@ const writeSessionBindingMock = vi.fn().mockResolvedValue(undefined)
 const recordSessionExitMock = vi.fn().mockResolvedValue(undefined)
 const discoverSettingsSourcesMock = vi.fn().mockResolvedValue([])
 const discoverMcpStatesMock = vi.fn().mockResolvedValue([])
+const synchronizeProjectPluginsMock = vi.fn().mockResolvedValue({ failures: [] })
+const resolvePluginStatesMock = vi.fn<(...args: unknown[]) => Array<{
+  name: string
+  enabled: boolean
+  source: 'user' | 'project' | 'project-local' | 'preset'
+}>>(() => [])
 const spawnClaudeMock = vi.fn().mockResolvedValue(0)
 const renderMock = vi.fn()
 
@@ -97,9 +103,15 @@ vi.mock('../src/core/spawn.js', () => ({
   spawnClaude: spawnClaudeMock,
 }))
 
+vi.mock('../src/services/claude-plugin-installation-service.js', () => ({
+  createClaudePluginInstallationService: () => ({
+    synchronizeProjectPlugins: synchronizeProjectPluginsMock,
+  }),
+}))
+
 vi.mock('../src/services/plugin-service.js', () => ({
   applyPluginOverrides: vi.fn((plugins) => plugins),
-  resolvePluginStates: vi.fn(() => []),
+  resolvePluginStates: resolvePluginStatesMock,
   pluginStatesToEnabledPlugins: vi.fn(() => ({})),
 }))
 
@@ -195,6 +207,10 @@ describe('cli direct run', () => {
     discoverSettingsSourcesMock.mockResolvedValue([])
     discoverMcpStatesMock.mockReset()
     discoverMcpStatesMock.mockResolvedValue([])
+    synchronizeProjectPluginsMock.mockReset()
+    synchronizeProjectPluginsMock.mockResolvedValue({ failures: [] })
+    resolvePluginStatesMock.mockReset()
+    resolvePluginStatesMock.mockReturnValue([])
 
     listPresetsMock.mockResolvedValue([basePreset])
     listPresetsWithSettingsMock.mockResolvedValue([{ meta: basePreset, sourcePath: selectedSettings.sourcePath, settings: selectedSettings.settings }])
@@ -225,6 +241,20 @@ describe('cli direct run', () => {
     expect(writeLastUsedGlobalSettingsMock).toHaveBeenCalledWith('/tmp/project', 'work')
     expect(writeLastUsedLaunchPresetMock).toHaveBeenCalledWith('web')
     expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
+  })
+
+  it('passes resolved plugin states to project installation synchronization', async () => {
+    const pluginStates = [
+      { name: 'user-plugin', enabled: true, source: 'user' as const },
+      { name: 'project-plugin', enabled: true, source: 'project' as const },
+      { name: 'disabled-plugin', enabled: false, source: 'project' as const },
+    ]
+    resolvePluginStatesMock.mockReturnValue(pluginStates)
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli', '-g', 'work', '-p', 'web'])
+
+    expect(synchronizeProjectPluginsMock).toHaveBeenCalledWith('/tmp/project', pluginStates)
   })
 
   it('renders dry-run preview without launching Claude', async () => {
