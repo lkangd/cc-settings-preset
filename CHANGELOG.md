@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.2 (2026-07-24)
+
+### Features
+* **launch**: sync project-scoped Claude plugins before launch
+
 ## 1.3.1 (2026-07-23)
 
 ### Features
