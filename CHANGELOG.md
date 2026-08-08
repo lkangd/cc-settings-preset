@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.3 (2026-08-08)
+
+### Features
+* **process**: add process management utilities for PID tracking
+
+### Bug Fixes
+* **docs**: clarify temp file retention and cleanup behavior
+
 ## 1.3.2 (2026-07-24)
 
 ### Features
