@@ -713,7 +713,11 @@ describe('run command', () => {
       skillOverrides: { personal: 'off' },
       deniedMcpServers: [{ serverName: 'github' }],
     }, expect.any(String))
-    expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
+    expect(spawnClaudeMock).toHaveBeenCalledWith(
+      '/tmp/project/.claude/.ccsp/tmp/temp-settings.json',
+      [],
+      expect.any(Function),
+    )
   })
 
   it('saves every changed project launch preset before launching', async () => {
@@ -774,7 +778,11 @@ describe('run command', () => {
       deniedMcpServers: [],
     })
     expect(writeLastUsedLaunchPresetMock).toHaveBeenCalledWith('api')
-    expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
+    expect(spawnClaudeMock).toHaveBeenCalledWith(
+      '/tmp/project/.claude/.ccsp/tmp/temp-settings.json',
+      [],
+      expect.any(Function),
+    )
   })
 
   it('continues launching when the active project preset was deleted before save', async () => {
@@ -824,7 +832,11 @@ describe('run command', () => {
     expect(writeTempSettingsMock).toHaveBeenCalledWith({
       enabledPlugins: { alpha: false },
     }, expect.any(String))
-    expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
+    expect(spawnClaudeMock).toHaveBeenCalledWith(
+      '/tmp/project/.claude/.ccsp/tmp/temp-settings.json',
+      [],
+      expect.any(Function),
+    )
   })
 
   it('continues launching when a changed non-active preset was deleted before save', async () => {
@@ -872,7 +884,11 @@ describe('run command', () => {
       deniedMcpServers: [],
     })
     expect(writeTempSettingsMock).toHaveBeenCalledWith({}, expect.any(String))
-    expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
+    expect(spawnClaudeMock).toHaveBeenCalledWith(
+      '/tmp/project/.claude/.ccsp/tmp/temp-settings.json',
+      [],
+      expect.any(Function),
+    )
   })
 
   it('does not rewrite project launch presets already saved by the UI', async () => {
@@ -913,7 +929,11 @@ describe('run command', () => {
 
     expect(writeProjectLaunchPresetSettingsMock).not.toHaveBeenCalled()
     expect(writeLastUsedLaunchPresetMock).toHaveBeenCalledWith('web')
-    expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
+    expect(spawnClaudeMock).toHaveBeenCalledWith(
+      '/tmp/project/.claude/.ccsp/tmp/temp-settings.json',
+      [],
+      expect.any(Function),
+    )
   })
 
   it('reopens the last used global preset and remembers the new selection', async () => {
@@ -1096,6 +1116,7 @@ describe('run command', () => {
     expect(spawnClaudeMock).toHaveBeenCalledWith(
       '/tmp/project/.claude/.ccsp/tmp/temp-settings.json',
       ['--effort', 'ultracode'],
+      expect.any(Function),
     )
   })
 
@@ -1425,7 +1446,11 @@ describe('manage command', () => {
 
     expect(renderMock).toHaveBeenCalledTimes(2)
     expect(writeTempSettingsMock).toHaveBeenCalledWith({}, expect.any(String))
-    expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
+    expect(spawnClaudeMock).toHaveBeenCalledWith(
+      '/tmp/project/.claude/.ccsp/tmp/temp-settings.json',
+      [],
+      expect.any(Function),
+    )
   })
 
   it('launches Claude from project manage mode without reopening the manage screen', async () => {
@@ -1451,7 +1476,11 @@ describe('manage command', () => {
 
     expect(renderMock).toHaveBeenCalledTimes(1)
     expect(writeTempSettingsMock).toHaveBeenCalled()
-    expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
+    expect(spawnClaudeMock).toHaveBeenCalledWith(
+      '/tmp/project/.claude/.ccsp/tmp/temp-settings.json',
+      [],
+      expect.any(Function),
+    )
   })
 
   it('enters project preset management directly without a settings selection screen in project manage mode', async () => {
@@ -1528,6 +1557,7 @@ describe('manage command', () => {
     expect(spawnClaudeMock).toHaveBeenCalledWith(
       '/tmp/project/.claude/.ccsp/tmp/temp-settings.json',
       ['--resume', sessionId, '--model', 'opus'],
+      expect.any(Function),
     )
   })
 
@@ -1564,6 +1594,7 @@ describe('manage command', () => {
     expect(spawnClaudeMock).toHaveBeenCalledWith(
       '/tmp/project/.claude/.ccsp/tmp/temp-settings.json',
       ['--resume', sessionId],
+      expect.any(Function),
     )
   })
 

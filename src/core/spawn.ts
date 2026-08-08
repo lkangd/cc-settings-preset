@@ -19,11 +19,19 @@ const TERMINATION_SIGNALS: NodeJS.Signals[] = ['SIGHUP', 'SIGTERM']
 // child that refuses to exit (e.g. claude ignores SIGHUP while in raw mode).
 const FORCE_KILL_DELAY_MS = 5000
 
-export async function spawnClaude(settingsPath: string, claudeArgs: string[]): Promise<number> {
+export async function spawnClaude(
+  settingsPath: string,
+  claudeArgs: string[],
+  // Called once with the child's pid, for callers that need to tie state to the
+  // claude process rather than to ccsp — claude outlives ccsp whenever ccsp is
+  // killed by a signal it cannot handle. Must not throw.
+  onSpawn?: (pid: number) => void,
+): Promise<number> {
   return new Promise((resolve, reject) => {
     const child = spawn('claude', ['--settings', settingsPath, ...claudeArgs], {
       stdio: 'inherit',
     })
+    if (child.pid !== undefined) onSpawn?.(child.pid)
 
     let settled = false
     let forceKillTimer: NodeJS.Timeout | undefined

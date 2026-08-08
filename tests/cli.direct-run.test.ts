@@ -240,7 +240,11 @@ describe('cli direct run', () => {
     expect(renderMock).not.toHaveBeenCalled()
     expect(writeLastUsedGlobalSettingsMock).toHaveBeenCalledWith('/tmp/project', 'work')
     expect(writeLastUsedLaunchPresetMock).toHaveBeenCalledWith('web')
-    expect(spawnClaudeMock).toHaveBeenCalledWith('/tmp/project/.claude/.ccsp/tmp/temp-settings.json', [])
+    expect(spawnClaudeMock).toHaveBeenCalledWith(
+      '/tmp/project/.claude/.ccsp/tmp/temp-settings.json',
+      [],
+      expect.any(Function),
+    )
   })
 
   it('passes resolved plugin states to project installation synchronization', async () => {
@@ -333,6 +337,7 @@ describe('cli direct run', () => {
     expect(spawnClaudeMock).toHaveBeenCalledWith(
       '/tmp/project/.claude/.ccsp/tmp/temp-settings.json',
       ['--model', 'opus'],
+      expect.any(Function),
     )
   })
 

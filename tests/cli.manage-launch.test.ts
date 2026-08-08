@@ -223,7 +223,7 @@ describe('manage launch flow', () => {
     }))
     expect(recordSessionExit).toHaveBeenCalledWith(discoveredSessionId)
     expect(writeLastUsed).toHaveBeenCalledWith(launchPreset.name)
-    expect(spawnClaude).toHaveBeenCalledWith('/tmp/final-settings.json', [])
+    expect(spawnClaude).toHaveBeenCalledWith('/tmp/final-settings.json', [], expect.any(Function))
     expect(stderrWrite).toHaveBeenCalled()
   })
 
@@ -551,7 +551,7 @@ describe('manage launch flow', () => {
     expect(claudeSnapshot).toHaveBeenCalledOnce()
     expect(findNewSessionId).toHaveBeenCalledOnce()
     expect(recordSessionExit).toHaveBeenCalledWith('sess-global')
-    expect(spawnClaude).toHaveBeenCalledWith('/tmp/final-settings.json', [])
+    expect(spawnClaude).toHaveBeenCalledWith('/tmp/final-settings.json', [], expect.any(Function))
   })
 
   it('runs project-only mode from project settings and labels statusline with project preset only', async () => {
@@ -706,7 +706,7 @@ describe('manage launch flow', () => {
       projectPresetName: launchPreset.name,
       presetLabel: `*Claude Official*/${launchPreset.name}`,
     }))
-    expect(spawnClaude).toHaveBeenCalledWith('/tmp/final-settings.json', [])
+    expect(spawnClaude).toHaveBeenCalledWith('/tmp/final-settings.json', [], expect.any(Function))
   })
 
   it('respects config.runMode when launching from manage', async () => {
@@ -989,6 +989,6 @@ describe('manage launch flow', () => {
       presetLabel: `${selectedItem.name}/${launchPreset.name}`,
     }))
     expect(writeLastUsed).toHaveBeenCalledWith(launchPreset.name)
-    expect(spawnClaude).toHaveBeenCalledWith('/tmp/final-settings.json', [])
+    expect(spawnClaude).toHaveBeenCalledWith('/tmp/final-settings.json', [], expect.any(Function))
   })
 })

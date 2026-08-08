@@ -146,3 +146,11 @@ export function resolveCcspStatuslineUnderlyingPath(projectRoot: string, stem: s
 export function resolveCcspStatuslineUnderlyingCommandPath(projectRoot: string, stem: string): string {
   return join(resolveProjectTempSettingsDir(projectRoot), `ccsp-statusline-underlying-${stem}.cmd`)
 }
+
+// Liveness marker for one launch: holds the pid of the ccsp process that owns the
+// stem, so a concurrent launch in the same project can tell "still in use" apart
+// from "left over". Deliberately not suffixed `-settings.json`, so it never counts
+// as a stem itself in `parseTempSettingsStem`.
+export function resolveCcspLaunchLockPath(projectRoot: string, stem: string): string {
+  return join(resolveProjectTempSettingsDir(projectRoot), `ccsp-launch-${stem}.lock`)
+}

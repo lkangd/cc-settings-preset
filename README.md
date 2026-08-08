@@ -236,7 +236,7 @@ claude --settings <temp-file> [your other args]
                                       │
                                       ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ ⑤ Write .claude/.ccsp/tmp/*.json (gitignored; keep at most 50 files)   │
+│ ⑤ Write .claude/.ccsp/tmp/*.json (gitignored; ~50 files retained)     │
 └─────────────────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
@@ -305,7 +305,7 @@ The position of the session flag controls the route: put it before `claude` to r
 | **Interactive-first for create/manage** | `create` / `manage` remain TUI-driven; use direct run or edit JSON for headless launch. |
 | **Derived presets** | Schema supports `derived` type; CLI does not expose full create/manage flow yet. |
 | **Project store is local by default** | `launch-presets`, `tmp`, and `sessions.json` under `.claude/.ccsp/` are not in Git unless you opt in. |
-| **Temp file cap** | Oldest temp settings in `tmp/` are pruned past 50 by last-used time; statusline scripts are cleaned every exit. |
+| **Temp file cap** | Oldest temp settings in `tmp/` are pruned past 50 by write time, except those a still-running session holds — the count may sit above 50 while sessions are live. Statusline scripts are cleaned every exit. |
 | **Resume only sees ccsp launches** | `ccsp --continue` / `--resume` only know about sessions started through ccsp on the new code path; sessions started directly with `claude` aren't bound and won't appear. |
 
 ---
@@ -368,7 +368,7 @@ The position of the session flag controls the route: put it before `claude` to r
 │   ├── index.json
 │   └── <name>-launch.json     # launch-layer overrides only
 ├── tmp/
-│   └── <stem>-settings.json   # finalized launch config (max 50, pruned by use time)
+│   └── <stem>-settings.json   # finalized launch config (~50 kept, oldest pruned)
 ├── sessions.json              # sessionId → launch config binding, for --continue / --resume
 └── last-used.json             # last launch preset used
 ```

@@ -236,7 +236,7 @@ claude --settings <临时文件> [你传入的其它参数]
                                       │
                                       ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ ⑤ 写入 .claude/.ccsp/tmp/*.json（目录默认 gitignore，最多保留 50 份）        │
+│ ⑤ 写入 .claude/.ccsp/tmp/*.json（目录默认 gitignore，约保留 50 份）          │
 └─────────────────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
@@ -305,7 +305,7 @@ Claude 退出后，CCSP 会**主动发现** Claude 真实分配的 session id（
 | **create / manage 仍以 TUI 为主** | 创建与管理预设需交互界面；无头启动请用直接运行或自行编辑 JSON。 |
 | **Derived 预设** | 数据模型支持 `derived` 类型，但当前 CLI 未暴露创建/管理衍生预设的完整流程。 |
 | **项目存储默认本地** | `launch-presets`、`tmp` 与 `sessions.json` 都在 `.claude/.ccsp/` 下，默认不进 Git；团队共享需另行约定导出方式。 |
-| **临时文件有上限** | `tmp` 中的 settings 文件按 lastUsedAt 淘汰，最多保留 50 份；statusline 脚本每次退出都会清理。 |
+| **临时文件有上限** | `tmp` 中的 settings 文件超过 50 份后按写入时间淘汰最旧的，但仍在运行的会话所持有的不会被回收——有活跃会话时份数可能暂时超过 50；statusline 脚本每次退出都会清理。 |
 | **Resume 只覆盖 ccsp 启动的会话** | `ccsp --continue` / `--resume` 只能看到通过新版 ccsp 启动并记录过绑定的会话；直接用 `claude` 启动的会话不在范围内。 |
 
 ---
@@ -367,7 +367,7 @@ Claude 退出后，CCSP 会**主动发现** Claude 真实分配的 session id（
 │   ├── index.json
 │   └── <name>-launch.json     # 仅含启动层覆盖字段
 ├── tmp/
-│   └── <stem>-settings.json   # 本次启动的最终配置（最多 50 份，按使用时间淘汰）
+│   └── <stem>-settings.json   # 本次启动的最终配置（约保留 50 份，淘汰最旧的）
 ├── sessions.json              # sessionId → 启动配置 的绑定，供 --continue / --resume
 └── last-used.json             # 上次使用的启动预设
 ```

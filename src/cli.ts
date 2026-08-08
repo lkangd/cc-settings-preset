@@ -817,25 +817,34 @@ async function launchClaudeWithFinalizedSettings(input: {
     toggles: input.toggles,
   }
 
-  // When we already know the session id (explicit --session-id / --resume <uuid>),
-  // record the binding upfront so the config is recoverable even if Claude is
-  // killed before exit. Otherwise snapshot Claude's project dir and discover
-  // the id post-spawn by diffing.
-  const sessionSnapshot = session.sessionId
-    ? undefined
-    : await profileStep('claude-session-snapshot', () => claudeSessionService.snapshot())
-  if (session.sessionId) {
-    await launchPresetService.writeSessionBinding({ sessionId: session.sessionId, ...bindingInput })
-  }
-  const pluginSync = await profileStep('sync-installed-plugins', () =>
-    claudePluginInstallationService.synchronizeProjectPlugins(context.cwd, input.toggles.plugins),
-  )
-  if (pluginSync.warning) process.stderr.write(`Warning: ${pluginSync.warning}\n`)
-  for (const failure of pluginSync.failures) {
-    const detail = failure.stderr ? `: ${failure.stderr}` : '.'
-    process.stderr.write(
-      `Warning: Failed to install Claude plugin "${failure.pluginName}"${detail}\n`,
+  // writeTempSettings has already claimed the stem, but the `finally` that
+  // releases it only starts once we reach spawnClaude — anything that throws in
+  // between would strand the lock and the statusline scripts in the project.
+  let sessionSnapshot: Awaited<ReturnType<typeof claudeSessionService.snapshot>> | undefined
+  try {
+    // When we already know the session id (explicit --session-id / --resume <uuid>),
+    // record the binding upfront so the config is recoverable even if Claude is
+    // killed before exit. Otherwise snapshot Claude's project dir and discover
+    // the id post-spawn by diffing.
+    sessionSnapshot = session.sessionId
+      ? undefined
+      : await profileStep('claude-session-snapshot', () => claudeSessionService.snapshot())
+    if (session.sessionId) {
+      await launchPresetService.writeSessionBinding({ sessionId: session.sessionId, ...bindingInput })
+    }
+    const pluginSync = await profileStep('sync-installed-plugins', () =>
+      claudePluginInstallationService.synchronizeProjectPlugins(context.cwd, input.toggles.plugins),
     )
+    if (pluginSync.warning) process.stderr.write(`Warning: ${pluginSync.warning}\n`)
+    for (const failure of pluginSync.failures) {
+      const detail = failure.stderr ? `: ${failure.stderr}` : '.'
+      process.stderr.write(
+        `Warning: Failed to install Claude plugin "${failure.pluginName}"${detail}\n`,
+      )
+    }
+  } catch (error) {
+    await launchPresetService.cleanupTempScripts(stem)
+    throw error
   }
 
   if (launchPrepStartedAt !== undefined) {
@@ -843,7 +852,11 @@ async function launchClaudeWithFinalizedSettings(input: {
   }
 
   try {
-    process.exitCode = await spawnClaude(settingsPath, session.args)
+    process.exitCode = await spawnClaude(settingsPath, session.args, pid => {
+      // Claude, not ccsp, is what actually depends on the stem's files from here
+      // on: record it so a SIGKILLed ccsp cannot make a live session look free.
+      void launchPresetService.recordLaunchOwnerPid(stem, pid)
+    })
   } catch (error) {
     if (error instanceof CliError) {
       process.exitCode = error.exitCode
