@@ -3,16 +3,8 @@ import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { isPidAlive } from '../../src/core/process.js'
 import { injectCcspStatusLine } from '../../src/services/statusline-injector-service.js'
-
-function isPidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch {
-    return false
-  }
-}
 
 function waitFor(predicate: () => boolean | Promise<boolean>, timeoutMs: number): Promise<boolean> {
   return new Promise((resolve) => {

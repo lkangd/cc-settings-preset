@@ -10,6 +10,7 @@ import {
   resolveProjectTempSettingsDir,
   resolveProjectTempSettingsPath,
 } from '../../src/core/paths.js'
+import { ownProcessBootOffsetMs } from '../../src/core/process.js'
 import { createLaunchPresetService } from '../../src/services/launch-preset-service.js'
 import { ensureProjectCcspStore } from '../../src/services/project-store-service.js'
 
@@ -23,10 +24,20 @@ async function fillTempSettings(cwd: string, from: number, to: number): Promise<
   }
 }
 
-async function writeLaunchLock(cwd: string, stem: string, lock: { host?: string; pids: number[] }): Promise<void> {
+// `pids` 写的是旧版本 ccsp 的锁格式（只有 pid、没有身份），`owners` 是带 bootOffsetMs 的当前
+// 格式；两者都要能被读懂，所以测试按用例分别落哪一种。
+async function writeLaunchLock(
+  cwd: string,
+  stem: string,
+  lock: { host?: string; pids?: number[]; owners?: Array<{ pid: number; bootOffsetMs?: number }> },
+): Promise<void> {
   await writeFile(
     resolveCcspLaunchLockPath(cwd, stem),
-    JSON.stringify({ host: lock.host ?? hostname(), pids: lock.pids }),
+    JSON.stringify({
+      host: lock.host ?? hostname(),
+      ...(lock.pids ? { pids: lock.pids } : {}),
+      ...(lock.owners ? { owners: lock.owners } : {}),
+    }),
   )
 }
 
@@ -265,6 +276,91 @@ describe('launch preset service', () => {
     expect(remaining).not.toContain('temp-01-settings.json')
   })
 
+  // pid 会被 OS 回收：ccsp 被 SIGKILL 留下的锁，其 pid 迟早会落到一个毫不相干的进程头上。
+  // 只看 kill(pid, 0) 会把这种 stem 永久钉死在 tmp 目录里，得靠记录的启动时刻把 pid 认回具体进程。
+  it('reclaims a stem whose live pid started later than the lock recorded', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ccsp-project-'))
+    const service = createLaunchPresetService(cwd)
+    await ensureProjectCcspStore(cwd)
+
+    const recycledStem = 'aaa-recycled-pid'
+    await writeFile(resolveProjectTempSettingsPath(cwd, `${recycledStem}-settings.json`), '{}')
+    // pid 存活（就是本测试进程），但它的真实启动时刻远晚于锁里记的那个——说明写锁的进程早没了。
+    await writeLaunchLock(cwd, recycledStem, { owners: [{ pid: process.pid, bootOffsetMs: 0 }] })
+    await fillTempSettings(cwd, 1, 49)
+
+    await service.writeTempSettings({}, 'zzz-newest')
+
+    const remaining = await readdir(resolveProjectTempSettingsDir(cwd))
+    expect(remaining).not.toContain(`${recycledStem}-settings.json`)
+    expect(remaining).not.toContain(`ccsp-launch-${recycledStem}.lock`)
+    expect(remaining).toContain('temp-01-settings.json')
+  })
+
+  // 身份对得上时不能误伤：startedAt 与进程实际启动时刻一致，就是原主还在。
+  it('keeps a stem whose live pid still matches the recorded start time', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ccsp-project-'))
+    const service = createLaunchPresetService(cwd)
+    await ensureProjectCcspStore(cwd)
+
+    const liveStem = 'aaa-identified-live'
+    await writeFile(resolveProjectTempSettingsPath(cwd, `${liveStem}-settings.json`), '{}')
+    await writeLaunchLock(cwd, liveStem, { owners: [{ pid: process.pid, bootOffsetMs: ownProcessBootOffsetMs() }] })
+    await fillTempSettings(cwd, 1, 49)
+
+    await service.writeTempSettings({}, 'zzz-newest')
+
+    const remaining = await readdir(resolveProjectTempSettingsDir(cwd))
+    expect(remaining).toContain(`${liveStem}-settings.json`)
+    expect(remaining).not.toContain('temp-01-settings.json')
+  })
+
+  // 身份值锚在 boot clock 上而不是墙钟上：NTP 或手动校时把系统时间前拨，不能让还活着的
+  // owner 看起来像是「pid 被别人复用了」，否则活会话的 settings 会被当场删掉。
+  it('keeps a live stem identified across a forward wall-clock jump', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ccsp-project-'))
+    const service = createLaunchPresetService(cwd)
+    await ensureProjectCcspStore(cwd)
+
+    const liveStem = 'aaa-clock-jump'
+    await writeFile(resolveProjectTempSettingsPath(cwd, `${liveStem}-settings.json`), '{}')
+    await writeLaunchLock(cwd, liveStem, { owners: [{ pid: process.pid, bootOffsetMs: ownProcessBootOffsetMs() }] })
+    await fillTempSettings(cwd, 1, 49)
+
+    // 把 Date.now() 整体前拨一小时；boot offset 不经过墙钟，判定必须完全不受影响。
+    const realNow = Date.now
+    Date.now = () => realNow.call(Date) + 60 * 60 * 1000
+    try {
+      await service.writeTempSettings({}, 'zzz-newest')
+    } finally {
+      Date.now = realNow
+    }
+
+    const remaining = await readdir(resolveProjectTempSettingsDir(cwd))
+    expect(remaining).toContain(`${liveStem}-settings.json`)
+    expect(remaining).not.toContain('temp-01-settings.json')
+  })
+
+  // 双写的两份表示若对不上（锁被改坏、或别的写入方只更新了一半），必须取并集：只出现在
+  // legacy pids 里的 pid 同样是一份占用声明，不能因为 owners 是空数组就把 stem 回收掉。
+  it('keeps a stem whose live pid survives only in the legacy pids mirror', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ccsp-project-'))
+    const service = createLaunchPresetService(cwd)
+    await ensureProjectCcspStore(cwd)
+
+    const mirroredStem = 'aaa-mirror-only'
+    await writeFile(resolveProjectTempSettingsPath(cwd, `${mirroredStem}-settings.json`), '{}')
+    await writeLaunchLock(cwd, mirroredStem, { pids: [process.pid], owners: [] })
+    await fillTempSettings(cwd, 1, 49)
+
+    await service.writeTempSettings({}, 'zzz-newest')
+
+    const remaining = await readdir(resolveProjectTempSettingsDir(cwd))
+    expect(remaining).toContain(`${mirroredStem}-settings.json`)
+    expect(remaining).toContain(`ccsp-launch-${mirroredStem}.lock`)
+    expect(remaining).not.toContain('temp-01-settings.json')
+  })
+
   // 同一目录被另一台主机 / 另一个 PID namespace（容器有自己的 hostname 和 pid 编号）共享时，
   // 本机的 kill(pid, 0) 对它的 pid 毫无意义，不能据此判定对方已经退出。
   it('never reclaims a lock written on another host', async () => {
@@ -328,7 +424,9 @@ describe('launch preset service', () => {
     await service.writeTempSettings({}, stem)
     expect(JSON.parse(await readFile(resolveCcspLaunchLockPath(cwd, stem), 'utf8'))).toEqual({
       host: hostname(),
+      // 旧版本 ccsp 只认 pids：缺了它，旧版本会把这个锁读成「无人持有」。
       pids: [process.pid],
+      owners: [{ pid: process.pid, bootOffsetMs: expect.any(Number) }],
     })
 
     await service.cleanupTempScripts(stem)
