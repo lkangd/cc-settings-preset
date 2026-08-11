@@ -274,11 +274,9 @@ claude --settings <临时文件> [你传入的其它参数]
 - **mode** —— `permissions.defaultMode`：`manual` → `acceptEdits` → `plan` → `auto` → `dontAsk` → `bypassPermissions`。
 - **effort** —— `effortLevel`：`low` → `medium` → `high` → `xhigh` → `max` → `ultracode`。
 
-未改动的字段会展示按优先级（managed → local → project → user）解析出的有效默认值。只有你**实际切换过**的字段才会被写入，且各自落到正确位置：
+未改动的字段会展示按优先级（managed → local → project → user）解析出的有效默认值。只有你**实际切换过**的字段才会被写入，且所有 effort 等级都以同一种方式持久化：作为 `effortLevel` 写入预设。
 
-- `low` / `medium` / `high` / `xhigh` —— 作为 `effortLevel` 写入预设。
-- `max` —— 写入 `env.CLAUDE_CODE_EFFORT_LEVEL`（settings 文件不接受 `effortLevel: "max"`）。
-- `ultracode` —— **不持久化**；仅对本次启动通过 `claude --effort ultracode` 生效（该级别只能在 Claude Code 会话内设置）。
+`max` 与 `ultracode` 多一步处理。Claude Code 的 settings schema 中 `effortLevel` 只接受 `low` / `medium` / `high` / `xhigh`，因此它永远不会从 settings 文件应用这两个值，只写 `effortLevel: "max"` 的预设会静默回落到 `~/.claude/settings.json` 里继承来的 `effortLevel`。为此 CCSP 会在命令行上再声明一次：当按该栏展示的同一条优先级链（preset → managed → local → project → user）解析出的有效等级是 `max` 或 `ultracode` 时，启动就追加 `--effort max` / `--effort ultracode`，其优先级高于所有 settings 作用域；直接运行与 `--resume` 同样适用。若你在自己的参数里显式传了 `--effort <level>` 或 `--effort=<level>`，则以你的为准。
 
 确认时写回对应预设文件；若编辑临时的 **Claude Official** 条目，则直接写回 `~/.claude/settings.json`。
 

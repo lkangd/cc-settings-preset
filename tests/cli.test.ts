@@ -1079,7 +1079,7 @@ describe('run command', () => {
     expect(writeLastUsedGlobalSettingsMock).toHaveBeenCalledWith('/tmp/project', '*Claude Official*')
   })
 
-  it('applies an ultracode effort via --effort without persisting it to the preset', async () => {
+  it('passes --effort max for a preset that persists max, so no inherited effortLevel wins', async () => {
     const basePreset = {
       type: 'base' as const,
       name: 'base',
@@ -1094,9 +1094,8 @@ describe('run command', () => {
         element.props.onSubmit({
           name: 'base',
           sourcePath: '/tmp/.ccsp/settings/base-settings.json',
-          settings: {},
-          changedPresets: { base: { effortLevel: 'ultracode' } },
-          effortArg: 'ultracode',
+          // Persisted by an earlier session, with no pending draft this time.
+          settings: { effortLevel: 'max' },
         })
         return { waitUntilExit: async () => undefined }
       })
@@ -1112,7 +1111,102 @@ describe('run command', () => {
     const { main } = await import('../src/cli.js')
     await main(['node', 'cli'])
 
-    expect(writePresetSettingsByNameMock).not.toHaveBeenCalled()
+    expect(spawnClaudeMock).toHaveBeenCalledWith(
+      '/tmp/project/.claude/.ccsp/tmp/temp-settings.json',
+      ['--effort', 'max'],
+      expect.any(Function),
+    )
+  })
+
+  it('restates a max effort inherited from a broader settings scope, and yields to an explicit --effort', async () => {
+    const basePreset = {
+      type: 'base' as const,
+      name: 'base',
+      fileName: 'base-settings.json',
+      createdAt: '2026-05-17T00:00:00.000Z',
+      updatedAt: '2026-05-17T00:00:00.000Z',
+    }
+    listPresetsMock.mockResolvedValue([basePreset])
+    // The preset sets no effort; ~/.claude/settings.json is where max lives (e.g. written there by
+    // editing the Claude Official entry), which is what the quick settings column shows as effective.
+    discoverSettingsSourcesMock.mockResolvedValue([
+      { scope: 'user', filePath: '/tmp/user/settings.json', settings: { effortLevel: 'max' } },
+    ])
+
+    const submitSelection = (element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+      element.props.onSubmit({
+        name: 'base',
+        sourcePath: '/tmp/.ccsp/settings/base-settings.json',
+        settings: {},
+      })
+      return { waitUntilExit: async () => undefined }
+    }
+    const submitLaunch = (element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+      element.props.onSubmit({
+        type: 'launch',
+        presetName: 'base',
+        toggles: { plugins: [], skills: [], mcps: [] },
+      })
+      return { waitUntilExit: async () => undefined }
+    }
+    renderMock
+      .mockImplementationOnce(submitSelection)
+      .mockImplementationOnce(submitLaunch)
+      .mockImplementationOnce(submitSelection)
+      .mockImplementationOnce(submitLaunch)
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli'])
+
+    expect(spawnClaudeMock).toHaveBeenLastCalledWith(
+      '/tmp/project/.claude/.ccsp/tmp/temp-settings.json',
+      ['--effort', 'max'],
+      expect.any(Function),
+    )
+
+    // An explicit --effort=<level> from the user is never doubled up by the preset's own level.
+    await main(['node', 'cli', 'claude', '--effort=low'])
+
+    expect(spawnClaudeMock).toHaveBeenLastCalledWith(
+      '/tmp/project/.claude/.ccsp/tmp/temp-settings.json',
+      ['--effort=low'],
+      expect.any(Function),
+    )
+  })
+
+  it('persists an ultracode effort to the preset and restates it via --effort', async () => {
+    const basePreset = {
+      type: 'base' as const,
+      name: 'base',
+      fileName: 'base-settings.json',
+      createdAt: '2026-05-17T00:00:00.000Z',
+      updatedAt: '2026-05-17T00:00:00.000Z',
+    }
+    listPresetsMock.mockResolvedValue([basePreset])
+
+    renderMock
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          name: 'base',
+          sourcePath: '/tmp/.ccsp/settings/base-settings.json',
+          settings: { effortLevel: 'ultracode' },
+          changedPresets: { base: { effortLevel: 'ultracode' } },
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          type: 'launch',
+          presetName: 'base',
+          toggles: { plugins: [], skills: [], mcps: [] },
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli'])
+
+    expect(writePresetSettingsByNameMock).toHaveBeenCalledWith('base', { effortLevel: 'ultracode' })
     expect(spawnClaudeMock).toHaveBeenCalledWith(
       '/tmp/project/.claude/.ccsp/tmp/temp-settings.json',
       ['--effort', 'ultracode'],

@@ -6,14 +6,12 @@ export type SettingsSelectSortMode = 'recent' | 'name' | 'updated'
 export type SettingsSelectFocus = 'presets' | 'quick-settings'
 export type QuickSettingField = 'defaultMode' | 'effortLevel'
 export type PermissionDefaultMode = 'manual' | 'acceptEdits' | 'plan' | 'auto' | 'dontAsk' | 'bypassPermissions'
-// Effort levels differ in how they are applied at launch:
-// - low/medium/high/xhigh: persisted as the `effortLevel` setting.
-// - max: not a valid `effortLevel`; persisted through the CLAUDE_CODE_EFFORT_LEVEL env var.
-// - ultracode: cannot be persisted at all; applied transiently via the `--effort ultracode` CLI flag.
+// Every level is persisted the same way: as the `effortLevel` setting of the preset.
 export type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultracode'
 
-// Effort level applied only as a launch-time CLI flag rather than written to a preset.
-export const EFFORT_LAUNCH_ARG_ONLY: readonly EffortLevel[] = ['ultracode']
+// Levels Claude Code does not honor as an `effortLevel` setting value, so persisting them is not
+// enough — the launch must also pass `--effort <level>`, which outranks every settings scope.
+export const EFFORT_LAUNCH_ARG_REQUIRED: readonly EffortLevel[] = ['max', 'ultracode']
 
 export const PERMISSION_DEFAULT_MODES: readonly PermissionDefaultMode[] = [
   'manual',
@@ -23,10 +21,7 @@ export const PERMISSION_DEFAULT_MODES: readonly PermissionDefaultMode[] = [
   'dontAsk',
   'bypassPermissions',
 ]
-// The effort cycle ring (not the set of persistable values — see EFFORT_LAUNCH_ARG_ONLY).
 export const EFFORT_LEVELS: readonly EffortLevel[] = ['low', 'medium', 'high', 'xhigh', 'max', 'ultracode']
-
-const EFFORT_LEVEL_ENV_VAR = 'CLAUDE_CODE_EFFORT_LEVEL'
 
 export type QuickSettingsDraft = {
   defaultMode?: PermissionDefaultMode
@@ -138,12 +133,6 @@ function readDefaultMode(settings: Settings): PermissionDefaultMode | undefined 
 }
 
 function readEffortLevel(settings: Settings): EffortLevel | undefined {
-  // The env var overrides the effortLevel setting, so check it first.
-  const env = settings.env
-  if (isPlainObject(env)) {
-    const envMatch = EFFORT_LEVELS.find(candidate => candidate === env[EFFORT_LEVEL_ENV_VAR])
-    if (envMatch) return envMatch
-  }
   return EFFORT_LEVELS.find(candidate => candidate === settings.effortLevel)
 }
 
@@ -193,43 +182,32 @@ function cycleValue<T extends string>(values: readonly T[], current: string | un
   return values[(index + 1) % values.length]!
 }
 
-function setEffortEnvVar(settings: Settings, value: string | undefined): Record<string, unknown> | undefined {
-  const env = isPlainObject(settings.env) ? { ...settings.env } : {}
-  if (value === undefined) {
-    delete env[EFFORT_LEVEL_ENV_VAR]
-  } else {
-    env[EFFORT_LEVEL_ENV_VAR] = value
+// The launch-time `--effort` value a launch needs, or undefined when the effective level is one
+// Claude Code applies from the settings file on its own. `settingsChain` is the scope chain the
+// quick settings column resolves against — the preset first, then broader scopes — because the
+// level shown as effective there is the one the session must actually run at.
+export function resolveEffortLaunchArg(settingsChain: readonly unknown[]): EffortLevel | undefined {
+  for (const settings of settingsChain) {
+    if (!isPlainObject(settings)) continue
+    const level = readEffortLevel(settings)
+    if (level === undefined) continue
+    return EFFORT_LAUNCH_ARG_REQUIRED.includes(level) ? level : undefined
   }
-  return Object.keys(env).length > 0 ? env : undefined
+  return undefined
 }
 
-// The launch-time `--effort` value for a draft, or undefined when the effort choice is persisted.
-export function resolveEffortLaunchArg(draft: QuickSettingsDraft | undefined): EffortLevel | undefined {
-  const level = draft?.effortLevel
-  return level !== undefined && EFFORT_LAUNCH_ARG_ONLY.includes(level) ? level : undefined
-}
-
-// Whether a draft has any change worth writing to a preset file (ignores launch-arg-only effort levels).
+// Whether a draft has any change worth writing to a preset file.
 export function draftHasPersistableChange(draft: QuickSettingsDraft | undefined): boolean {
-  if (!draft) return false
-  if (draft.defaultMode !== undefined) return true
-  return draft.effortLevel !== undefined && !EFFORT_LAUNCH_ARG_ONLY.includes(draft.effortLevel)
+  return Boolean(draft && (draft.defaultMode !== undefined || draft.effortLevel !== undefined))
 }
 
 export function applyQuickSettingsDraft(settings: Settings, draft: QuickSettingsDraft | undefined): Settings {
-  if (!draft || (draft.defaultMode === undefined && draft.effortLevel === undefined)) return settings
+  if (!draft || !draftHasPersistableChange(draft)) return settings
 
   const next: Settings = { ...settings }
-  // ultracode is applied via the --effort CLI flag at launch, so it never changes the persisted settings.
-  if (draft.effortLevel !== undefined && !EFFORT_LAUNCH_ARG_ONLY.includes(draft.effortLevel)) {
-    // `max` is rejected as an `effortLevel`, so it rides on the env var; other levels persist as
-    // `effortLevel` and clear any stale max env override. Commit the resulting env once.
-    if (draft.effortLevel === 'max') delete next.effortLevel
-    else next.effortLevel = draft.effortLevel
-    const env = setEffortEnvVar(settings, draft.effortLevel === 'max' ? 'max' : undefined)
-    if (env) next.env = env
-    else delete next.env
-  }
+  // Every level persists as `effortLevel`; max/ultracode additionally ride the `--effort` launch arg
+  // (see EFFORT_LAUNCH_ARG_REQUIRED).
+  if (draft.effortLevel !== undefined) next.effortLevel = draft.effortLevel
   if (draft.defaultMode !== undefined) {
     const permissions = isPlainObject(settings.permissions) ? settings.permissions : {}
     next.permissions = { ...permissions, defaultMode: draft.defaultMode }

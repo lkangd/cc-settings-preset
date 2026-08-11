@@ -130,48 +130,37 @@ describe('settings select flow', () => {
     expect(values).toEqual(['max', 'ultracode', 'low'])
   })
 
-  it('treats ultracode as a launch-arg-only effort that never touches persisted settings', () => {
-    expect(resolveEffortLaunchArg({ effortLevel: 'ultracode' })).toBe('ultracode')
-    expect(resolveEffortLaunchArg({ effortLevel: 'max' })).toBeUndefined()
-    expect(resolveEffortLaunchArg({ defaultMode: 'plan' })).toBeUndefined()
-
-    expect(draftHasPersistableChange({ effortLevel: 'ultracode' })).toBe(false)
-    expect(draftHasPersistableChange({ effortLevel: 'ultracode', defaultMode: 'plan' })).toBe(true)
-    expect(draftHasPersistableChange({ effortLevel: 'max' })).toBe(true)
-
-    // ultracode leaves the effort part of the settings untouched.
-    expect(applyQuickSettingsDraft({ effortLevel: 'high' }, { effortLevel: 'ultracode' })).toEqual({
-      effortLevel: 'high',
-    })
+  it('persists every effort level as effortLevel, including max and ultracode', () => {
+    for (const effortLevel of ['low', 'xhigh', 'max', 'ultracode'] as const) {
+      expect(draftHasPersistableChange({ effortLevel })).toBe(true)
+      expect(applyQuickSettingsDraft({ effortLevel: 'high' }, { effortLevel })).toEqual({ effortLevel })
+    }
+    expect(draftHasPersistableChange(undefined)).toBe(false)
+    expect(draftHasPersistableChange({})).toBe(false)
   })
 
-  it('routes a max effort selection through the CLAUDE_CODE_EFFORT_LEVEL env var', () => {
-    expect(applyQuickSettingsDraft({ effortLevel: 'high' }, { effortLevel: 'max' })).toEqual({
-      env: { CLAUDE_CODE_EFFORT_LEVEL: 'max' },
-    })
+  it('requires a launch arg only for the levels Claude Code ignores in settings files', () => {
+    expect(resolveEffortLaunchArg([{ effortLevel: 'max' }])).toBe('max')
+    expect(resolveEffortLaunchArg([{ effortLevel: 'ultracode' }])).toBe('ultracode')
+    // Levels Claude Code applies from the settings file itself need no flag.
+    expect(resolveEffortLaunchArg([{ effortLevel: 'xhigh' }])).toBeUndefined()
+    expect(resolveEffortLaunchArg([{}])).toBeUndefined()
+    expect(resolveEffortLaunchArg([undefined])).toBeUndefined()
+    expect(resolveEffortLaunchArg([])).toBeUndefined()
+  })
+
+  it('resolves the effort launch arg over the scope chain, nearest scope first', () => {
+    // A broader scope supplies max when no nearer scope sets effort at all.
+    expect(resolveEffortLaunchArg([{}, undefined, { effortLevel: 'max' }])).toBe('max')
+    // A nearer scope that sets a settings-applied level wins, so no flag is needed.
+    expect(resolveEffortLaunchArg([{ effortLevel: 'low' }, { effortLevel: 'max' }])).toBeUndefined()
+  })
+
+  it('leaves env untouched when persisting an effort level', () => {
     expect(applyQuickSettingsDraft({ env: { FOO: 'bar' } }, { effortLevel: 'max' })).toEqual({
-      env: { FOO: 'bar', CLAUDE_CODE_EFFORT_LEVEL: 'max' },
+      effortLevel: 'max',
+      env: { FOO: 'bar' },
     })
-  })
-
-  it('clears the max env override when switching to a persistable effort level', () => {
-    expect(
-      applyQuickSettingsDraft({ env: { CLAUDE_CODE_EFFORT_LEVEL: 'max' } }, { effortLevel: 'high' }),
-    ).toEqual({ effortLevel: 'high' })
-    expect(
-      applyQuickSettingsDraft({ env: { CLAUDE_CODE_EFFORT_LEVEL: 'max', FOO: 'bar' } }, { effortLevel: 'low' }),
-    ).toEqual({ effortLevel: 'low', env: { FOO: 'bar' } })
-  })
-
-  it('reads an effort level from the env var override before the effortLevel setting', () => {
-    const state = createSettingsSelectFlowState({
-      items: [{
-        name: 'base',
-        settings: { effortLevel: 'high', env: { CLAUDE_CODE_EFFORT_LEVEL: 'max' } },
-        sourcePath: '/tmp/base.json',
-      }],
-    })
-    expect(resolveQuickSettingDisplays(state)[1]).toMatchObject({ value: 'max', source: 'preset' })
   })
 
   it('preserves other permission settings when applying a touched default mode', () => {

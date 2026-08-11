@@ -5,9 +5,7 @@ import {
   createSettingsSelectFlowState,
   formatSettingsSortMode,
   reduceSettingsSelectFlow,
-  resolveEffortLaunchArg,
   resolveQuickSettingDisplays,
-  type EffortLevel,
   type QuickSettingsDraft,
   type QuickSettingsSource,
   type SettingsSelectFlowState,
@@ -18,7 +16,6 @@ import { TwoColumnSettingsView } from './components/two-column-settings-view.js'
 
 export type SettingsSelectResult = SettingsSelectItem & {
   changedPresets?: Record<string, QuickSettingsDraft>
-  effortArg?: EffortLevel
 }
 
 type Props = {
@@ -113,14 +110,12 @@ export function SettingsSelectApp({
       const current = stateRef.current
       const selected = current.items[current.cursor]
       if (!selected) return
-      const effortArg = resolveEffortLaunchArg(current.draftsByPreset[selected.name])
       onSubmit({
         ...selected,
         settings: applyQuickSettingsDraft(selected.settings, current.draftsByPreset[selected.name]),
         ...(Object.keys(current.draftsByPreset).length > 0
           ? { changedPresets: current.draftsByPreset }
           : {}),
-        ...(effortArg ? { effortArg } : {}),
       })
       exit()
     }

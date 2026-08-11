@@ -30,6 +30,7 @@ import {
   applyQuickSettingsDraft,
   createSettingsSelectFlowState,
   draftHasPersistableChange,
+  resolveEffortLaunchArg,
   type QuickSettingsSource,
 } from './flows/settings-select-flow.js'
 import { SettingsSelectApp, type SettingsSelectResult } from './ink/settings-select-app.js'
@@ -446,7 +447,7 @@ async function persistQuickSettingsChanges(
   const itemsByName = new Map(presetItems.map(item => [item.name, item]))
   let selectedSettings = selected.settings
   for (const [name, draft] of Object.entries(changedPresets)) {
-    // ultracode-only drafts carry no persistable change; they are applied via --effort at launch.
+    // Drafts the user never actually cycled carry nothing to write.
     if (!draftHasPersistableChange(draft)) continue
 
     const item = itemsByName.get(name)
@@ -782,15 +783,19 @@ async function launchClaudeWithFinalizedSettings(input: {
   args: string[]
   statusLineEnabled?: boolean
 }): Promise<void> {
-  const session = resolveSessionLaunch(input.args)
   const stem = randomUUID()
   const launchPrepStartedAt = isProfileEnabled() ? performance.now() : undefined
-  const [claudeSources, statusLineEnabled] = await Promise.all([
+  const [claudeSources, statusLineEnabled, managedSettings] = await Promise.all([
     profileStep('launch-settings-sources', () => settingsSourceService.discoverSettingsSources()),
     input.statusLineEnabled !== undefined
       ? Promise.resolve(input.statusLineEnabled)
       : profileStep('ccsp-config', async () => (await ccspConfigService.read()).statusLineEnabled),
+    profileStep('launch-managed-settings', readManagedSettings),
   ])
+  const session = resolveSessionLaunch(withEffortLaunchArg(input.args, input.baseSettings, {
+    ...(managedSettings ? { managedSettings } : {}),
+    claudeSources,
+  }))
   const finalizedSettings = await profileStep('finalize-launch-settings', () => finalizeLaunchSettings(
     input.baseSettings,
     input.launchSettings,
@@ -874,8 +879,24 @@ async function launchClaudeWithFinalizedSettings(input: {
   }
 }
 
-function withEffortLaunchArg(args: string[], selectedSettings: SettingsSelectResult): string[] {
-  return selectedSettings.effortArg ? [...args, '--effort', selectedSettings.effortArg] : args
+// `max` and `ultracode` are persisted as `effortLevel` like every other level, but Claude Code does
+// not apply them from a settings file, so the launch must restate them as `--effort <level>`. The
+// effective level is resolved over the same scope chain the quick settings column displays, so a
+// max/ultracode inherited from a broader scope reaches the session too.
+// A user-supplied `--effort` (either spelling) always takes priority over what the settings imply.
+function withEffortLaunchArg(
+  args: string[],
+  baseSettings: unknown,
+  scopes: { managedSettings?: Record<string, unknown>; claudeSources: SettingsSource[] },
+): string[] {
+  if (args.some(arg => arg === '--effort' || arg.startsWith('--effort='))) return args
+
+  const level = resolveEffortLaunchArg([
+    baseSettings,
+    scopes.managedSettings,
+    ...scopes.claudeSources.map(source => source.settings),
+  ])
+  return level ? [...args, '--effort', level] : args
 }
 
 async function launchWithSelectedSettings(
@@ -924,7 +945,7 @@ async function launchWithSelectedSettings(
     ),
     toggles: launchResult.toggles,
     launchSettings,
-    args: withEffortLaunchArg(sanitized.args, selectedSettings),
+    args: sanitized.args,
     ...(config ? { statusLineEnabled: config.statusLineEnabled } : {}),
   })
   return 'done'
@@ -947,7 +968,7 @@ async function launchGlobalOnly(
     presetLabel: combinePresetLabel('global-only', selectedSettings.name, 'Detected'),
     toggles: detected,
     launchSettings: selectedSettings.settings,
-    args: withEffortLaunchArg(sanitized.args, selectedSettings),
+    args: sanitized.args,
     statusLineEnabled: config.statusLineEnabled,
   })
 }
@@ -1013,8 +1034,8 @@ async function launchFromBinding(binding: SessionBinding, extraArgs: string[]): 
     presetLabel: bindingPresetLabel(binding),
     toggles: binding.toggles as unknown as ProjectLaunchToggleState,
     launchSettings: binding.launchSettings,
-    // A one-off `--effort ultracode` is intentionally not restored on resume: it is a transient
-    // per-launch choice that is never persisted (see withEffortLaunchArg / EFFORT_LAUNCH_ARG_ONLY).
+    // A max/ultracode effort persisted in the bound base settings is restored as `--effort` by
+    // launchClaudeWithFinalizedSettings (see withEffortLaunchArg).
     args: ['--resume', binding.sessionId, ...filteredArgs],
   })
 }

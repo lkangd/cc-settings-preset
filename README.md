@@ -274,11 +274,9 @@ The base preset selection screen has a middle **Quick Settings** column. Move fo
 - **mode** — `permissions.defaultMode`: `manual` → `acceptEdits` → `plan` → `auto` → `dontAsk` → `bypassPermissions`.
 - **effort** — `effortLevel`: `low` → `medium` → `high` → `xhigh` → `max` → `ultracode`.
 
-Fields you don't touch show the effective default resolved by precedence (managed → local → project → user). Only fields you actually cycle are written, and each persists to the right place:
+Fields you don't touch show the effective default resolved by precedence (managed → local → project → user). Only fields you actually cycle are written, and every effort level persists the same way: as `effortLevel` in the preset.
 
-- `low` / `medium` / `high` / `xhigh` — saved as `effortLevel` in the preset.
-- `max` — saved as `env.CLAUDE_CODE_EFFORT_LEVEL` (`effortLevel: "max"` is rejected in settings files).
-- `ultracode` — **not persisted**; applied to that launch via `claude --effort ultracode` (it can only be set inside a Claude Code session).
+`max` and `ultracode` need one extra step. Claude Code's settings schema only accepts `low` / `medium` / `high` / `xhigh` for `effortLevel`, so it never applies those two from a settings file, and a preset that only stored `effortLevel: "max"` would silently fall back to the `effortLevel` inherited from `~/.claude/settings.json`. CCSP therefore also restates them on the command line: when the effective level — resolved over the same chain the column displays (preset → managed → local → project → user) — is `max` or `ultracode`, the launch appends `--effort max` / `--effort ultracode`, which outranks every settings scope. This applies to direct run and `--resume` too. An explicit `--effort <level>` or `--effort=<level>` in your own args always wins.
 
 Edits are written to the preset file on confirm. Editing the temporary **Claude Official** entry writes straight back to `~/.claude/settings.json`.
 
