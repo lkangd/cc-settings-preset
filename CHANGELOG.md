@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.4 (2026-08-11)
+
+### Features
+* **settings**: persist max/ultracode as effortLevel and restate via --effort
+
 ## 1.3.3 (2026-08-08)
 
 ### Features
