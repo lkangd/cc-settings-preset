@@ -2,6 +2,7 @@ import { asRecord } from '../core/is-plain-object.js'
 import { readJsonFile, readJsonFileOrDefault } from '../core/json.js'
 import { resolveProjectMcpPath, resolveUserClaudeJsonPath } from '../core/paths.js'
 import type { McpPolicyEntry, Settings } from '../core/schema.js'
+import { appendMissing } from './missing-toggle-service.js'
 import { discoverCachedClaudePlugins } from './plugin-cache-service.js'
 import { resolvePluginRegistryKey, type PluginState } from './plugin-service.js'
 
@@ -131,14 +132,13 @@ export function applyDeniedMcpServers(states: McpState[], denied: McpPolicyEntry
 // ever means "off", so the ordinary `mcpStatesToDeniedServers` rule already
 // writes it back.
 export function mergeMissingMcpStates(states: McpState[], denied: McpPolicyEntry[] = []): McpState[] {
-  const known = new Set(states.map(state => state.name))
-  const missing = denied.flatMap((entry): McpState[] => (
-    'serverName' in entry && !known.has(entry.serverName)
-      ? [{ name: entry.serverName, enabled: false, source: 'missing', config: undefined }]
-      : []
-  ))
-
-  return missing.length === 0 ? states : sortMcpStates([...states, ...missing])
+  return appendMissing(states, known => (
+    denied.flatMap((entry): McpState[] => (
+      'serverName' in entry && !known.has(entry.serverName)
+        ? [{ name: entry.serverName, enabled: false, source: 'missing', config: undefined }]
+        : []
+    ))
+  ), sortMcpStates)
 }
 
 export function mcpStatesToDeniedServers(states: McpState[]): McpPolicyEntry[] {

@@ -14,7 +14,7 @@ import { resolvePresetIndexKey } from './core/name.js'
 import { CliError, type CliErrorCode } from './core/errors.js'
 import { readJsonFile } from './core/json.js'
 import { createPathContext, resolveGlobalRoot, resolveUserClaudeSettingsPath } from './core/paths.js'
-import { parseSettings, type BasePresetMeta, type CcspConfig, type LaunchPresetSettings, type RunMode, type SessionBinding, type SettingsDisplayFormat } from './core/schema.js'
+import { parseSettings, type BasePresetMeta, type CcspConfig, type RunMode, type SessionBinding, type SettingsDisplayFormat } from './core/schema.js'
 import { spawnClaude } from './core/spawn.js'
 import { ConfigApp } from './ink/config-app.js'
 import { CreateApp, type CreateResult, type CreateSubmitResult } from './ink/create-app.js'
@@ -48,19 +48,23 @@ import { createLaunchPresetService } from './services/launch-preset-service.js'
 import { createLaunchTemplateService } from './services/launch-template-service.js'
 import { collectMissingToggleNames, countMissingToggles } from './services/missing-toggle-service.js'
 import {
-  buildImportOrigin,
-  copyPresetsInto,
   discoverImportCandidates,
-  formatSeedReport,
+  importCandidateInto,
   type ImportCandidate
 } from './services/preset-import-service.js'
+import { writeWorktreeSeedMarker } from './services/worktree-service.js'
 import {
-  readWorktreeSeedMarker,
-  resolveMainWorktreeRoot,
-  writeWorktreeSeedMarker
-} from './services/worktree-service.js'
+  resolveWorktreeSeedSource,
+  seedWorktreePresets,
+  type WorktreeSeedSource
+} from './services/worktree-seed-service.js'
 import { WorktreeSeedApp, type WorktreeSeedResult } from './ink/worktree-seed-app.js'
-import type { ImportCandidateView, ImportOutcome } from './ink/components/import-panel.js'
+import {
+  isTemplateCandidate,
+  templateOnlyMessage,
+  type ImportCandidateView,
+  type ImportOutcome
+} from './ink/components/import-panel.js'
 import {
   applyDeniedMcpServers,
   applyPluginMcpAvailability,
@@ -357,6 +361,21 @@ export async function waitForInkAppExit(
   }
 }
 
+// Renders an Ink app and resolves once it exits, with the resize counter, the
+// ctrl-l redraw handler and the app handle wired to each other. The three are
+// mutually recursive — the handler needs the app, the app is rendered with the
+// handler — and every screen that reties that knot by hand is another place it
+// can be tied slightly differently.
+async function runRefreshableInkApp(createNode: () => React.ReactElement): Promise<void> {
+  const state = { resizeVersion: 0 }
+  let app: RefreshableInkApp
+  const onShortcut = (input: string, key: ShortcutKey) => {
+    createGlobalShortcutHandler(app, createNode, process.stdout, state, onShortcut)(input, key)
+  }
+  app = render(wrapInkNode(createNode, state.resizeVersion, onShortcut))
+  await waitForInkAppExit(app, createNode, process.stdout, state, onShortcut)
+}
+
 async function renderCreateApp(header?: InlineHeaderNotice): Promise<BasePresetMeta | undefined> {
   const sources = (await settingsSourceService.discoverSettingsSources()).map(source => ({
     label: source.scope,
@@ -379,13 +398,7 @@ async function renderCreateApp(header?: InlineHeaderNotice): Promise<BasePresetM
         }
       }
     }), header)
-  const state = { resizeVersion: 0 }
-  let app: RefreshableInkApp
-  const onShortcut = (input: string, key: ShortcutKey) => {
-    createGlobalShortcutHandler(app, createNode, process.stdout, state, onShortcut)(input, key)
-  }
-  app = render(wrapInkNode(createNode, state.resizeVersion, onShortcut))
-  await waitForInkAppExit(app, createNode, process.stdout, state, onShortcut)
+  await runRefreshableInkApp(createNode)
   return result
 }
 
@@ -399,13 +412,7 @@ async function configInteractive(config?: CcspConfig): Promise<void> {
         void ccspConfigService.write(config)
       }
     }), header)
-  const state = { resizeVersion: 0 }
-  let app: RefreshableInkApp
-  const onShortcut = (input: string, key: ShortcutKey) => {
-    createGlobalShortcutHandler(app, createNode, process.stdout, state, onShortcut)(input, key)
-  }
-  app = render(wrapInkNode(createNode, state.resizeVersion, onShortcut))
-  await waitForInkAppExit(app, createNode, process.stdout, state, onShortcut)
+  await runRefreshableInkApp(createNode)
 }
 
 async function renderSettingsSelectApp(
@@ -428,13 +435,7 @@ async function renderSettingsSelectApp(
         result = value
       }
     })
-  const state = { resizeVersion: 0 }
-  let app: RefreshableInkApp
-  const onShortcut = (input: string, key: ShortcutKey) => {
-    createGlobalShortcutHandler(app, createNode, process.stdout, state, onShortcut)(input, key)
-  }
-  app = render(wrapInkNode(createNode, state.resizeVersion, onShortcut))
-  await waitForInkAppExit(app, createNode, process.stdout, state, onShortcut)
+  await runRefreshableInkApp(createNode)
   return result
 }
 
@@ -638,13 +639,7 @@ async function renderProjectLaunchApp(
         }
       }
     })
-  const state = { resizeVersion: 0 }
-  let app: RefreshableInkApp
-  const onShortcut = (input: string, key: ShortcutKey) => {
-    createGlobalShortcutHandler(app, createNode, process.stdout, state, onShortcut)(input, key)
-  }
-  app = render(wrapInkNode(createNode, state.resizeVersion, onShortcut))
-  await waitForInkAppExit(app, createNode, process.stdout, state, onShortcut)
+  await runRefreshableInkApp(createNode)
   return result
 }
 
@@ -674,16 +669,14 @@ async function runImportMutation(
   }
 }
 
-// Only templates are editable from the import panel: a preset belonging to
-// another project is shown so it can be copied, not managed from here.
 function findTemplateCandidate(
   candidates: ImportCandidate[],
   candidateId: string,
   action: 'renamed' | 'deleted',
 ): { candidate: ImportCandidate } | { ok: false; error: string } {
   const candidate = candidates.find(entry => entry.id === candidateId)
-  if (candidate?.kind !== 'template') {
-    return { ok: false, error: `Only global templates can be ${action} here` }
+  if (!candidate || !isTemplateCandidate(candidate)) {
+    return { ok: false, error: templateOnlyMessage(action) }
   }
   return { candidate }
 }
@@ -707,17 +700,24 @@ async function renderProjectManageApp(
   header?: InlineHeaderNotice,
 ): Promise<ProjectManageResult | undefined> {
   const input = await buildProjectLaunchInput(selectedSettings)
-  const candidates = await discoverImportCandidates({
-    homeDir: context.homeDir,
-    globalRoot,
-    cwd: context.cwd,
-  }).catch(() => [] as ImportCandidate[])
-  const importCandidates = candidates.map(candidate => toImportCandidateView(candidate, input.detected))
+  // Re-read on every open, and held here so the panel callbacks resolve ids
+  // against the same scan the panel is showing: this screen promotes templates
+  // and the panel renames and deletes them, so a list captured once is wrong
+  // the moment the user does either.
+  let candidates: ImportCandidate[] = []
+  const loadImportCandidates = async (): Promise<ImportCandidateView[]> => {
+    candidates = await discoverImportCandidates({
+      homeDir: context.homeDir,
+      globalRoot,
+      cwd: context.cwd,
+    }).catch(() => [] as ImportCandidate[])
+    return candidates.map(candidate => toImportCandidateView(candidate, input.detected))
+  }
   let result: ProjectManageResult | undefined
   const createNode = () =>
     wrapWithInlineHeader(h(ProjectManageApp, {
       ...input,
-      importCandidates,
+      loadImportCandidates,
       onPromoteSubmit: async (presetName: string, templateName: string, overwrite: boolean): Promise<ImportOutcome> => {
         const origin = { kind: 'project' as const, name: presetName, path: context.cwd, at: new Date().toISOString() }
         // Inside the mutation so a failed read is reported in the panel too —
@@ -732,11 +732,8 @@ async function renderProjectManageApp(
       onImportSubmit: async (candidateId: string, targetName: string, overwrite: boolean): Promise<ImportOutcome> => {
         const candidate = candidates.find(entry => entry.id === candidateId)
         if (!candidate) return { ok: false, error: 'That import source is no longer available' }
-        const origin = buildImportOrigin(candidate)
         return runImportMutation('launch_preset_already_exists', () => (
-          overwrite
-            ? launchPresetService.writePresetSettings(targetName, candidate.settings, { origin })
-            : launchPresetService.createPreset(targetName, candidate.settings, { origin })
+          importCandidateInto(launchPresetService, candidate, targetName, { overwrite })
         ))
       },
       onTemplateRenameSubmit: async (candidateId: string, newName: string): Promise<ImportOutcome> => {
@@ -790,13 +787,7 @@ async function renderProjectManageApp(
         }
       }
     }), header)
-  const state = { resizeVersion: 0 }
-  let app: RefreshableInkApp
-  const onShortcut = (input: string, key: ShortcutKey) => {
-    createGlobalShortcutHandler(app, createNode, process.stdout, state, onShortcut)(input, key)
-  }
-  app = render(wrapInkNode(createNode, state.resizeVersion, onShortcut))
-  await waitForInkAppExit(app, createNode, process.stdout, state, onShortcut)
+  await runRefreshableInkApp(createNode)
   return result
 }
 
@@ -895,13 +886,7 @@ async function renderManageApp(
         }
       }
     }), header)
-  const state = { resizeVersion: 0 }
-  let app: RefreshableInkApp
-  const onShortcut = (input: string, key: ShortcutKey) => {
-    createGlobalShortcutHandler(app, createNode, process.stdout, state, onShortcut)(input, key)
-  }
-  app = render(wrapInkNode(createNode, state.resizeVersion, onShortcut))
-  await waitForInkAppExit(app, createNode, process.stdout, state, onShortcut)
+  await runRefreshableInkApp(createNode)
   return result
 }
 
@@ -1308,6 +1293,17 @@ async function buildGlobalPreviewItems(selectedName: string): Promise<{ items: S
   return { items: previewState.items, cursor }
 }
 
+// A fresh linked worktree is where "preset not found" is most misleading: the
+// preset exists, just one checkout over. The direct route stays scriptable and
+// never blocks on a keypress, so it points at the interactive route that can
+// ask rather than asking itself. Only reached on the failure path, so the git
+// and index reads cost a launch nothing.
+async function worktreeSeedHint(): Promise<string> {
+  const source = await resolveWorktreeSeedSource(context.cwd, launchPresetService).catch(() => undefined)
+  if (!source) return ''
+  return `\nRun \`ccsp\` in this worktree to inherit presets from ${source.mainRoot}`
+}
+
 async function resolveDirectProjectLaunch(
   selectedSettings: SettingsSelectResult,
   projectPreset?: string,
@@ -1332,7 +1328,11 @@ async function resolveDirectProjectLaunch(
   )
   const toggles = name ? launchInput.statesByPreset[name] : undefined
   if (!name || !toggles) {
-    throw new CliError(`Launch preset not found: ${projectPreset}`, 1, 'launch_preset_not_found')
+    throw new CliError(
+      `Launch preset not found: ${projectPreset}${await worktreeSeedHint()}`,
+      1,
+      'launch_preset_not_found',
+    )
   }
 
   return {
@@ -1448,49 +1448,6 @@ async function runDirect(options: DirectRunOptions): Promise<void> {
   })
 }
 
-type WorktreeSeedSource = {
-  mainRoot: string
-  presets: Array<{ name: string; settings: LaunchPresetSettings }>
-  lastUsedName?: string
-}
-
-// Only offered when this worktree has nothing of its own: once it has presets,
-// the user has already made a decision here, and topping it up would only
-// produce name collisions and surprises.
-async function resolveWorktreeSeedSource(): Promise<WorktreeSeedSource | undefined> {
-  if ((await launchPresetService.listPresets()).length > 0) return undefined
-  if (await readWorktreeSeedMarker(context.cwd)) return undefined
-
-  const mainRoot = await resolveMainWorktreeRoot(context.cwd)
-  if (!mainRoot) return undefined
-
-  const mainService = createLaunchPresetService(mainRoot)
-  const entries = await mainService.listPresetsWithSettings().catch(() => [])
-  if (entries.length === 0) return undefined
-
-  const lastUsedName = await mainService.readLastUsed().catch(() => undefined)
-  return {
-    mainRoot,
-    presets: entries.map(entry => ({ name: entry.meta.name, settings: entry.settings })),
-    ...(lastUsedName ? { lastUsedName } : {}),
-  }
-}
-
-async function seedWorktreePresets(source: WorktreeSeedSource): Promise<void> {
-  const report = await copyPresetsInto(launchPresetService, source.mainRoot, source.presets)
-
-  // Only pointed at something that actually arrived: inheriting a pointer to a
-  // preset that failed to copy would leave the worktree opening on a name it
-  // does not have.
-  if (source.lastUsedName && report.copied.includes(source.lastUsedName)) {
-    await writeProjectLaunchLastUsedIfPresent(source.lastUsedName)
-  }
-
-  for (const line of formatSeedReport(report, source.presets.length, source.mainRoot)) {
-    process.stderr.write(`${line}\n`)
-  }
-}
-
 async function renderWorktreeSeedApp(source: WorktreeSeedSource): Promise<WorktreeSeedResult> {
   let result: WorktreeSeedResult = 'decline'
   const createNode = () =>
@@ -1502,22 +1459,18 @@ async function renderWorktreeSeedApp(source: WorktreeSeedSource): Promise<Worktr
         result = value
       },
     })
-  const state = { resizeVersion: 0 }
-  let app: RefreshableInkApp
-  const onShortcut = (input: string, key: ShortcutKey) => {
-    createGlobalShortcutHandler(app, createNode, process.stdout, state, onShortcut)(input, key)
-  }
-  app = render(wrapInkNode(createNode, state.resizeVersion, onShortcut))
-  await waitForInkAppExit(app, createNode, process.stdout, state, onShortcut)
+  await runRefreshableInkApp(createNode)
   return result
 }
 
 async function offerWorktreeSeed(): Promise<void> {
-  const source = await resolveWorktreeSeedSource()
+  const source = await resolveWorktreeSeedSource(context.cwd, launchPresetService)
   if (!source) return
 
   if (await renderWorktreeSeedApp(source) === 'accept') {
-    await seedWorktreePresets(source)
+    for (const line of await seedWorktreePresets(source, launchPresetService)) {
+      process.stderr.write(`${line}\n`)
+    }
     return
   }
 

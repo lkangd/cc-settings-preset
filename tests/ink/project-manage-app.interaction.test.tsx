@@ -809,7 +809,7 @@ describe('ProjectManageApp interactions', () => {
           lastUsedName="web"
           onSubmit={onSubmit}
           onImportSubmit={vi.fn()}
-          importCandidates={[]}
+          loadImportCandidates={async () => []}
         />,
       )
     })
@@ -844,7 +844,7 @@ describe('ProjectManageApp interactions', () => {
           statesByPreset={{}}
           onSubmit={onSubmit}
           onImportSubmit={onImportSubmit}
-          importCandidates={[{
+          loadImportCandidates={async () => [{
             id: 'candidate-0',
             kind: 'template',
             presetName: 'shared',
@@ -855,7 +855,7 @@ describe('ProjectManageApp interactions', () => {
       )
     })
 
-    act(() => {
+    await act(async () => {
       latestInputHandler()?.('i', {})
     })
 
@@ -873,7 +873,7 @@ describe('ProjectManageApp interactions', () => {
     expect(exitMock).toHaveBeenCalled()
   })
 
-  it('leaves the project list alone when the import panel is dismissed', () => {
+  it('leaves the project list alone when the import panel is dismissed', async () => {
     const onSubmit = vi.fn()
     let output: TestRenderer.ReactTestRenderer
 
@@ -885,12 +885,12 @@ describe('ProjectManageApp interactions', () => {
           statesByPreset={{ web: { plugins: [], skills: [], mcps: [] } }}
           onSubmit={onSubmit}
           onImportSubmit={vi.fn()}
-          importCandidates={[]}
+          loadImportCandidates={async () => []}
         />,
       )
     })
 
-    act(() => {
+    await act(async () => {
       latestInputHandler()?.('i', {})
     })
     act(() => {
@@ -899,6 +899,43 @@ describe('ProjectManageApp interactions', () => {
 
     expect(onSubmit).not.toHaveBeenCalled()
     expect(flattenJson(output!.toJSON())).toContain('Manage project launch presets')
+  })
+
+  it('rescans candidates every time the import panel opens', async () => {
+    // Promoting a preset with `s`, or deleting a template inside the panel,
+    // both change what is importable — so a list captured once before the
+    // screen mounted is wrong by the second visit.
+    const loadImportCandidates = vi.fn().mockResolvedValue([])
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <ProjectManageApp
+          presets={[{ name: 'web', fileName: 'web-launch.json', createdAt: '2026-05-19T00:00:00.000Z', updatedAt: '2026-05-19T00:00:00.000Z' }]}
+          detected={{ plugins: [], skills: [], mcps: [] }}
+          statesByPreset={{ web: { plugins: [], skills: [], mcps: [] } }}
+          onSubmit={vi.fn()}
+          onImportSubmit={vi.fn()}
+          loadImportCandidates={loadImportCandidates}
+        />,
+      )
+    })
+
+    // Nothing is read until the panel is actually asked for.
+    expect(loadImportCandidates).not.toHaveBeenCalled()
+
+    await act(async () => {
+      latestInputHandler()?.('i', {})
+    })
+    act(() => {
+      latestInputHandler()?.('', { escape: true })
+    })
+    await act(async () => {
+      latestInputHandler()?.('i', {})
+    })
+
+    expect(loadImportCandidates).toHaveBeenCalledTimes(2)
+    expect(flattenJson(output!.toJSON())).toContain('Import project launch preset')
   })
 
   it('marks an imported preset with where it came from', () => {

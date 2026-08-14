@@ -9,6 +9,7 @@ import {
 } from '../flows/settings-select-flow.js'
 import type { SettingsDisplayFormat } from '../core/schema.js'
 import { revealInFinder } from '../services/reveal-service.js'
+import { ConfirmDelete } from './components/confirm-delete.js'
 import { TextInput } from './components/text-input.js'
 import { TwoColumnSettingsView } from './components/two-column-settings-view.js'
 
@@ -132,12 +133,4 @@ export function ManageApp({ items, displayFormat = 'yaml', onSubmit, onRenameSub
       {message ? <Text color="yellow">{message}</Text> : null}
     </Box>
   )
-}
-
-function ConfirmDelete({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
-  useInput((input, key) => {
-    if (input === 'y') onConfirm()
-    if (input === 'n' || key.escape) onCancel()
-  })
-  return null
 }

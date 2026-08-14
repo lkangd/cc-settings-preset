@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { BorderedTitleBox } from './bordered-title-box.js'
+import { ConfirmDelete } from './confirm-delete.js'
 import { PresetConflictPrompt, type PresetConflictChoice } from './preset-conflict-prompt.js'
 import { TextInput } from './text-input.js'
 import { TruncateText } from './truncate-text.js'
@@ -34,6 +35,18 @@ type PanelRow =
   | { type: 'candidate'; candidate: ImportCandidateView }
 
 type PanelMode = 'browse' | 'name' | 'conflict' | 'rename' | 'delete'
+
+// Only templates are editable from here: a preset belonging to another project
+// is shown so it can be copied, not managed. The panel and the callbacks behind
+// it both have to enforce that, so both ask the same question in the same
+// words — the refusal is the same refusal either way.
+export function isTemplateCandidate(candidate?: { kind: ImportCandidateView['kind'] }): boolean {
+  return candidate?.kind === 'template'
+}
+
+export function templateOnlyMessage(action: 'renamed' | 'deleted'): string {
+  return `Only global templates can be ${action} here`
+}
 
 export function formatCandidateLabel(candidate: ImportCandidateView): string {
   return candidate.projectLabel
@@ -149,8 +162,8 @@ export function ImportPanel({
       return
     }
     if (input === 'r') {
-      if (active?.candidate.kind !== 'template') {
-        setError('Only global templates can be renamed here')
+      if (!active || !isTemplateCandidate(active.candidate)) {
+        setError(templateOnlyMessage('renamed'))
         return
       }
       setDraftName(active.candidate.presetName)
@@ -159,8 +172,8 @@ export function ImportPanel({
       return
     }
     if (input === 'd') {
-      if (active?.candidate.kind !== 'template') {
-        setError('Only global templates can be deleted here')
+      if (!active || !isTemplateCandidate(active.candidate)) {
+        setError(templateOnlyMessage('deleted'))
         return
       }
       setError(null)
@@ -248,7 +261,7 @@ export function ImportPanel({
       <Box flexDirection="column">
         <Text color="red">{`Delete global template ${active.candidate.presetName}?`}</Text>
         <Text dimColor>press y to confirm · esc cancel</Text>
-        <ConfirmTemplateDelete
+        <ConfirmDelete
           onCancel={() => setMode('browse')}
           onConfirm={async () => {
             const outcome = await onDeleteTemplate(active.candidate.id)
@@ -298,12 +311,4 @@ export function ImportPanel({
       {!error && notice ? <TruncateText color="yellow">{notice}</TruncateText> : null}
     </Box>
   )
-}
-
-function ConfirmTemplateDelete({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
-  useInput((input, key) => {
-    if (input === 'y') onConfirm()
-    if (input === 'n' || key.escape) onCancel()
-  })
-  return null
 }

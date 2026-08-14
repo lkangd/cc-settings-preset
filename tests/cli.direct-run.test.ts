@@ -27,6 +27,7 @@ const resolvePluginStatesMock = vi.fn<(...args: unknown[]) => Array<{
 }>>(() => [])
 const spawnClaudeMock = vi.fn().mockResolvedValue(0)
 const renderMock = vi.fn()
+const resolveWorktreeSeedSourceMock = vi.fn()
 
 const basePreset = {
   type: 'base' as const,
@@ -147,6 +148,14 @@ vi.mock('../src/services/launch-preset-service.js', () => ({
   }),
 }))
 
+// The direct route never renders the inheritance prompt, but it does ask
+// whether one *could* have been offered so it can say so in its error. Stubbed
+// here to keep `git rev-parse` out of the unit suite.
+vi.mock('../src/services/worktree-seed-service.js', () => ({
+  resolveWorktreeSeedSource: (...args: unknown[]) => resolveWorktreeSeedSourceMock(...args),
+  seedWorktreePresets: vi.fn(),
+}))
+
 vi.mock('../src/services/claude-session-service.js', () => ({
   createClaudeSessionService: () => ({
     snapshot: vi.fn().mockResolvedValue(new Set<string>()),
@@ -193,6 +202,8 @@ describe('cli direct run', () => {
   beforeEach(() => {
     vi.resetModules()
     renderMock.mockReset()
+    resolveWorktreeSeedSourceMock.mockReset()
+    resolveWorktreeSeedSourceMock.mockResolvedValue(undefined)
     listPresetsMock.mockReset()
     listPresetsWithSettingsMock.mockReset()
     readIndexMock.mockReset()
@@ -352,6 +363,34 @@ describe('cli direct run', () => {
     const { main } = await import('../src/cli.js')
     await expect(main(['node', 'cli', '-g', 'missing'])).rejects.toMatchObject({
       message: 'Preset not found: missing',
+    })
+  })
+
+  it('points a fresh worktree at the interactive route when the preset is missing', async () => {
+    // The preset exists — one checkout over. Blocking the direct route on a y/n
+    // prompt would break scripted launches, so it names the way to get one.
+    listLaunchPresetsMock.mockResolvedValue([])
+    listLaunchPresetsWithSettingsMock.mockResolvedValue([])
+    resolveWorktreeSeedSourceMock.mockResolvedValue({
+      mainRoot: '/tmp/main-checkout',
+      presets: [{ name: 'web', settings: {} }],
+    })
+
+    const { main } = await import('../src/cli.js')
+
+    await expect(main(['node', 'cli', '-g', 'work', '-p', 'web'])).rejects.toMatchObject({
+      message: 'Launch preset not found: web\nRun `ccsp` in this worktree to inherit presets from /tmp/main-checkout',
+    })
+  })
+
+  it('leaves the missing-preset error alone outside a seedable worktree', async () => {
+    listLaunchPresetsMock.mockResolvedValue([])
+    listLaunchPresetsWithSettingsMock.mockResolvedValue([])
+
+    const { main } = await import('../src/cli.js')
+
+    await expect(main(['node', 'cli', '-g', 'work', '-p', 'web'])).rejects.toMatchObject({
+      message: 'Launch preset not found: web',
     })
   })
 

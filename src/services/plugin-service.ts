@@ -1,4 +1,5 @@
 import type { Settings } from '../core/schema.js'
+import { appendMissing } from './missing-toggle-service.js'
 import type { SettingsSourceScope } from './settings-source-service.js'
 
 export type PluginState = {
@@ -97,12 +98,11 @@ export function mergeMissingPluginStates(
   states: PluginState[],
   overrides: Record<string, boolean> = {},
 ): PluginState[] {
-  const known = new Set(states.map(state => state.name))
-  const missing = Object.entries(overrides)
-    .filter(([name]) => !known.has(name))
-    .map(([name, enabled]): PluginState => ({ name, enabled, source: 'missing' }))
-
-  return missing.length === 0 ? states : sortPluginStates([...states, ...missing])
+  return appendMissing(states, known => (
+    Object.entries(overrides)
+      .filter(([name]) => !known.has(name))
+      .map(([name, enabled]): PluginState => ({ name, enabled, source: 'missing' }))
+  ), sortPluginStates)
 }
 
 function matchesPluginRegistryKey(manifestName: string, pluginName: string): boolean {

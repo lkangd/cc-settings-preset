@@ -83,24 +83,23 @@ export function createLaunchPresetStore(options: LaunchPresetStoreOptions) {
     return resolvePresetIndexKey((await readIndex()).presets, nameInput)
   }
 
-  async function readMeta(nameInput: string): Promise<LaunchPresetMeta | undefined> {
-    const index = await readIndex()
-    const name = resolvePresetIndexKey(index.presets, nameInput)
-    return name ? index.presets[name] : undefined
-  }
-
-  async function requireMeta(nameInput: string): Promise<LaunchPresetMeta> {
-    const meta = await readMeta(nameInput)
+  // `index` is passed in by the callers that have just read it themselves, so a
+  // write does not bounce off the cache a second time on its way to the same
+  // object.
+  async function requireMeta(nameInput: string, index?: LaunchPresetIndex): Promise<LaunchPresetMeta> {
+    const presets = (index ?? await readIndex()).presets
+    const name = resolvePresetIndexKey(presets, nameInput)
+    const meta = name ? presets[name] : undefined
     if (!meta) throw new CliError(`${label} not found: ${nameInput}`, 1, notFoundCode)
     return meta
   }
 
+  // `invalidateIndex`, `getPresetPath` and `readMeta` are deliberately absent:
+  // they are how this store keeps its own promises about caching and about
+  // staying inside its directory, and nothing outside has a reason to hold them.
   const store = {
     readIndex,
-    invalidateIndex,
-    getPresetPath,
     resolveName,
-    readMeta,
     requireMeta,
 
     async listPresets(): Promise<LaunchPresetMeta[]> {
@@ -160,7 +159,7 @@ export function createLaunchPresetStore(options: LaunchPresetStoreOptions) {
       createOptions: CreatePresetOptions = {},
     ): Promise<LaunchPresetMeta> {
       const index = await readIndex()
-      const existing = await requireMeta(nameInput)
+      const existing = await requireMeta(nameInput, index)
       const settings = parseLaunchPresetSettings(settingsInput)
 
       const updated: LaunchPresetMeta = {
@@ -179,7 +178,7 @@ export function createLaunchPresetStore(options: LaunchPresetStoreOptions) {
     async renamePreset(nameInput: string, newNameInput: string): Promise<LaunchPresetMeta> {
       const newName = normalizePresetName(newNameInput, { preserveCase: true })
       const index = await readIndex()
-      const existing = await requireMeta(nameInput)
+      const existing = await requireMeta(nameInput, index)
       if (newName === existing.name) {
         return { ...existing, updatedAt: nowIso() }
       }

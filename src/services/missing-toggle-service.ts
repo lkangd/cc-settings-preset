@@ -17,6 +17,20 @@ function missingFrom(names: string[], detected: Array<{ name: string }>): string
   return names.filter(name => !known.has(name))
 }
 
+// The shared skeleton behind every "put the preset's own entries back on the
+// list" pass: which names are already there, and what happens to the ones that
+// are not. Plugins, skills and mcps differ only in what they build and how they
+// sort — keeping the rest here is what stops one of the three drifting on
+// dedup or append order with nothing to catch it.
+export function appendMissing<T extends { name: string }>(
+  states: T[],
+  buildMissing: (known: ReadonlySet<string>) => T[],
+  sort: (items: T[]) => T[],
+): T[] {
+  const missing = buildMissing(new Set(states.map(state => state.name)))
+  return missing.length === 0 ? states : sort([...states, ...missing])
+}
+
 // Names a preset refers to that this project cannot see. A preset is a
 // statement of intent, not a snapshot, so these are neither an error nor
 // something to drop — they are what the user needs to be told about before

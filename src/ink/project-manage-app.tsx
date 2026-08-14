@@ -9,6 +9,7 @@ import {
   type ProjectLaunchFlowState,
 } from '../flows/project-launch-flow.js'
 import type { DisableLockSource } from '../services/disable-lock-service.js'
+import { ConfirmDelete } from './components/confirm-delete.js'
 import { ConfirmEnableUnlock } from './components/confirm-enable-unlock.js'
 import { TextInput } from './components/text-input.js'
 import { ImportPanel, type ImportCandidateView, type ImportOutcome } from './components/import-panel.js'
@@ -62,7 +63,11 @@ type Props = Omit<ProjectLaunchAppProps, 'onSubmit'> & {
   onSaveSubmit?: (presetName: string, toggles: ProjectLaunchToggleState) => Promise<string | null>
   onCreateSubmit?: (saveAs: string, toggles: ProjectLaunchToggleState) => Promise<string | null>
   onRenameSubmit?: (presetName: string, newName: string) => Promise<string | null>
-  importCandidates?: ImportCandidateView[]
+  // A callback rather than a list: the candidates are whatever is on disk when
+  // the panel opens, and this screen can change that itself — promoting a
+  // preset with `s`, or renaming and deleting templates inside the panel. A
+  // snapshot taken before mounting goes stale the first time it does.
+  loadImportCandidates?: () => Promise<ImportCandidateView[]>
   onPromoteSubmit?: (presetName: string, templateName: string, overwrite: boolean) => Promise<ImportOutcome>
   onImportSubmit?: (candidateId: string, targetName: string, overwrite: boolean) => Promise<ImportOutcome>
   onTemplateRenameSubmit?: (candidateId: string, newName: string) => Promise<ImportOutcome>
@@ -79,7 +84,7 @@ export function ProjectManageApp({
   onSaveSubmit,
   onCreateSubmit,
   onRenameSubmit,
-  importCandidates = [],
+  loadImportCandidates,
   onPromoteSubmit,
   onImportSubmit,
   onTemplateRenameSubmit,
@@ -104,6 +109,10 @@ export function ProjectManageApp({
   const [renameError, setRenameError] = useState<string | null>(null)
   const [promoteName, setPromoteName] = useState('')
   const [promoteError, setPromoteError] = useState<string | null>(null)
+  // `null` while a scan is in flight. The scan is a handful of small JSON reads
+  // and normally lands within a frame, but the panel must not mount against a
+  // list it does not have yet.
+  const [importCandidates, setImportCandidates] = useState<ImportCandidateView[] | null>(null)
 
   async function saveChangedPresets(changedPresets: ChangedProjectLaunchPresets): Promise<string[] | undefined> {
     if (!onSaveSubmit) return []
@@ -137,6 +146,13 @@ export function ProjectManageApp({
   }
 
   useInput((input, key) => {
+    // The panel owns its own keys once it is up, but while the scan is still
+    // running nothing else is listening — and a scan waiting on an unresponsive
+    // filesystem would otherwise leave the user with no way back.
+    if (mode === 'import' && !importCandidates && (key.escape || input === 'q')) {
+      setMode('browse')
+      return
+    }
     if (mode !== 'browse' || saveMode !== 'none' || state.pendingEnableUnlock) return
     if (input === 'q') {
       exit()
@@ -190,7 +206,7 @@ export function ProjectManageApp({
       return
     }
     if (input === 'i') {
-      if (!onImportSubmit) return
+      if (!onImportSubmit || !loadImportCandidates) return
       // A successful import refreshes the whole screen from disk, which would
       // take every unsaved toggle with it without ever saying so.
       if (state.dirty) {
@@ -198,7 +214,9 @@ export function ProjectManageApp({
         return
       }
       setMessage(null)
+      setImportCandidates(null)
       setMode('import')
+      void loadImportCandidates().then(setImportCandidates, () => setImportCandidates([]))
       return
     }
     if (input === 'l' && !key.ctrl && !key.meta) {
@@ -317,6 +335,14 @@ export function ProjectManageApp({
   }
 
   if (mode === 'import') {
+    if (!importCandidates) {
+      return (
+        <Box flexDirection="column">
+          <Text dimColor>Scanning global templates and recent projects…</Text>
+        </Box>
+      )
+    }
+
     return (
       <ImportPanel
         candidates={importCandidates}
@@ -448,12 +474,4 @@ export function ProjectManageApp({
       {!columnsProps.toggleMessage && message ? <Text color={message.color}>{message.text}</Text> : null}
     </Box>
   )
-}
-
-function ConfirmDelete({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
-  useInput((input, key) => {
-    if (input === 'y') onConfirm()
-    if (input === 'n' || key.escape) onCancel()
-  })
-  return null
 }

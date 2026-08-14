@@ -366,7 +366,10 @@ export function createLaunchPresetService(cwd: string) {
       // stored name against the index, and the rename removes the old name from
       // it — so a reading taken afterwards always reports "nothing was last
       // used" and the pointer is left dangling on a preset that no longer exists.
-      const lastUsed = await readLastUsed()
+      // A pointer too broken to parse must not block the rename either: the user
+      // asked for this outright, and a pointer that cannot be read already
+      // resolves to nothing.
+      const lastUsed = await readLastUsed().catch(() => undefined)
       const updated = await store.renamePreset(nameInput, newNameInput)
       if (updated.name !== existing.name && lastUsed === existing.name) {
         await writeLastUsed(updated.name)

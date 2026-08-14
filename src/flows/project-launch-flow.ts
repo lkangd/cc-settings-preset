@@ -157,7 +157,11 @@ export function formatEnableLockReason(source: ToggleColumnItem['source']): stri
 // starts working the moment that changes.
 export const MISSING_ITEM_REASON = 'Not installed in this project · this preset applies it once installed'
 
-function isMissingItem(item: { source?: ToggleColumnItem['source'] }): boolean {
+// Exported so the row that renders a missing item and the rules that pin it to
+// the bottom and refuse to toggle it all read the same definition: three
+// behaviours splitting over two copies is how a list ends up sorting one way
+// and looking another.
+export function isMissingItem(item: { source?: ToggleColumnItem['source'] }): boolean {
   return item.source === 'missing'
 }
 

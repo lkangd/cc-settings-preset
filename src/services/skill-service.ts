@@ -5,6 +5,7 @@ import { readDirSafe } from '../core/fs.js'
 import { pathExists } from '../core/json.js'
 import { resolveProjectCommandsDir, resolveProjectSkillsDir, resolveUserSkillsDir } from '../core/paths.js'
 import type { Settings, SkillOverrideValue } from '../core/schema.js'
+import { appendMissing } from './missing-toggle-service.js'
 import { discoverCachedClaudePlugins } from './plugin-cache-service.js'
 import type { SettingsSourceScope } from './settings-source-service.js'
 
@@ -215,16 +216,15 @@ export function mergeMissingSkillStates(
   states: SkillState[],
   overrides: Record<string, SkillOverrideValue> = {},
 ): SkillState[] {
-  const known = new Set(states.map(state => state.name))
-  const missing = Object.entries(overrides)
-    .filter(([name]) => !known.has(name))
-    .map(([name, value]): SkillState => ({
-      name,
-      enabled: value !== 'off',
-      source: 'missing',
-      toggleable: false,
-      overrideValue: value,
-    }))
-
-  return missing.length === 0 ? states : sortSkillStates([...states, ...missing])
+  return appendMissing(states, known => (
+    Object.entries(overrides)
+      .filter(([name]) => !known.has(name))
+      .map(([name, value]): SkillState => ({
+        name,
+        enabled: value !== 'off',
+        source: 'missing',
+        toggleable: false,
+        overrideValue: value,
+      }))
+  ), sortSkillStates)
 }

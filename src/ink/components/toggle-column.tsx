@@ -1,5 +1,5 @@
 import { Text } from 'ink'
-import type { ToggleColumnItem } from '../../flows/project-launch-flow.js'
+import { isMissingItem, type ToggleColumnItem } from '../../flows/project-launch-flow.js'
 import { BorderedTitleBox } from './bordered-title-box.js'
 import { TruncateText } from './truncate-text.js'
 
@@ -29,12 +29,8 @@ function sourceBadge(source: ToggleColumnItem['source']): string {
   return SOURCE_BADGE_ITEMS.find(item => item.sources.includes(source))?.badge ?? '[D]'
 }
 
-export function isMissingToggleItem(item: Pick<ToggleColumnItem, 'source'>): boolean {
-  return item.source === 'missing'
-}
-
 export function ToggleItemText({ item }: { item: ToggleColumnItem }) {
-  const missing = isMissingToggleItem(item)
+  const missing = isMissingItem(item)
   const dimProps = missing || (item.enableLocked && !item.enabled) ? { dimColor: true as const } : {}
 
   return (
@@ -74,7 +70,7 @@ export function ToggleColumn({
       {...(height === undefined ? {} : { height })}
     >
       {items.map((item, index) => {
-        const lockedOff = Boolean(item.enableLocked && !item.enabled) || isMissingToggleItem(item)
+        const lockedOff = Boolean(item.enableLocked && !item.enabled) || isMissingItem(item)
         const focusedLine = focused && index === cursor
         const dimProps = lockedOff ? { dimColor: true as const } : {}
         return (

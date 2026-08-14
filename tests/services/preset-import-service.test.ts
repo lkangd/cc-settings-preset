@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
@@ -72,6 +72,20 @@ describe('import candidate discovery', () => {
     await writeRecentProjects(homeDir, [cwd])
 
     expect(await discoverImportCandidates({ homeDir, globalRoot, cwd })).toEqual([])
+  })
+
+  it('never offers the current project reached through a symlink', async () => {
+    const { homeDir, globalRoot } = await createFixture()
+    // The recorded path is the real one; the user is standing in an alias of it.
+    // A lexical comparison sees two different projects and lets this project
+    // import itself.
+    const realPath = await realpath(await mkdtemp(join(tmpdir(), 'ccsp-real-')))
+    const aliasPath = join(await mkdtemp(join(tmpdir(), 'ccsp-alias-')), 'link')
+    await symlink(realPath, aliasPath)
+    await createLaunchPresetService(realPath).createPreset('local-only', {})
+    await writeRecentProjects(homeDir, [realPath])
+
+    expect(await discoverImportCandidates({ homeDir, globalRoot, cwd: aliasPath })).toEqual([])
   })
 
   it('skips recent projects whose directory is gone', async () => {

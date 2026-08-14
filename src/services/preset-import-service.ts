@@ -45,6 +45,20 @@ async function isDirectory(path: string): Promise<boolean> {
   }
 }
 
+// `resolve()` normalizes `.`, `..` and separators but not symlinks, so a
+// project recorded under its real path and later entered through an alias
+// compares as two different projects — and the current one shows up in its own
+// candidate list. Falls back to the lexical form when the path cannot be
+// resolved: something that does not exist is not the directory we are standing
+// in either, and the comparison stays as good as it was before.
+async function canonicalPath(path: string): Promise<string> {
+  try {
+    return await fs.realpath(path)
+  } catch {
+    return resolve(path)
+  }
+}
+
 // Read-only view of another project's launch presets. The error codes are never
 // surfaced: a project we merely browse is allowed to be broken, and the whole
 // read is discarded if it is.
@@ -78,6 +92,13 @@ export type SeedReport = {
 // presets up by name.
 export type LaunchPresetWriter = Pick<ReturnType<typeof createLaunchPresetService>, 'createPreset'>
 
+// Both ways a preset can arrive here — copied wholesale from a main worktree,
+// or picked one at a time out of the import panel — stamp the same provenance,
+// so there is one place that decides what "where this came from" looks like.
+function buildOrigin(kind: PresetOrigin['kind'], name: string, path: string | undefined, at: string): PresetOrigin {
+  return { kind, name, ...(path ? { path } : {}), at }
+}
+
 // Copies a set of presets into a project one at a time, keeping going past a
 // failure. These are plain file writes and idempotent, so a partial result is
 // something the user can simply retry — whereas a rollback has its own failure
@@ -93,7 +114,7 @@ export async function copyPresetsInto(
   for (const preset of presets) {
     try {
       await service.createPreset(preset.name, preset.settings, {
-        origin: { kind: 'project', name: preset.name, path: sourcePath, at },
+        origin: buildOrigin('project', preset.name, sourcePath, at),
       })
       report.copied.push(preset.name)
     } catch (error) {
@@ -116,12 +137,31 @@ export function formatSeedReport(report: SeedReport, total: number, sourcePath: 
 }
 
 export function buildImportOrigin(candidate: ImportCandidate, at = new Date().toISOString()): PresetOrigin {
-  return {
-    kind: candidate.kind,
-    name: candidate.presetName,
-    ...(candidate.projectPath ? { path: candidate.projectPath } : {}),
-    at,
+  return buildOrigin(candidate.kind, candidate.presetName, candidate.projectPath, at)
+}
+
+export type ImportTargetWriter = Pick<
+  ReturnType<typeof createLaunchPresetService>,
+  'createPreset' | 'writePresetSettings'
+>
+
+// Landing a candidate in a project is a single decision — which write, under
+// which name, carrying which provenance — and it belongs beside the discovery
+// that produced the candidate rather than in whichever panel callback happens
+// to trigger it. Conflicts are left to throw: the caller is the only one that
+// knows whether it can offer the user a way out.
+export async function importCandidateInto(
+  service: ImportTargetWriter,
+  candidate: ImportCandidate,
+  targetName: string,
+  options: { overwrite?: boolean } = {},
+): Promise<void> {
+  const origin = buildImportOrigin(candidate)
+  if (options.overwrite) {
+    await service.writePresetSettings(targetName, candidate.settings, { origin })
+    return
   }
+  await service.createPreset(targetName, candidate.settings, { origin })
 }
 
 // Everything the current project could import, in one pass. Scanning the whole
@@ -133,9 +173,9 @@ export async function discoverImportCandidates(
 ): Promise<ImportCandidate[]> {
   const templateService = createLaunchTemplateService(input.globalRoot)
   const globalLastSettings = createGlobalLastSettingsService(input.homeDir)
-  const currentPath = resolve(input.cwd)
 
-  const [templateEntries, projectPaths] = await Promise.all([
+  const [currentPath, templateEntries, projectPaths] = await Promise.all([
+    canonicalPath(input.cwd),
     templateService.listTemplatesWithSettings().catch(() => []),
     globalLastSettings.listProjectPaths().catch(() => []),
   ])
@@ -147,8 +187,8 @@ export async function discoverImportCandidates(
     counts: countEntries(entry.settings),
   }))
 
-  const scannable = projectPaths.filter(projectPath => resolve(projectPath) !== currentPath)
-  const projectGroups = await Promise.all(scannable.map(async projectPath => {
+  const projectGroups = await Promise.all(projectPaths.map(async projectPath => {
+    if (await canonicalPath(projectPath) === currentPath) return []
     if (!await isDirectory(projectPath)) return []
     return (await readProjectPresets(projectPath)).map((preset): Omit<ImportCandidate, 'id'> => ({
       kind: 'project',

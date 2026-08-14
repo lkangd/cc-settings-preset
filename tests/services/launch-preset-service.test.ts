@@ -7,6 +7,7 @@ import {
   resolveCcspStatuslineUnderlyingCommandPath,
   resolveCcspStatuslineUnderlyingPath,
   resolveCcspStatuslineWrapperPath,
+  resolveProjectLastUsedPath,
   resolveProjectTempSettingsDir,
   resolveProjectTempSettingsPath,
 } from '../../src/core/paths.js'
@@ -123,6 +124,22 @@ describe('launch preset service', () => {
     await service.deletePreset('web')
 
     expect(await service.readLastUsed()).toBeUndefined()
+  })
+
+  it('renames past a last-used pointer too broken to read', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ccsp-project-'))
+    const service = createLaunchPresetService(cwd)
+
+    await service.createPreset('web', {})
+    await ensureProjectCcspStore(cwd)
+    await writeFile(resolveProjectLastUsedPath(cwd), '{ not json', 'utf8')
+
+    // The rename is what the user asked for outright, and a pointer that cannot
+    // be parsed already resolves to nothing — it must not stand in the way.
+    const renamed = await service.renamePreset('web', 'api')
+
+    expect(renamed.name).toBe('api')
+    expect((await service.listPresets()).map(preset => preset.name)).toEqual(['api'])
   })
 
   it('treats dot and hyphen normalized rename targets as the same preset', async () => {
