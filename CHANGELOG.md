@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.0 (2026-08-14)
+
+### Features
+* **code-review**: add documentation for import panel and launch preset store issues
+* **progress-line**: implement progress line for plugin installation feedback
+* **templates**: introduce global launch preset templates and import functionality
+
+### Code Refactoring
+* **cli**: streamline app rendering and enhance import candidate handling
+
 ## 1.3.4 (2026-08-11)
 
 ### Features
