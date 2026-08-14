@@ -208,6 +208,38 @@ describe('createClaudePluginInstallationService', () => {
     expect(runner).toHaveBeenCalledTimes(2)
   })
 
+  it('announces each install it is about to run, counting only the plugins that need one', async () => {
+    const home = await createHome()
+    const installPath = join(home, 'cache', 'present')
+    await fs.mkdir(installPath, { recursive: true })
+    await writeRegistry(home, {
+      version: 2,
+      plugins: {
+        present: [{ scope: 'project', projectPath: '/repo/worktree', installPath }],
+      },
+    })
+    const onProgress = vi.fn()
+
+    await createClaudePluginInstallationService(home, successfulRunner())
+      .synchronizeProjectPlugins('/repo/worktree', projectPlugins(['present', 'first', 'second']), onProgress)
+
+    // 报告发生在安装之前：这条线本来就是给「正在等」的那一刻看的。
+    expect(onProgress.mock.calls.map(([progress]) => progress)).toEqual([
+      { pluginName: 'first', index: 1, total: 2 },
+      { pluginName: 'second', index: 2, total: 2 },
+    ])
+  })
+
+  it('still announces an install whose runner then fails', async () => {
+    const home = await createHome()
+    const onProgress = vi.fn()
+
+    await createClaudePluginInstallationService(home, vi.fn<PluginInstallRunner>().mockRejectedValue(new Error('spawn failed')))
+      .synchronizeProjectPlugins('/repo/worktree', projectPlugins(['broken']), onProgress)
+
+    expect(onProgress).toHaveBeenCalledWith({ pluginName: 'broken', index: 1, total: 1 })
+  })
+
   it('never installs a plugin the preset only names as missing here', async () => {
     const home = await createHome()
     const runner = successfulRunner()

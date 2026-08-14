@@ -272,7 +272,7 @@ describe('cli direct run', () => {
     const { main } = await import('../src/cli.js')
     await main(['node', 'cli', '-g', 'work', '-p', 'web'])
 
-    expect(synchronizeProjectPluginsMock).toHaveBeenCalledWith('/tmp/project', pluginStates)
+    expect(synchronizeProjectPluginsMock).toHaveBeenCalledWith('/tmp/project', pluginStates, expect.any(Function))
   })
 
   it('renders dry-run preview without launching Claude', async () => {

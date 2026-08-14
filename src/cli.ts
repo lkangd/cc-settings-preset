@@ -14,6 +14,7 @@ import { resolvePresetIndexKey } from './core/name.js'
 import { CliError, type CliErrorCode } from './core/errors.js'
 import { readJsonFile } from './core/json.js'
 import { createPathContext, resolveGlobalRoot, resolveUserClaudeSettingsPath } from './core/paths.js'
+import { createProgressLine } from './core/progress-line.js'
 import { parseSettings, type BasePresetMeta, type CcspConfig, type RunMode, type SessionBinding, type SettingsDisplayFormat } from './core/schema.js'
 import { spawnClaude } from './core/spawn.js'
 import { ConfigApp } from './ink/config-app.js'
@@ -74,7 +75,10 @@ import {
   resolveDeniedMcpServers
 } from './services/mcp-service.js'
 import { createClaudeLoginService } from './services/claude-login-service.js'
-import { createClaudePluginInstallationService } from './services/claude-plugin-installation-service.js'
+import {
+  createClaudePluginInstallationService,
+  type PluginInstallProgressReporter,
+} from './services/claude-plugin-installation-service.js'
 import { CLAUDE_OFFICIAL_PRESET_NAME, createPresetService } from './services/preset-service.js'
 import { createSettingsSourceService, type SettingsSource } from './services/settings-source-service.js'
 import { readManagedSettings } from './services/managed-settings-service.js'
@@ -894,6 +898,25 @@ async function createPresetInteractive(header?: InlineHeaderNotice): Promise<Bas
   return renderCreateApp(header)
 }
 
+// This runs after the Ink UI is gone and before Claude takes over the terminal, so a
+// plugin install — up to a minute of silence on a cold marketplace fetch — looks like
+// a hung launch. Nothing finer than "which plugin, for how long" is available: the
+// official installer prints only its opening line until it is done.
+async function withPluginInstallProgress<T>(
+  run: (onProgress: PluginInstallProgressReporter) => Promise<T>,
+): Promise<T> {
+  const progressLine = createProgressLine(process.stderr)
+  try {
+    // The counter is shown even at `(1/1)`: what the person staring at the wait wants to
+    // know is not only what is being fetched but whether anything follows it.
+    return await run(({ pluginName, index, total }) => {
+      progressLine.update(`Installing Claude plugin "${pluginName}" (${index}/${total})…`)
+    })
+  } finally {
+    progressLine.stop()
+  }
+}
+
 async function launchClaudeWithFinalizedSettings(input: {
   baseSettings: unknown
   globalName: string
@@ -959,7 +982,9 @@ async function launchClaudeWithFinalizedSettings(input: {
       await launchPresetService.writeSessionBinding({ sessionId: session.sessionId, ...bindingInput })
     }
     const pluginSync = await profileStep('sync-installed-plugins', () =>
-      claudePluginInstallationService.synchronizeProjectPlugins(context.cwd, input.toggles.plugins),
+      withPluginInstallProgress(onProgress =>
+        claudePluginInstallationService.synchronizeProjectPlugins(context.cwd, input.toggles.plugins, onProgress),
+      ),
     )
     if (pluginSync.warning) process.stderr.write(`Warning: ${pluginSync.warning}\n`)
     for (const failure of pluginSync.failures) {

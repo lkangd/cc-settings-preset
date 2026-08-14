@@ -26,6 +26,17 @@ type PluginInstallResult = {
 
 export type PluginInstallRunner = (pluginName: string, projectPath: string) => Promise<PluginInstallResult>
 
+// Reported once per plugin that actually needs installing, right before its install
+// starts. `claude plugin install` says nothing between "Installing…" and its result —
+// there is no finer-grained progress to pass on than which plugin is being fetched.
+export type PluginInstallProgress = {
+  pluginName: string
+  index: number
+  total: number
+}
+
+export type PluginInstallProgressReporter = (progress: PluginInstallProgress) => void
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
@@ -127,7 +138,11 @@ export function createClaudePluginInstallationService(
   const registryPath = resolveUserClaudeInstalledPluginsPath(homeDir)
 
   return {
-    async synchronizeProjectPlugins(projectPath: string, pluginStates: PluginState[]): Promise<PluginInstallationSyncResult> {
+    async synchronizeProjectPlugins(
+      projectPath: string,
+      pluginStates: PluginState[],
+      onProgress?: PluginInstallProgressReporter,
+    ): Promise<PluginInstallationSyncResult> {
       // `missing` rows are a preset naming something this machine does not have.
       // They are shown greyed out and cannot be toggled, so installing them here
       // would be the one thing the user was told would not happen — the promise
@@ -150,10 +165,12 @@ export function createClaudePluginInstallationService(
         installed: await hasCurrentProjectInstallation(pluginName, projectPath, plugins),
       })))
       const failures: PluginInstallationSyncResult['failures'] = []
+      // Counted upfront so the very first report can already say how many follow.
+      const pending = installationStates.filter(state => !state.installed)
 
       // Claude owns one shared installation registry, so installs must not race each other.
-      for (const { pluginName, installed } of installationStates) {
-        if (installed) continue
+      for (const [offset, { pluginName }] of pending.entries()) {
+        onProgress?.({ pluginName, index: offset + 1, total: pending.length })
         try {
           const result = await runPluginInstall(pluginName, projectPath)
           if (result.status !== 0) failures.push({ pluginName, stderr: result.stderr.trim() })
