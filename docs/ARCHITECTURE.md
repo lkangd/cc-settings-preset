@@ -65,9 +65,11 @@ every TUI state transition unit-testable without rendering React.
 
 `src/services/` is the side-effect layer: each file is a small factory
 that closes over a `PathContext` (a `{ homeDir, cwd }` pair) and exposes
-async operations over JSON stores under `~/.ccsp/` (global presets and
-`last-settings.json`), `<cwd>/.claude/.ccsp/` (per-project launch presets,
-session bindings, temp settings, statusline wrapper scripts), and the
+async operations over JSON stores under `~/.ccsp/` (global presets,
+`last-settings.json`, and the cross-project launch templates in
+`launch-presets/`), `<cwd>/.claude/.ccsp/` (per-project launch presets,
+session bindings, temp settings, statusline wrapper scripts, and the
+`worktree-seed.json` decline marker), and the
 host's Claude Code state (`~/.claude/settings.json`, `~/.claude.json`,
 `/Library/Application Support/ClaudeCode/`).
 
@@ -93,9 +95,11 @@ safe to import from any layer and has no side effects on import.
 
 - [`src/core/paths.ts`](src/core/paths.ts) — every filesystem path the
   app touches, computed from a `PathContext`. The canonical list of
-  storage locations: `~/.ccsp/{index.json, settings/…}` (global presets),
+  storage locations: `~/.ccsp/{index.json, settings/…, launch-presets/}`
+  (global presets and global launch templates — two flat, independent
+  namespaces, so a base preset and a template may share a name),
   `<cwd>/.claude/.ccsp/{launch-presets/, sessions.json, last-used.json,
-  tmp/}` (per-project state), and read-only paths into Claude Code's
+  worktree-seed.json, tmp/}` (per-project state), and read-only paths into Claude Code's
   own state (`~/.claude/`, `~/.claude.json`,
   `/Library/Application Support/ClaudeCode/`).
 - [`src/core/schema.ts`](src/core/schema.ts) — Zod schemas for every
@@ -149,6 +153,31 @@ themselves; that injection point is what `cli.ts` sets up once at startup.
   (`writeTempSettings` → `<cwd>/.claude/.ccsp/tmp/<stem>-settings.json`),
   the session-binding store (`sessions.json`), and the temp-artifact
   pruner (`MAX_TEMP_SETTINGS_FILES = 50`).
+- [`src/services/launch-preset-store.ts`](src/services/launch-preset-store.ts)
+  — the shared index-plus-files CRUD both launch preset stores are built
+  on. Project presets and global templates differ only in where the files
+  live and what their errors are called, so both pass a directory and a
+  pair of error codes into this one factory.
+- [`src/services/launch-template-service.ts`](src/services/launch-template-service.ts)
+  — CRUD over the **global** launch templates at `~/.ccsp/launch-presets/`.
+  Templates are only ever produced by promoting a project preset, and land
+  as detached copies: the `origin` metadata on a preset's index entry
+  records where it came from (for the `← web-dev` suffix in the list) but
+  is never a live link back.
+- [`src/services/preset-import-service.ts`](src/services/preset-import-service.ts)
+  — discovers what the current project could import (global templates plus
+  the launch presets of every still-existing recent project, minus this
+  one) and copies presets in one at a time, reporting what was skipped
+  rather than rolling back.
+- [`src/services/worktree-service.ts`](src/services/worktree-service.ts)
+  — resolves the main worktree's root via
+  `git rev-parse --git-common-dir --show-toplevel` (they differ only in a
+  linked worktree) and reads/writes the `worktree-seed.json` marker that
+  records a declined inheritance offer.
+- [`src/services/missing-toggle-service.ts`](src/services/missing-toggle-service.ts)
+  — the names a preset references that this machine cannot see. Detection
+  can only enumerate what is installed, so these are merged back in as
+  non-toggleable `missing` rows and written back verbatim on save.
 - [`src/services/project-store-service.ts`](src/services/project-store-service.ts)
   — `ensureProjectCcspStore`: lazily creates `<cwd>/.claude/.ccsp/` plus
   its `launch-presets/` and `tmp/` subdirs and writes a `.gitignore`

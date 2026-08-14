@@ -5,7 +5,7 @@ import type { McpPolicyEntry, Settings } from '../core/schema.js'
 import { discoverCachedClaudePlugins } from './plugin-cache-service.js'
 import { resolvePluginRegistryKey, type PluginState } from './plugin-service.js'
 
-export type McpSource = 'local' | 'project' | 'user' | 'plugin' | 'connector'
+export type McpSource = 'local' | 'project' | 'user' | 'plugin' | 'connector' | 'missing'
 
 export type McpState = {
   name: string
@@ -124,6 +124,21 @@ export function applyDeniedMcpServers(states: McpState[], denied: McpPolicyEntry
   return sortMcpStates(states.map(state => (
     deniedNames.has(state.name) ? { ...state, enabled: false } : state
   )))
+}
+
+// A denied entry naming a server this project does not have. Unlike plugins and
+// skills these need no special treatment on the way out: a policy entry only
+// ever means "off", so the ordinary `mcpStatesToDeniedServers` rule already
+// writes it back.
+export function mergeMissingMcpStates(states: McpState[], denied: McpPolicyEntry[] = []): McpState[] {
+  const known = new Set(states.map(state => state.name))
+  const missing = denied.flatMap((entry): McpState[] => (
+    'serverName' in entry && !known.has(entry.serverName)
+      ? [{ name: entry.serverName, enabled: false, source: 'missing', config: undefined }]
+      : []
+  ))
+
+  return missing.length === 0 ? states : sortMcpStates([...states, ...missing])
 }
 
 export function mcpStatesToDeniedServers(states: McpState[]): McpPolicyEntry[] {

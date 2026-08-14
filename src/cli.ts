@@ -11,10 +11,10 @@ import { randomUUID } from 'node:crypto'
 import { isUuid, parseDirectRunOptions, resolveSessionLaunch, sanitizeClaudeArgs, type DirectRunOptions } from './core/args.js'
 import { isCcspCommanderSubcommand } from './core/commands.js'
 import { resolvePresetIndexKey } from './core/name.js'
-import { CliError } from './core/errors.js'
+import { CliError, type CliErrorCode } from './core/errors.js'
 import { readJsonFile } from './core/json.js'
 import { createPathContext, resolveGlobalRoot, resolveUserClaudeSettingsPath } from './core/paths.js'
-import { parseSettings, type BasePresetMeta, type CcspConfig, type RunMode, type SessionBinding, type SettingsDisplayFormat } from './core/schema.js'
+import { parseSettings, type BasePresetMeta, type CcspConfig, type LaunchPresetSettings, type RunMode, type SessionBinding, type SettingsDisplayFormat } from './core/schema.js'
 import { spawnClaude } from './core/spawn.js'
 import { ConfigApp } from './ink/config-app.js'
 import { CreateApp, type CreateResult, type CreateSubmitResult } from './ink/create-app.js'
@@ -35,16 +35,38 @@ import {
 } from './flows/settings-select-flow.js'
 import { SettingsSelectApp, type SettingsSelectResult } from './ink/settings-select-app.js'
 import { discoverCachedClaudePlugins } from './services/plugin-cache-service.js'
-import { applyPluginOverrides, pluginStatesToEnabledPlugins, resolvePluginStates } from './services/plugin-service.js'
+import {
+  applyPluginOverrides,
+  mergeMissingPluginStates,
+  pluginStatesToEnabledPlugins,
+  resolvePluginStates
+} from './services/plugin-service.js'
 import { createCcspConfigService } from './services/ccsp-config-service.js'
 import { createGlobalLastSettingsService } from './services/global-last-settings-service.js'
 import { createClaudeSessionService } from './services/claude-session-service.js'
 import { createLaunchPresetService } from './services/launch-preset-service.js'
+import { createLaunchTemplateService } from './services/launch-template-service.js'
+import { collectMissingToggleNames, countMissingToggles } from './services/missing-toggle-service.js'
+import {
+  buildImportOrigin,
+  copyPresetsInto,
+  discoverImportCandidates,
+  formatSeedReport,
+  type ImportCandidate
+} from './services/preset-import-service.js'
+import {
+  readWorktreeSeedMarker,
+  resolveMainWorktreeRoot,
+  writeWorktreeSeedMarker
+} from './services/worktree-service.js'
+import { WorktreeSeedApp, type WorktreeSeedResult } from './ink/worktree-seed-app.js'
+import type { ImportCandidateView, ImportOutcome } from './ink/components/import-panel.js'
 import {
   applyDeniedMcpServers,
   applyPluginMcpAvailability,
   discoverMcpStates,
   mcpStatesToDeniedServers,
+  mergeMissingMcpStates,
   resolveDeniedMcpServers
 } from './services/mcp-service.js'
 import { createClaudeLoginService } from './services/claude-login-service.js'
@@ -61,6 +83,7 @@ import {
 import {
   applySkillOverrides,
   discoverSkillStates,
+  mergeMissingSkillStates,
   resolveSkillOverrides,
   skillStatesToOverrides
 } from './services/skill-service.js'
@@ -75,6 +98,7 @@ const settingsSourceService = createSettingsSourceService(context)
 const globalLastSettingsService = createGlobalLastSettingsService(context.homeDir)
 const ccspConfigService = createCcspConfigService(globalRoot)
 const launchPresetService = createLaunchPresetService(context.cwd)
+const launchTemplateService = createLaunchTemplateService(globalRoot)
 const claudeSessionService = createClaudeSessionService(context.homeDir, context.cwd)
 const claudeLoginService = createClaudeLoginService(context)
 const claudePluginInstallationService = createClaudePluginInstallationService(context.homeDir)
@@ -552,12 +576,25 @@ async function buildProjectLaunchInput(selectedSettings: SettingsSelectResult): 
   )
   const statesByPreset: Record<string, ProjectLaunchToggleState> = {}
 
+  // Detection can only enumerate what is installed, so each preset's own
+  // contents are merged back in afterwards: whatever it names that this project
+  // cannot see becomes a `missing` row instead of vanishing between the file and
+  // the screen — and, because it is a row, it survives the next save.
   for (const { meta: preset, settings } of launchPresetEntries) {
-    const presetPlugins = applyPluginOverrides(basePlugins, settings.enabledPlugins)
+    const presetPlugins = mergeMissingPluginStates(
+      applyPluginOverrides(basePlugins, settings.enabledPlugins),
+      settings.enabledPlugins,
+    )
     statesByPreset[preset.name] = {
       plugins: presetPlugins,
-      skills: applySkillOverrides(baseSkills, settings.skillOverrides),
-      mcps: applyDeniedMcpServers(applyPluginMcpAvailability(rawMcps, presetPlugins), settings.deniedMcpServers)
+      skills: mergeMissingSkillStates(
+        applySkillOverrides(baseSkills, settings.skillOverrides),
+        settings.skillOverrides,
+      ),
+      mcps: mergeMissingMcpStates(
+        applyDeniedMcpServers(applyPluginMcpAvailability(rawMcps, presetPlugins), settings.deniedMcpServers),
+        settings.deniedMcpServers,
+      )
     }
   }
 
@@ -611,15 +648,114 @@ async function renderProjectLaunchApp(
   return result
 }
 
+// Plain filesystem failures (a full disk, a read-only home) are reported like
+// any other refusal rather than rethrown: the panel is the only thing on screen,
+// so an escaping rejection takes the TUI down instead of telling the user which
+// candidate failed and why.
+function toImportOutcome(error: unknown, conflictCode: CliErrorCode): ImportOutcome {
+  const known = CliError.is(error, conflictCode)
+  if (known) return { ok: false, conflict: true, error: known }
+  if (error instanceof CliError) return { ok: false, error: error.message }
+  return { ok: false, error: error instanceof Error ? error.message : String(error) }
+}
+
+// Every import-panel mutation reports the same three outcomes, and the panel
+// decides whether to offer overwrite/rename purely from `conflict`. Spelling
+// that out per callback is how one of them ends up quietly not offering it.
+async function runImportMutation(
+  conflictCode: CliErrorCode,
+  operation: () => Promise<unknown>,
+): Promise<ImportOutcome> {
+  try {
+    await operation()
+    return { ok: true }
+  } catch (error) {
+    return toImportOutcome(error, conflictCode)
+  }
+}
+
+// Only templates are editable from the import panel: a preset belonging to
+// another project is shown so it can be copied, not managed from here.
+function findTemplateCandidate(
+  candidates: ImportCandidate[],
+  candidateId: string,
+  action: 'renamed' | 'deleted',
+): { candidate: ImportCandidate } | { ok: false; error: string } {
+  const candidate = candidates.find(entry => entry.id === candidateId)
+  if (candidate?.kind !== 'template') {
+    return { ok: false, error: `Only global templates can be ${action} here` }
+  }
+  return { candidate }
+}
+
+function toImportCandidateView(
+  candidate: ImportCandidate,
+  detected: ProjectLaunchToggleState,
+): ImportCandidateView {
+  return {
+    id: candidate.id,
+    kind: candidate.kind,
+    presetName: candidate.presetName,
+    ...(candidate.projectLabel ? { projectLabel: candidate.projectLabel } : {}),
+    counts: candidate.counts,
+    missingCount: countMissingToggles(collectMissingToggleNames(candidate.settings, detected)),
+  }
+}
+
 async function renderProjectManageApp(
   selectedSettings: SettingsSelectResult,
   header?: InlineHeaderNotice,
 ): Promise<ProjectManageResult | undefined> {
   const input = await buildProjectLaunchInput(selectedSettings)
+  const candidates = await discoverImportCandidates({
+    homeDir: context.homeDir,
+    globalRoot,
+    cwd: context.cwd,
+  }).catch(() => [] as ImportCandidate[])
+  const importCandidates = candidates.map(candidate => toImportCandidateView(candidate, input.detected))
   let result: ProjectManageResult | undefined
   const createNode = () =>
     wrapWithInlineHeader(h(ProjectManageApp, {
       ...input,
+      importCandidates,
+      onPromoteSubmit: async (presetName: string, templateName: string, overwrite: boolean): Promise<ImportOutcome> => {
+        const origin = { kind: 'project' as const, name: presetName, path: context.cwd, at: new Date().toISOString() }
+        // Inside the mutation so a failed read is reported in the panel too —
+        // it is exactly as likely as a failed write, and just as recoverable.
+        return runImportMutation('launch_template_already_exists', async () => {
+          const settings = await launchPresetService.readPresetSettings(presetName)
+          return overwrite
+            ? launchTemplateService.overwrite(templateName, settings, origin)
+            : launchTemplateService.promote(templateName, settings, origin)
+        })
+      },
+      onImportSubmit: async (candidateId: string, targetName: string, overwrite: boolean): Promise<ImportOutcome> => {
+        const candidate = candidates.find(entry => entry.id === candidateId)
+        if (!candidate) return { ok: false, error: 'That import source is no longer available' }
+        const origin = buildImportOrigin(candidate)
+        return runImportMutation('launch_preset_already_exists', () => (
+          overwrite
+            ? launchPresetService.writePresetSettings(targetName, candidate.settings, { origin })
+            : launchPresetService.createPreset(targetName, candidate.settings, { origin })
+        ))
+      },
+      onTemplateRenameSubmit: async (candidateId: string, newName: string): Promise<ImportOutcome> => {
+        const template = findTemplateCandidate(candidates, candidateId, 'renamed')
+        if ('error' in template) return template
+        return runImportMutation('launch_template_already_exists', async () => {
+          const renamed = await launchTemplateService.renameTemplate(template.candidate.presetName, newName)
+          // Kept in step with the panel's own copy so a second action on the
+          // same row addresses the template by the name it now has.
+          template.candidate.presetName = renamed.name
+        })
+      },
+      onTemplateDeleteSubmit: async (candidateId: string): Promise<ImportOutcome> => {
+        const template = findTemplateCandidate(candidates, candidateId, 'deleted')
+        if ('error' in template) return template
+        return runImportMutation('launch_template_already_exists', () => (
+          launchTemplateService.deleteTemplate(template.candidate.presetName)
+        ))
+      },
       onSubmit: (value: ProjectManageResult) => {
         result = value
       },
@@ -977,6 +1113,9 @@ async function runInteractive(rawClaudeArgs: string[], fallbackMode?: 'resume' |
   const config = await ccspConfigService.read()
   printBanner({ bannerEnabled: config.bannerEnabled })
   prewarmProjectLaunchDiscovery()
+  // Skipped in global-only mode, where project launch presets never come into
+  // play and the question would be pure noise.
+  if (config.runMode !== 'global-only') await offerWorktreeSeed()
   const launchArgs = fallbackMode === 'resume'
     ? ['--resume', ...rawClaudeArgs]
     : rawClaudeArgs
@@ -1309,7 +1448,84 @@ async function runDirect(options: DirectRunOptions): Promise<void> {
   })
 }
 
+type WorktreeSeedSource = {
+  mainRoot: string
+  presets: Array<{ name: string; settings: LaunchPresetSettings }>
+  lastUsedName?: string
+}
+
+// Only offered when this worktree has nothing of its own: once it has presets,
+// the user has already made a decision here, and topping it up would only
+// produce name collisions and surprises.
+async function resolveWorktreeSeedSource(): Promise<WorktreeSeedSource | undefined> {
+  if ((await launchPresetService.listPresets()).length > 0) return undefined
+  if (await readWorktreeSeedMarker(context.cwd)) return undefined
+
+  const mainRoot = await resolveMainWorktreeRoot(context.cwd)
+  if (!mainRoot) return undefined
+
+  const mainService = createLaunchPresetService(mainRoot)
+  const entries = await mainService.listPresetsWithSettings().catch(() => [])
+  if (entries.length === 0) return undefined
+
+  const lastUsedName = await mainService.readLastUsed().catch(() => undefined)
+  return {
+    mainRoot,
+    presets: entries.map(entry => ({ name: entry.meta.name, settings: entry.settings })),
+    ...(lastUsedName ? { lastUsedName } : {}),
+  }
+}
+
+async function seedWorktreePresets(source: WorktreeSeedSource): Promise<void> {
+  const report = await copyPresetsInto(launchPresetService, source.mainRoot, source.presets)
+
+  // Only pointed at something that actually arrived: inheriting a pointer to a
+  // preset that failed to copy would leave the worktree opening on a name it
+  // does not have.
+  if (source.lastUsedName && report.copied.includes(source.lastUsedName)) {
+    await writeProjectLaunchLastUsedIfPresent(source.lastUsedName)
+  }
+
+  for (const line of formatSeedReport(report, source.presets.length, source.mainRoot)) {
+    process.stderr.write(`${line}\n`)
+  }
+}
+
+async function renderWorktreeSeedApp(source: WorktreeSeedSource): Promise<WorktreeSeedResult> {
+  let result: WorktreeSeedResult = 'decline'
+  const createNode = () =>
+    h(WorktreeSeedApp, {
+      mainRoot: source.mainRoot,
+      presetNames: source.presets.map(preset => preset.name),
+      ...(source.lastUsedName ? { lastUsedName: source.lastUsedName } : {}),
+      onSubmit: (value: WorktreeSeedResult) => {
+        result = value
+      },
+    })
+  const state = { resizeVersion: 0 }
+  let app: RefreshableInkApp
+  const onShortcut = (input: string, key: ShortcutKey) => {
+    createGlobalShortcutHandler(app, createNode, process.stdout, state, onShortcut)(input, key)
+  }
+  app = render(wrapInkNode(createNode, state.resizeVersion, onShortcut))
+  await waitForInkAppExit(app, createNode, process.stdout, state, onShortcut)
+  return result
+}
+
+async function offerWorktreeSeed(): Promise<void> {
+  const source = await resolveWorktreeSeedSource()
+  if (!source) return
+
+  if (await renderWorktreeSeedApp(source) === 'accept') {
+    await seedWorktreePresets(source)
+    return
+  }
+
+  await writeWorktreeSeedMarker(context.cwd, source.mainRoot)
+}
+
 async function manageProjectInteractive(config?: CcspConfig): Promise<void> {
+  await offerWorktreeSeed()
   const selectedSettings = await resolveProjectManageBaseSettings()
   if (!selectedSettings) {
     process.stderr.write('No project settings sources found for project preset management.\n')

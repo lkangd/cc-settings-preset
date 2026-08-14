@@ -207,4 +207,19 @@ describe('createClaudePluginInstallationService', () => {
     expect(result).toEqual({ failures: [{ pluginName: 'broken', stderr: 'spawn failed' }] })
     expect(runner).toHaveBeenCalledTimes(2)
   })
+
+  it('never installs a plugin the preset only names as missing here', async () => {
+    const home = await createHome()
+    const runner = successfulRunner()
+
+    const result = await createClaudePluginInstallationService(home, runner)
+      .synchronizeProjectPlugins('/repo/worktree', [
+        { name: 'absent', enabled: true, source: 'missing' },
+        { name: 'present', enabled: true, source: 'project' },
+      ])
+
+    expect(result).toEqual({ failures: [] })
+    expect(runner).toHaveBeenCalledTimes(1)
+    expect(runner).toHaveBeenCalledWith('present', '/repo/worktree')
+  })
 })

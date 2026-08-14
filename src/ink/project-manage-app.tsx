@@ -11,6 +11,8 @@ import {
 import type { DisableLockSource } from '../services/disable-lock-service.js'
 import { ConfirmEnableUnlock } from './components/confirm-enable-unlock.js'
 import { TextInput } from './components/text-input.js'
+import { ImportPanel, type ImportCandidateView, type ImportOutcome } from './components/import-panel.js'
+import { PresetConflictPrompt, type PresetConflictChoice } from './components/preset-conflict-prompt.js'
 import { ProjectLaunchColumnsView } from './components/project-launch-columns-view.js'
 import type { ProjectLaunchAppProps, ProjectLaunchResult } from './project-launch-app.js'
 import type { ProjectLaunchToggleState } from '../flows/project-launch-flow.js'
@@ -60,9 +62,29 @@ type Props = Omit<ProjectLaunchAppProps, 'onSubmit'> & {
   onSaveSubmit?: (presetName: string, toggles: ProjectLaunchToggleState) => Promise<string | null>
   onCreateSubmit?: (saveAs: string, toggles: ProjectLaunchToggleState) => Promise<string | null>
   onRenameSubmit?: (presetName: string, newName: string) => Promise<string | null>
+  importCandidates?: ImportCandidateView[]
+  onPromoteSubmit?: (presetName: string, templateName: string, overwrite: boolean) => Promise<ImportOutcome>
+  onImportSubmit?: (candidateId: string, targetName: string, overwrite: boolean) => Promise<ImportOutcome>
+  onTemplateRenameSubmit?: (candidateId: string, newName: string) => Promise<ImportOutcome>
+  onTemplateDeleteSubmit?: (candidateId: string) => Promise<ImportOutcome>
 }
 
-export function ProjectManageApp({ presets, detected, statesByPreset, disableLockSources = [], lastUsedName, onSubmit, onSaveSubmit, onCreateSubmit, onRenameSubmit }: Props) {
+export function ProjectManageApp({
+  presets,
+  detected,
+  statesByPreset,
+  disableLockSources = [],
+  lastUsedName,
+  onSubmit,
+  onSaveSubmit,
+  onCreateSubmit,
+  onRenameSubmit,
+  importCandidates = [],
+  onPromoteSubmit,
+  onImportSubmit,
+  onTemplateRenameSubmit,
+  onTemplateDeleteSubmit,
+}: Props) {
   const { exit } = useApp()
   const controller = useProjectLaunchBrowserController({
     presets,
@@ -72,14 +94,16 @@ export function ProjectManageApp({ presets, detected, statesByPreset, disableLoc
     ...(lastUsedName ? { lastUsedName } : {}),
     moveRightWithL: false,
     title: 'Manage project launch presets',
-    help: '←/→ switch column · h/j/k navigate · t sort · space toggle · enter save · r rename · d delete · l launch · esc presets/quit · q quit',
+    help: '←/→ switch column · h/j/k navigate · t sort · space toggle · enter save · r rename · d delete · s template · i import · l launch · esc presets/quit · q quit',
   })
   const { state, activeItem, activeToggleState, columnsProps } = controller
-  const [mode, setMode] = useState<'browse' | 'rename' | 'delete'>('browse')
+  const [mode, setMode] = useState<'browse' | 'rename' | 'delete' | 'import' | 'promote' | 'promote-conflict'>('browse')
   const [saveMode, setSaveMode] = useState<SaveMode>('none')
   const [message, setMessage] = useState<{ text: string; color: 'yellow' | 'red' } | null>(null)
   const [newName, setNewName] = useState('')
   const [renameError, setRenameError] = useState<string | null>(null)
+  const [promoteName, setPromoteName] = useState('')
+  const [promoteError, setPromoteError] = useState<string | null>(null)
 
   async function saveChangedPresets(changedPresets: ChangedProjectLaunchPresets): Promise<string[] | undefined> {
     if (!onSaveSubmit) return []
@@ -93,6 +117,23 @@ export function ProjectManageApp({ presets, detected, statesByPreset, disableLoc
       savedPresets.push(presetName)
     }
     return savedPresets
+  }
+
+  async function runPromote(templateName: string, overwrite: boolean): Promise<void> {
+    if (!onPromoteSubmit || activeItem?.type !== 'preset') return
+    const outcome = await onPromoteSubmit(activeItem.name, templateName, overwrite)
+    if (outcome.ok) {
+      setMessage({ text: `Saved as global template ${templateName}`, color: 'yellow' })
+      setMode('browse')
+      return
+    }
+    if (outcome.conflict) {
+      setPromoteName(templateName)
+      setMode('promote-conflict')
+      return
+    }
+    setPromoteError(outcome.error)
+    setMode('promote')
   }
 
   useInput((input, key) => {
@@ -129,6 +170,35 @@ export function ProjectManageApp({ presets, detected, statesByPreset, disableLoc
         return
       }
       setMode('delete')
+      return
+    }
+    if (input === 's') {
+      if (!onPromoteSubmit) return
+      if (activeItem?.type !== 'preset') {
+        setMessage({ text: 'Detected cannot be saved as a template', color: 'yellow' })
+        return
+      }
+      // Promotion reads the preset back from disk, so unsaved toggles would be
+      // silently left out of the template while the panel still reported success.
+      if (activeItem.name in getChangedProjectLaunchPresets(state)) {
+        setMessage({ text: 'Save this preset before saving it as a template', color: 'yellow' })
+        return
+      }
+      setPromoteError(null)
+      setPromoteName(activeItem.name)
+      setMode('promote')
+      return
+    }
+    if (input === 'i') {
+      if (!onImportSubmit) return
+      // A successful import refreshes the whole screen from disk, which would
+      // take every unsaved toggle with it without ever saying so.
+      if (state.dirty) {
+        setMessage({ text: 'Save or discard your changes before importing', color: 'yellow' })
+        return
+      }
+      setMessage(null)
+      setMode('import')
       return
     }
     if (input === 'l' && !key.ctrl && !key.meta) {
@@ -240,6 +310,82 @@ export function ProjectManageApp({ presets, detected, statesByPreset, disableLoc
               ...changedProjectLaunchPresetProps(changedPresets),
             })
             exit()
+          }}
+        />
+      </Box>
+    )
+  }
+
+  if (mode === 'import') {
+    return (
+      <ImportPanel
+        candidates={importCandidates}
+        onImport={async (id, targetName, overwrite) => (
+          onImportSubmit
+            ? onImportSubmit(id, targetName, overwrite)
+            : { ok: false, error: 'Importing is unavailable' }
+        )}
+        onRenameTemplate={async (id, nextName) => (
+          onTemplateRenameSubmit
+            ? onTemplateRenameSubmit(id, nextName)
+            : { ok: false, error: 'Renaming templates is unavailable' }
+        )}
+        onDeleteTemplate={async id => (
+          onTemplateDeleteSubmit
+            ? onTemplateDeleteSubmit(id)
+            : { ok: false, error: 'Deleting templates is unavailable' }
+        )}
+        onClose={imported => {
+          if (!imported) {
+            setMode('browse')
+            return
+          }
+          // The imported preset has to be re-detected against this project
+          // before it can be shown, and that happens where detection lives.
+          onSubmit({ type: 'refresh' })
+          exit()
+        }}
+      />
+    )
+  }
+
+  if (mode === 'promote-conflict') {
+    return (
+      <PresetConflictPrompt
+        title="A global template with that name already exists"
+        existingName={promoteName}
+        onChoose={(choice: PresetConflictChoice) => {
+          if (choice === 'cancel') {
+            setMode('browse')
+            return
+          }
+          if (choice === 'overwrite') {
+            void runPromote(promoteName, true)
+            return
+          }
+          setPromoteError(null)
+          setMode('promote')
+        }}
+      />
+    )
+  }
+
+  if (mode === 'promote') {
+    return (
+      <Box flexDirection="column">
+        {promoteError ? <Text color="red">{promoteError}</Text> : <Text> </Text>}
+        <TextInput
+          label={`Save ${activeItem?.name ?? 'preset'} as global template`}
+          value={promoteName}
+          onChange={value => {
+            setPromoteError(null)
+            setPromoteName(value)
+          }}
+          onCancel={() => setMode('browse')}
+          onSubmit={async () => {
+            const templateName = promoteName.trim()
+            if (!templateName) return
+            await runPromote(templateName, false)
           }}
         />
       </Box>

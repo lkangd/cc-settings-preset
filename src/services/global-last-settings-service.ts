@@ -23,5 +23,15 @@ export function createGlobalLastSettingsService(homeDir: string) {
       state[cwd] = { presetName, updatedAt: new Date().toISOString() }
       await writeState(state)
     },
+
+    // Every project ccsp has been run in, most recent first. Doubles as the
+    // candidate pool for cross-project imports — there is no other record of
+    // which projects the user actually works in, and building a second one
+    // would only drift from this.
+    async listProjectPaths(): Promise<string[]> {
+      return Object.entries(await readState())
+        .sort(([, a], [, b]) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0))
+        .map(([cwd]) => cwd)
+    },
   }
 }

@@ -334,7 +334,7 @@ The position of the session flag controls the route: put it before `claude` to r
 
 **Global manage (`ccsp manage`):** `l` launch, `r` rename, `d` delete, `c` create, `o` reveal in Finder, `q` quit.
 
-**Project launch layer:** switch between presets and plugin / skill / MCP columns; save as launch preset. `Ctrl+L` refreshes the UI.
+**Project launch layer:** switch between presets and plugin / skill / MCP columns; save as launch preset. `s` saves the selected preset as a global template, `i` opens the import panel (global templates + presets from recent projects; `r`/`d` manage templates in place). `Ctrl+L` refreshes the UI.
 
 **Config (`ccsp config`):** `j`/`k` or arrows to move, `space`/`Enter` toggle the focused option, `q` quit.
 
@@ -358,8 +358,11 @@ The position of the session flag controls the route: put it before `claude` to r
 ├── index.json                 # global base preset index
 ├── settings/
 │   └── <name>-settings.json   # base preset body
+├── launch-presets/            # global launch preset templates (promoted with s)
+│   ├── index.json
+│   └── <name>-launch.json
 ├── config.json                # user preferences (run mode, env-only preview, statusline, preview format)
-└── last-settings.json         # last base preset name per project cwd
+└── last-settings.json         # last base preset name per project cwd; also the import candidate pool
 
 <project>/.claude/.ccsp/       # entire dir gitignored by default
 ├── launch-presets/
@@ -368,8 +371,18 @@ The position of the session flag controls the route: put it before `claude` to r
 ├── tmp/
 │   └── <stem>-settings.json   # finalized launch config (~50 kept, oldest pruned)
 ├── sessions.json              # sessionId → launch config binding, for --continue / --resume
+├── worktree-seed.json         # written only when a worktree declines to inherit
 └── last-used.json             # last launch preset used
 ```
+
+Templates are **copied, not linked**: a preset imported from a template is an independent
+file from that moment on, and the copy records where it came from (shown as `← <source>`).
+A preset may name plugins, skills or MCP servers this project has not installed — those
+appear as `[!] not installed` rows, cannot be toggled, and are preserved when you save,
+so the preset starts working as soon as they are installed.
+
+In a linked git worktree with no presets of its own, ccsp offers once to inherit the main
+repository's presets (and its last-used pointer). Declining is remembered per worktree.
 
 ---
 

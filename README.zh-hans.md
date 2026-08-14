@@ -334,7 +334,7 @@ Claude 退出后，CCSP 会**主动发现** Claude 真实分配的 session id（
 
 **管理全局预设（`ccsp manage`）：** `l` 启动，`r` 重命名，`d` 删除，`c` 新建，`o` 在 Finder 中打开文件，`q` 退出。
 
-**项目启动层：** 在预设与插件 / Skill / MCP 列间切换并开关；支持保存为启动预设。终端内 `Ctrl+L` 可刷新界面。
+**项目启动层：** 在预设与插件 / Skill / MCP 列间切换并开关；支持保存为启动预设。`s` 将选中预设保存为全局模板，`i` 打开导入面板（全局模板 + 最近项目的预设，面板内 `r`/`d` 直接管理模板）。终端内 `Ctrl+L` 可刷新界面。
 
 **配置（`ccsp config`）：** `j`/`k` 或方向键移动，`space`/`Enter` 切换当前选项，`q` 退出。
 
@@ -357,8 +357,11 @@ Claude 退出后，CCSP 会**主动发现** Claude 真实分配的 session id（
 ├── index.json                 # 全局基础预设索引
 ├── settings/
 │   └── <name>-settings.json   # 基础预设内容
+├── launch-presets/            # 全局启动预设模板（由 s 提升产生）
+│   ├── index.json
+│   └── <name>-launch.json
 ├── config.json                # 用户偏好（仅 env 预览、statusline）
-└── last-settings.json         # 各项目 cwd 上次使用的基础预设名
+└── last-settings.json         # 各项目 cwd 上次使用的基础预设名；同时作为导入候选池
 
 <项目>/.claude/.ccsp/          # 默认整目录 gitignore
 ├── launch-presets/
@@ -367,8 +370,16 @@ Claude 退出后，CCSP 会**主动发现** Claude 真实分配的 session id（
 ├── tmp/
 │   └── <stem>-settings.json   # 本次启动的最终配置（约保留 50 份，淘汰最旧的）
 ├── sessions.json              # sessionId → 启动配置 的绑定，供 --continue / --resume
+├── worktree-seed.json         # 仅在 worktree 拒绝继承时写入
 └── last-used.json             # 上次使用的启动预设
 ```
+
+模板是**复制而非引用**：从模板导入的预设从落地那一刻起就是独立文件，副本会记录来源（列表中显示为 `← <来源>`）。
+预设可能引用本项目未安装的插件 / Skill / MCP，这些条目显示为 `[!] not installed`、不可切换，并在保存时原样保留——
+装上之后该预设即自动生效。
+
+在没有自己预设的 git linked worktree 中，ccsp 会询问一次是否继承主仓库的预设（含上次使用的那一个）；
+拒绝后该 worktree 不再重复询问。
 
 ---
 

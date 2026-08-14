@@ -104,12 +104,13 @@ function isPinnedToBottom(
   state: ProjectLaunchFlowState,
   detected: ProjectLaunchToggleState,
   kind: 'plugins' | 'skills' | 'mcps',
-  item: { name: string; enabled: boolean },
+  item: { name: string; enabled: boolean; source?: ToggleColumnItem['source'] },
 ): boolean {
+  if (isMissingItem(item)) return true
   return isItemEnableLocked(state, detected, kind, item) && !item.enabled
 }
 
-function sortWithPinnedBottom<T extends { name: string; enabled: boolean }>(
+function sortWithPinnedBottom<T extends { name: string; enabled: boolean; source?: ToggleColumnItem['source'] }>(
   items: T[],
   state: ProjectLaunchFlowState,
   detected: ProjectLaunchToggleState,
@@ -149,6 +150,30 @@ function settingsScopeLabel(source: ToggleColumnItem['source']): string {
 
 export function formatEnableLockReason(source: ToggleColumnItem['source']): string {
   return `Cannot enable: disabled in ${settingsScopeLabel(source)} Claude settings`
+}
+
+// Deliberately worded as a future promise rather than a failure: the preset is
+// not broken, it just names something this project has not installed, and it
+// starts working the moment that changes.
+export const MISSING_ITEM_REASON = 'Not installed in this project · this preset applies it once installed'
+
+function isMissingItem(item: { source?: ToggleColumnItem['source'] }): boolean {
+  return item.source === 'missing'
+}
+
+function focusedToggleItem(state: ProjectLaunchFlowState): ToggleColumnItem | undefined {
+  if (state.focus === 'plugins') return state.plugins[state.pluginCursor]
+  if (state.focus === 'skills') return state.skills[state.skillCursor]
+  if (state.focus === 'mcps') return state.mcps[state.mcpCursor]
+  return undefined
+}
+
+// Surfaced on hover rather than only when the user tries to toggle: a greyed-out
+// row that cannot be acted on has no other way to explain itself, and the
+// difference from a settings-locked row is not carried by the colour alone.
+export function getFocusedMissingMessage(state: ProjectLaunchFlowState): string | undefined {
+  const item = focusedToggleItem(state)
+  return item && isMissingItem(item) ? MISSING_ITEM_REASON : undefined
 }
 
 function isEnableLocked(
@@ -441,6 +466,13 @@ export function reduceProjectLaunchFlow(state: ProjectLaunchFlowState, event: Pr
   }
 
   if (event.type === 'toggle-current') {
+    const focused = focusedToggleItem(state)
+    // Checked once for all three columns: a missing item is inert everywhere,
+    // and the reason has to reach the user who just pressed space at it.
+    if (focused && isMissingItem(focused)) {
+      return { ...state, toggleMessage: MISSING_ITEM_REASON }
+    }
+
     if (state.focus === 'plugins') {
       const current = state.plugins[state.pluginCursor]
       if (!current) return state

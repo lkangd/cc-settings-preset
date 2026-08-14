@@ -11,9 +11,13 @@ import type { SettingsSourceScope } from './settings-source-service.js'
 export type SkillState = {
   name: string
   enabled: boolean
-  source: 'user' | 'project' | 'command' | 'plugin'
+  source: 'user' | 'project' | 'command' | 'plugin' | 'missing'
   toggleable: boolean
   controlledByPlugin?: string
+  // Only set for `missing` skills: the override value read out of the preset,
+  // kept verbatim so a save writes back what was there rather than collapsing
+  // every override to the `off` that a boolean round-trip would produce.
+  overrideValue?: SkillOverrideValue
 }
 
 export type SkillDiscoveryInput = {
@@ -104,6 +108,7 @@ function compareSkillSourceThenName(a: SkillState, b: SkillState): number {
     plugin: 1,
     user: 2,
     project: 3,
+    missing: 4,
   }
 
   if (sourceRank[a.source] !== sourceRank[b.source]) return sourceRank[a.source] - sourceRank[b.source]
@@ -194,7 +199,32 @@ export async function discoverSkillStates(input: SkillDiscoveryInput): Promise<S
 export function skillStatesToOverrides(states: SkillState[]): Record<string, SkillOverrideValue> {
   const overrides: Record<string, SkillOverrideValue> = {}
   for (const state of states) {
+    // Written back verbatim: a missing skill is not toggleable, so the rule
+    // below would drop it, and its override may be any of the four values —
+    // deriving one from `enabled` would rewrite `name-only` as `on`.
+    if (state.source === 'missing') {
+      if (state.overrideValue) overrides[state.name] = state.overrideValue
+      continue
+    }
     if (state.toggleable && !state.enabled) overrides[state.name] = 'off'
   }
   return overrides
+}
+
+export function mergeMissingSkillStates(
+  states: SkillState[],
+  overrides: Record<string, SkillOverrideValue> = {},
+): SkillState[] {
+  const known = new Set(states.map(state => state.name))
+  const missing = Object.entries(overrides)
+    .filter(([name]) => !known.has(name))
+    .map(([name, value]): SkillState => ({
+      name,
+      enabled: value !== 'off',
+      source: 'missing',
+      toggleable: false,
+      overrideValue: value,
+    }))
+
+  return missing.length === 0 ? states : sortSkillStates([...states, ...missing])
 }

@@ -15,6 +15,15 @@ const launchPreset = {
   updatedAt: '2026-05-20T00:00:00.000Z',
 }
 
+// Keeps `git rev-parse` out of the unit suite: unmocked, the worktree probe
+// would inspect whichever real checkout the suite was started from, and this
+// repo has linked worktrees.
+vi.mock('../src/services/worktree-service.js', () => ({
+  resolveMainWorktreeRoot: vi.fn().mockResolvedValue(undefined),
+  readWorktreeSeedMarker: vi.fn().mockResolvedValue(undefined),
+  writeWorktreeSeedMarker: vi.fn().mockResolvedValue(undefined),
+}))
+
 vi.mock('../src/services/claude-plugin-installation-service.js', () => ({
   createClaudePluginInstallationService: () => ({
     synchronizeProjectPlugins: vi.fn().mockResolvedValue({ failures: [] }),
@@ -149,17 +158,20 @@ describe('manage launch flow', () => {
       }),
     }))
     vi.doMock('../src/services/plugin-service.js', () => ({
+      mergeMissingPluginStates: vi.fn((plugins: unknown[]) => plugins),
       resolvePluginStates: vi.fn().mockReturnValue([]),
       pluginStatesToEnabledPlugins: vi.fn().mockReturnValue({}),
       applyPluginOverrides: vi.fn().mockReturnValue([]),
     }))
     vi.doMock('../src/services/skill-service.js', () => ({
+      mergeMissingSkillStates: vi.fn((skills: unknown[]) => skills),
       discoverSkillStates: vi.fn().mockResolvedValue([]),
       resolveSkillOverrides: vi.fn().mockReturnValue({}),
       skillStatesToOverrides: vi.fn().mockReturnValue({}),
       applySkillOverrides: vi.fn().mockReturnValue([]),
     }))
     vi.doMock('../src/services/mcp-service.js', () => ({
+      mergeMissingMcpStates: vi.fn((mcps: unknown[]) => mcps),
       discoverMcpStates: vi.fn().mockResolvedValue([]),
       resolveDeniedMcpServers: vi.fn().mockReturnValue([]),
       applyPluginMcpAvailability: vi.fn((mcps: unknown[]) => mcps),
@@ -305,17 +317,20 @@ describe('manage launch flow', () => {
       }),
     }))
     vi.doMock('../src/services/plugin-service.js', () => ({
+      mergeMissingPluginStates: vi.fn((plugins: unknown[]) => plugins),
       resolvePluginStates: vi.fn().mockReturnValue([]),
       pluginStatesToEnabledPlugins: vi.fn().mockReturnValue({}),
       applyPluginOverrides: vi.fn().mockReturnValue([]),
     }))
     vi.doMock('../src/services/skill-service.js', () => ({
+      mergeMissingSkillStates: vi.fn((skills: unknown[]) => skills),
       discoverSkillStates: vi.fn().mockResolvedValue([]),
       resolveSkillOverrides: vi.fn().mockReturnValue({}),
       skillStatesToOverrides: vi.fn().mockReturnValue({}),
       applySkillOverrides: vi.fn().mockReturnValue([]),
     }))
     vi.doMock('../src/services/mcp-service.js', () => ({
+      mergeMissingMcpStates: vi.fn((mcps: unknown[]) => mcps),
       discoverMcpStates: vi.fn().mockResolvedValue([]),
       resolveDeniedMcpServers: vi.fn().mockReturnValue([]),
       applyPluginMcpAvailability: vi.fn((mcps: unknown[]) => mcps),
@@ -468,6 +483,7 @@ describe('manage launch flow', () => {
       }),
     }))
     vi.doMock('../src/services/plugin-service.js', () => ({
+      mergeMissingPluginStates: vi.fn((plugins: unknown[]) => plugins),
       resolvePluginStates: vi.fn().mockReturnValue([
         { name: 'alpha', enabled: true, source: 'preset' },
         { name: 'beta', enabled: false, source: 'project' },
@@ -476,6 +492,7 @@ describe('manage launch flow', () => {
       applyPluginOverrides: vi.fn().mockReturnValue([]),
     }))
     vi.doMock('../src/services/skill-service.js', () => ({
+      mergeMissingSkillStates: vi.fn((skills: unknown[]) => skills),
       discoverSkillStates: vi.fn().mockResolvedValue([
         { name: 'personal', enabled: true, source: 'user', toggleable: true },
       ]),
@@ -484,6 +501,7 @@ describe('manage launch flow', () => {
       applySkillOverrides: vi.fn((skills: unknown[]) => skills),
     }))
     vi.doMock('../src/services/mcp-service.js', () => ({
+      mergeMissingMcpStates: vi.fn((mcps: unknown[]) => mcps),
       discoverMcpStates: vi.fn().mockResolvedValue([
         { name: 'github', enabled: true, source: 'project', config: {} },
         { name: 'filesystem', enabled: false, source: 'user', config: {} },
@@ -637,17 +655,20 @@ describe('manage launch flow', () => {
       }),
     }))
     vi.doMock('../src/services/plugin-service.js', () => ({
+      mergeMissingPluginStates: vi.fn((plugins: unknown[]) => plugins),
       resolvePluginStates: vi.fn().mockReturnValue([]),
       pluginStatesToEnabledPlugins: vi.fn().mockReturnValue({}),
       applyPluginOverrides: vi.fn().mockReturnValue([]),
     }))
     vi.doMock('../src/services/skill-service.js', () => ({
+      mergeMissingSkillStates: vi.fn((skills: unknown[]) => skills),
       discoverSkillStates: vi.fn().mockResolvedValue([]),
       resolveSkillOverrides: vi.fn().mockReturnValue({}),
       skillStatesToOverrides: vi.fn().mockReturnValue({}),
       applySkillOverrides: vi.fn().mockReturnValue([]),
     }))
     vi.doMock('../src/services/mcp-service.js', () => ({
+      mergeMissingMcpStates: vi.fn((mcps: unknown[]) => mcps),
       discoverMcpStates: vi.fn().mockResolvedValue([]),
       resolveDeniedMcpServers: vi.fn().mockReturnValue([]),
       applyPluginMcpAvailability: vi.fn((mcps: unknown[]) => mcps),
@@ -792,17 +813,20 @@ describe('manage launch flow', () => {
       }),
     }))
     vi.doMock('../src/services/plugin-service.js', () => ({
+      mergeMissingPluginStates: vi.fn((plugins: unknown[]) => plugins),
       resolvePluginStates: vi.fn().mockReturnValue([]),
       pluginStatesToEnabledPlugins: vi.fn().mockReturnValue({}),
       applyPluginOverrides: vi.fn().mockReturnValue([]),
     }))
     vi.doMock('../src/services/skill-service.js', () => ({
+      mergeMissingSkillStates: vi.fn((skills: unknown[]) => skills),
       discoverSkillStates: vi.fn().mockResolvedValue([]),
       resolveSkillOverrides: vi.fn().mockReturnValue({}),
       skillStatesToOverrides: vi.fn().mockReturnValue({}),
       applySkillOverrides: vi.fn((skills: unknown[]) => skills),
     }))
     vi.doMock('../src/services/mcp-service.js', () => ({
+      mergeMissingMcpStates: vi.fn((mcps: unknown[]) => mcps),
       discoverMcpStates: vi.fn().mockResolvedValue([]),
       resolveDeniedMcpServers: vi.fn().mockReturnValue([]),
       applyPluginMcpAvailability: vi.fn((mcps: unknown[]) => mcps),
@@ -931,17 +955,20 @@ describe('manage launch flow', () => {
       }),
     }))
     vi.doMock('../src/services/plugin-service.js', () => ({
+      mergeMissingPluginStates: vi.fn((plugins: unknown[]) => plugins),
       resolvePluginStates: vi.fn().mockReturnValue([]),
       pluginStatesToEnabledPlugins: vi.fn().mockReturnValue({}),
       applyPluginOverrides: vi.fn().mockReturnValue([]),
     }))
     vi.doMock('../src/services/skill-service.js', () => ({
+      mergeMissingSkillStates: vi.fn((skills: unknown[]) => skills),
       discoverSkillStates: vi.fn().mockResolvedValue([]),
       resolveSkillOverrides: vi.fn().mockReturnValue({}),
       skillStatesToOverrides: vi.fn().mockReturnValue({}),
       applySkillOverrides: vi.fn().mockReturnValue([]),
     }))
     vi.doMock('../src/services/mcp-service.js', () => ({
+      mergeMissingMcpStates: vi.fn((mcps: unknown[]) => mcps),
       discoverMcpStates: vi.fn().mockResolvedValue([]),
       resolveDeniedMcpServers: vi.fn().mockReturnValue([]),
       applyPluginMcpAvailability: vi.fn((mcps: unknown[]) => mcps),

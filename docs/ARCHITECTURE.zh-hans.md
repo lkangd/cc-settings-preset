@@ -60,8 +60,9 @@ service 串联起来的全部编排。子命令（`create`、`manage`、`manage 
 
 `src/services/` 是副作用层：每个文件都是一个工厂，闭包持有一个 `PathContext`
 （`{ homeDir, cwd }`），对位于以下位置的 JSON 存储提供异步操作：`~/.ccsp/`
-（全局预设和 `last-settings.json`）、`<cwd>/.claude/.ccsp/`（项目级启动预设、
-会话绑定、临时 settings、statusline 包装脚本），以及宿主 Claude Code 的状态
+（全局预设、`last-settings.json`，以及 `launch-presets/` 下的跨项目启动模板）、
+`<cwd>/.claude/.ccsp/`（项目级启动预设、会话绑定、临时 settings、statusline
+包装脚本，以及 `worktree-seed.json` 拒绝标记），以及宿主 Claude Code 的状态
 （`~/.claude/settings.json`、`~/.claude.json`、
 `/Library/Application Support/ClaudeCode/`）。
 
@@ -86,8 +87,10 @@ import 自身没有副作用。
 
 - [`src/core/paths.ts`](src/core/paths.ts) —— 应用接触到的所有文件系统路径，
   都是由 `PathContext` 推导出来的。这里是存储位置的权威清单：
-  `~/.ccsp/{index.json, settings/…}`（全局预设）、
-  `<cwd>/.claude/.ccsp/{launch-presets/, sessions.json, last-used.json, tmp/}`
+  `~/.ccsp/{index.json, settings/…, launch-presets/}`（全局预设与全局启动模板
+  ——两个平级且互相独立的命名空间，因此 base preset 与模板可以重名）、
+  `<cwd>/.claude/.ccsp/{launch-presets/, sessions.json, last-used.json,
+  worktree-seed.json, tmp/}`
   （项目级状态），以及对 Claude Code 自身状态的只读路径（`~/.claude/`、
   `~/.claude.json`、`/Library/Application Support/ClaudeCode/`）。
 - [`src/core/schema.ts`](src/core/schema.ts) —— 所有持久化 JSON 文件的 Zod
@@ -132,6 +135,24 @@ import 自身没有副作用。
   存储，同时承担临时 settings 的写入（`writeTempSettings` →
   `<cwd>/.claude/.ccsp/tmp/<stem>-settings.json`）、会话绑定存储
   （`sessions.json`）以及临时产物的清理（`MAX_TEMP_SETTINGS_FILES = 50`）。
+- [`src/services/launch-preset-store.ts`](src/services/launch-preset-store.ts)
+  —— 两个启动预设存储共用的「索引 + 文件」CRUD。项目预设与全局模板的区别只
+  在于文件放在哪里、错误叫什么名字，因此两者都只是把一个目录和一对错误码传
+  进这同一个工厂。
+- [`src/services/launch-template-service.ts`](src/services/launch-template-service.ts)
+  —— 操作位于 `~/.ccsp/launch-presets/` 的**全局**启动模板。模板只能由项目预
+  设提升产生，落地即是脱钩的副本：预设索引条目上的 `origin` 元数据只用于记录
+  来源（列表里 `← web-dev` 后缀的由来），不构成任何回链。
+- [`src/services/preset-import-service.ts`](src/services/preset-import-service.ts)
+  —— 发现当前项目可导入的内容（全局模板，加上所有仍然存在的最近项目的启动预
+  设，剔除当前项目），并逐个复制预设，失败时汇报跳过项而不做回滚。
+- [`src/services/worktree-service.ts`](src/services/worktree-service.ts)
+  —— 用 `git rev-parse --git-common-dir --show-toplevel` 解析主工作树根（二者
+  仅在 linked worktree 中不同），并读写记录「已拒绝继承」的
+  `worktree-seed.json` 标记。
+- [`src/services/missing-toggle-service.ts`](src/services/missing-toggle-service.ts)
+  —— 预设引用了、但本机看不到的那些名字。探测链路只能枚举已安装项，因此这些
+  名字被反向合并成不可切换的 `missing` 行，并在保存时原样写回。
 - [`src/services/project-store-service.ts`](src/services/project-store-service.ts)
   —— `ensureProjectCcspStore`：按需创建 `<cwd>/.claude/.ccsp/` 及其
   `launch-presets/`、`tmp/` 子目录，并写入包含 `*` 的 `.gitignore`，避免任

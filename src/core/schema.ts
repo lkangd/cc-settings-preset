@@ -31,11 +31,24 @@ const basePresetMetaSchema = z.object({
   updatedAt: timestampSchema,
 })
 
+// Where an instantiated copy came from. Templates are copied, never linked, so
+// without this the copy is indistinguishable from one built by hand — and the
+// user has no way to tell that it has since diverged from its source.
+const presetOriginSchema = z.object({
+  kind: z.enum(['template', 'project']),
+  name: z.string().min(1),
+  path: z.string().min(1).optional(),
+  at: timestampSchema,
+})
+
 const launchPresetMetaSchema = z.object({
   name: z.string().min(1),
   fileName: z.string().min(1),
   createdAt: timestampSchema,
   updatedAt: timestampSchema,
+  // Optional on purpose: every index written before templates existed lacks it,
+  // and a required field would turn those into parse failures at startup.
+  origin: presetOriginSchema.optional(),
 })
 
 const lastUsedBasePresetSchema = z.object({
@@ -59,6 +72,12 @@ export const lastUsedLaunchPresetSchema = z.object({
 })
 
 export const lastSettingsSchema = z.record(z.string(), lastUsedBasePresetSchema)
+
+export const worktreeSeedMarkerSchema = z.object({
+  declined: z.boolean(),
+  mainRoot: z.string().min(1),
+  at: timestampSchema,
+})
 
 export const ccspConfigSchema = z.object({
   globalPresetEnvOnly: z.boolean().default(true),
@@ -93,6 +112,7 @@ export const sessionIndexSchema = z.object({
 })
 
 export type McpPolicyEntry = z.infer<typeof mcpPolicyEntrySchema>
+export type PresetOrigin = z.infer<typeof presetOriginSchema>
 export type Settings = z.infer<typeof settingsSchema>
 export type LaunchPresetSettings = z.infer<typeof launchPresetSettingsSchema>
 export type SkillOverrideValue = z.infer<typeof skillOverrideValueSchema>
@@ -104,6 +124,7 @@ export type LaunchPresetIndex = z.infer<typeof launchPresetIndexSchema>
 export type LastUsedLaunchPreset = z.infer<typeof lastUsedLaunchPresetSchema>
 export type LastUsedBasePreset = z.infer<typeof lastUsedBasePresetSchema>
 export type LastSettings = z.infer<typeof lastSettingsSchema>
+export type WorktreeSeedMarker = z.infer<typeof worktreeSeedMarkerSchema>
 export type CcspConfig = z.infer<typeof ccspConfigSchema>
 export type SettingsDisplayFormat = CcspConfig['settingsDisplayFormat']
 export type RunMode = CcspConfig['runMode']

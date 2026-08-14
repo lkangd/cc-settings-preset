@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   annotateToggleItems,
   createProjectLaunchFlowState,
+  getFocusedMissingMessage,
   getPendingDisableRemovals,
+  MISSING_ITEM_REASON,
   reduceProjectLaunchFlow,
   shouldBubbleProjectLaunchEscape,
 } from '../../src/flows/project-launch-flow.js'
@@ -284,5 +286,67 @@ describe('project launch flow', () => {
 
     expect(toggled.plugins[0]?.enabled).toBe(false)
     expect(toggled.dirty).toBe(true)
+  })
+})
+
+describe('missing toggle items', () => {
+  const missingInput = {
+    presets: [{ name: 'web', fileName: 'web-launch.json', createdAt: '2026-05-19T00:00:00.000Z', updatedAt: '2026-05-19T00:00:00.000Z' }],
+    detected: {
+      plugins: [{ name: 'alpha', enabled: true, source: 'user' as const }],
+      skills: [],
+      mcps: [],
+    },
+    statesByPreset: {
+      web: {
+        plugins: [
+          { name: 'ghost', enabled: false, source: 'missing' as const },
+          { name: 'alpha', enabled: true, source: 'user' as const },
+        ],
+        skills: [],
+        mcps: [],
+      },
+    },
+    lastUsedName: 'web',
+  }
+
+  it('sinks missing items to the bottom of their column', () => {
+    const state = createProjectLaunchFlowState(missingInput)
+
+    expect(state.plugins.map(plugin => plugin.name)).toEqual(['alpha', 'ghost'])
+  })
+
+  it('keeps missing items at the bottom when sorting by name', () => {
+    const state = reduceProjectLaunchFlow(createProjectLaunchFlowState(missingInput), { type: 'toggle-sort-mode' })
+
+    expect(state.plugins.map(plugin => plugin.name)).toEqual(['alpha', 'ghost'])
+  })
+
+  it('refuses to toggle a missing item and says why', () => {
+    let state = createProjectLaunchFlowState(missingInput)
+    state = reduceProjectLaunchFlow(state, { type: 'focus-plugins' })
+    state = reduceProjectLaunchFlow(state, { type: 'down' })
+    const toggled = reduceProjectLaunchFlow(state, { type: 'toggle-current' })
+
+    expect(toggled.plugins.find(plugin => plugin.name === 'ghost')?.enabled).toBe(false)
+    expect(toggled.dirty).toBe(false)
+    expect(toggled.toggleMessage).toBe(MISSING_ITEM_REASON)
+  })
+
+  it('explains a missing item as soon as the cursor reaches it', () => {
+    let state = createProjectLaunchFlowState(missingInput)
+    state = reduceProjectLaunchFlow(state, { type: 'focus-plugins' })
+
+    expect(getFocusedMissingMessage(state)).toBeUndefined()
+
+    state = reduceProjectLaunchFlow(state, { type: 'down' })
+
+    expect(getFocusedMissingMessage(state)).toBe(MISSING_ITEM_REASON)
+  })
+
+  it('says nothing about ordinary items', () => {
+    const state = reduceProjectLaunchFlow(createProjectLaunchFlowState(missingInput), { type: 'focus-presets' })
+
+    expect(getFocusedMissingMessage(state)).toBeUndefined()
   })
 })

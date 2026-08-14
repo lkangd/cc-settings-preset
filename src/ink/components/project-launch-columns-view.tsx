@@ -117,6 +117,12 @@ export function ProjectLaunchColumnsView({
             >
               {focus === 'presets' && index === presetCursor ? '❯ ' : '  '}
               {item.name}
+              {/* Copies diverge silently otherwise: nothing else on this screen
+                  distinguishes a preset built here from one that arrived from a
+                  template and has since been edited. */}
+              {item.type === 'preset' && item.preset.origin
+                ? <Text dimColor>{` ← ${item.preset.origin.name}`}</Text>
+                : null}
             </TruncateText>
           ))}
         </BorderedTitleBox>

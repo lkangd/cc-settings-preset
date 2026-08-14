@@ -111,12 +111,14 @@ vi.mock('../src/services/claude-plugin-installation-service.js', () => ({
 
 vi.mock('../src/services/plugin-service.js', () => ({
   applyPluginOverrides: vi.fn((plugins) => plugins),
+  mergeMissingPluginStates: vi.fn((plugins) => plugins),
   resolvePluginStates: resolvePluginStatesMock,
   pluginStatesToEnabledPlugins: vi.fn(() => ({})),
 }))
 
 vi.mock('../src/services/skill-service.js', () => ({
   applySkillOverrides: vi.fn((skills) => skills),
+  mergeMissingSkillStates: vi.fn((skills) => skills),
   discoverSkillStates: vi.fn().mockResolvedValue([]),
   resolveSkillOverrides: vi.fn(() => ({})),
   skillStatesToOverrides: vi.fn(() => ({})),
@@ -124,6 +126,7 @@ vi.mock('../src/services/skill-service.js', () => ({
 
 vi.mock('../src/services/mcp-service.js', () => ({
   discoverMcpStates: discoverMcpStatesMock,
+  mergeMissingMcpStates: vi.fn((states) => states),
   resolveDeniedMcpServers: vi.fn(() => []),
   applyDeniedMcpServers: vi.fn((states) => states),
   applyPluginMcpAvailability: vi.fn((states) => states),

@@ -71,8 +71,32 @@ export function resolveUserClaudeInstalledPluginsPath(homeDir: string): string {
   return join(homeDir, '.claude', 'plugins', 'installed_plugins.json')
 }
 
+// Global launch preset templates. Deliberately a sibling of the base preset
+// `settings/` directory rather than a child: base presets answer "which model /
+// account", templates answer "which plugins" — the two are orthogonal, and
+// nesting them would force a cartesian product of both.
+export function resolveGlobalLaunchTemplateDir(globalRoot: string): string {
+  return join(globalRoot, 'launch-presets')
+}
+
+export function resolveGlobalLaunchTemplateIndexPath(globalRoot: string): string {
+  return join(resolveGlobalLaunchTemplateDir(globalRoot), 'index.json')
+}
+
+export function resolveGlobalLaunchTemplatePath(globalRoot: string, fileName: string): string {
+  return join(resolveGlobalLaunchTemplateDir(globalRoot), fileName)
+}
+
 export function resolveProjectCcspRoot(cwd: string): string {
   return join(cwd, '.claude', '.ccsp')
+}
+
+// Records that this worktree was already offered its main repository's presets.
+// Lives inside the project store (which is `.gitignore`d wholesale) so that its
+// lifetime is the worktree's: delete the worktree and the marker goes with it,
+// unlike a global registry that would accumulate entries for paths long gone.
+export function resolveWorktreeSeedMarkerPath(projectRoot: string): string {
+  return join(resolveProjectCcspRoot(projectRoot), 'worktree-seed.json')
 }
 
 export function resolveProjectLaunchPresetDir(projectRoot: string): string {

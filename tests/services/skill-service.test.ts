@@ -2,7 +2,13 @@ import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { applySkillOverrides, discoverSkillStates, resolveSkillOverrides } from '../../src/services/skill-service.js'
+import {
+  applySkillOverrides,
+  discoverSkillStates,
+  mergeMissingSkillStates,
+  resolveSkillOverrides,
+  skillStatesToOverrides,
+} from '../../src/services/skill-service.js'
 
 describe('discoverSkillStates', () => {
   it('discovers user, project, command-backed, and plugin skills', async () => {
@@ -167,5 +173,36 @@ describe('resolveSkillOverrides', () => {
       personal: 'off',
       shared: 'name-only',
     })
+  })
+})
+
+describe('missing skills', () => {
+  it('re-attaches skills a preset names that this project cannot see', () => {
+    expect(mergeMissingSkillStates(
+      [{ name: 'review', enabled: true, source: 'user', toggleable: true }],
+      { review: 'off', ghost: 'off' },
+    )).toEqual([
+      { name: 'review', enabled: true, source: 'user', toggleable: true },
+      { name: 'ghost', enabled: false, source: 'missing', toggleable: false, overrideValue: 'off' },
+    ])
+  })
+
+  it('marks a missing skill as enabled when its override is not off', () => {
+    const [missing] = mergeMissingSkillStates([], { ghost: 'name-only' })
+
+    expect(missing).toMatchObject({ name: 'ghost', enabled: true, source: 'missing' })
+  })
+
+  it('writes a missing skill back with the override it came in with', () => {
+    expect(skillStatesToOverrides([
+      { name: 'ghost', enabled: true, source: 'missing', toggleable: false, overrideValue: 'name-only' },
+    ])).toEqual({ ghost: 'name-only' })
+  })
+
+  it('keeps missing skills out of the way of the normal off rule', () => {
+    expect(skillStatesToOverrides([
+      { name: 'review', enabled: false, source: 'user', toggleable: true },
+      { name: 'ghost', enabled: false, source: 'missing', toggleable: false, overrideValue: 'off' },
+    ])).toEqual({ review: 'off', ghost: 'off' })
   })
 })

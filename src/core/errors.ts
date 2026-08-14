@@ -2,6 +2,8 @@ export type CliErrorCode =
   | 'preset_already_exists'
   | 'launch_preset_already_exists'
   | 'launch_preset_not_found'
+  | 'launch_template_already_exists'
+  | 'launch_template_not_found'
 
 export class CliError extends Error {
   readonly exitCode: number

@@ -7,6 +7,7 @@ import {
   applyPluginMcpAvailability,
   discoverMcpStates,
   mcpStatesToDeniedServers,
+  mergeMissingMcpStates,
   resolveDeniedMcpServers,
 } from '../../src/services/mcp-service.js'
 
@@ -244,5 +245,29 @@ describe('mcpStatesToDeniedServers', () => {
       { name: 'github', enabled: false, source: 'project', config: {} },
       { name: 'filesystem', enabled: true, source: 'user', config: {} },
     ])).toEqual([{ serverName: 'github' }])
+  })
+})
+
+describe('missing MCP servers', () => {
+  it('re-attaches denied servers this project does not have', () => {
+    expect(mergeMissingMcpStates(
+      [{ name: 'github', enabled: false, source: 'project', config: {} }],
+      [{ serverName: 'github' }, { serverName: 'ghost' }],
+    )).toEqual([
+      { name: 'ghost', enabled: false, source: 'missing', config: undefined },
+      { name: 'github', enabled: false, source: 'project', config: {} },
+    ])
+  })
+
+  it('ignores policy entries that name no server', () => {
+    const states = [{ name: 'github', enabled: true, source: 'project' as const, config: {} }]
+
+    expect(mergeMissingMcpStates(states, [{ serverUrl: 'https://example.test' }])).toBe(states)
+  })
+
+  it('keeps missing servers in the denied list a save writes back', () => {
+    expect(mcpStatesToDeniedServers([
+      { name: 'ghost', enabled: false, source: 'missing', config: undefined },
+    ])).toEqual([{ serverName: 'ghost' }])
   })
 })

@@ -88,6 +88,15 @@ vi.mock('../src/core/json.js', () => ({
   readJsonFile: readJsonFileMock,
 }))
 
+// Keeps `git rev-parse` out of the unit suite. Left unmocked these tests would
+// probe the real repository they happen to be running in, and this repo has
+// linked worktrees — so the answer would depend on where the suite was started.
+vi.mock('../src/services/worktree-service.js', () => ({
+  resolveMainWorktreeRoot: vi.fn().mockResolvedValue(undefined),
+  readWorktreeSeedMarker: vi.fn().mockResolvedValue(undefined),
+  writeWorktreeSeedMarker: vi.fn().mockResolvedValue(undefined),
+}))
+
 vi.mock('ink', () => ({
   Text: ({ children }: { children?: React.ReactNode }) => children,
   render: (element: unknown) => {
@@ -142,12 +151,14 @@ vi.mock('../src/services/claude-plugin-installation-service.js', () => ({
 
 vi.mock('../src/services/plugin-service.js', () => ({
   applyPluginOverrides: vi.fn((plugins) => plugins),
+  mergeMissingPluginStates: vi.fn((plugins) => plugins),
   resolvePluginStates: vi.fn(() => []),
   pluginStatesToEnabledPlugins: vi.fn((plugins = []) => Object.fromEntries(plugins.filter((plugin: { enabled: boolean }) => !plugin.enabled).map((plugin: { name: string }) => [plugin.name, false]))),
 }))
 
 vi.mock('../src/services/skill-service.js', () => ({
   applySkillOverrides: vi.fn((skills) => skills),
+  mergeMissingSkillStates: vi.fn((skills) => skills),
   discoverSkillStates: vi.fn().mockResolvedValue([]),
   resolveSkillOverrides: vi.fn(() => ({})),
   skillStatesToOverrides: vi.fn((skills = []) => Object.fromEntries(skills.filter((skill: { name: string; enabled: boolean; toggleable: boolean }) => skill.toggleable && !skill.enabled).map((skill: { name: string }) => [skill.name, 'off']))),
@@ -155,6 +166,7 @@ vi.mock('../src/services/skill-service.js', () => ({
 
 vi.mock('../src/services/mcp-service.js', () => ({
   discoverMcpStates: vi.fn().mockResolvedValue([]),
+  mergeMissingMcpStates: vi.fn((mcps) => mcps),
   resolveDeniedMcpServers: vi.fn(() => []),
   applyDeniedMcpServers: vi.fn((states) => states),
   mcpStatesToDeniedServers: vi.fn(() => []),

@@ -19,21 +19,32 @@ export const SOURCE_BADGE_ITEMS: Array<{
   { sources: ['plugin'], badge: '[PL]', label: '[PL] plugin' },
   { sources: ['connector'], badge: '[CN]', label: '[CN] connector' },
   { sources: ['preset'], badge: '[D]', label: '[D] default/discovered' },
+  // Its own badge rather than sharing the dimmed look of a settings-locked row:
+  // "not installed here" and "installed but switched off elsewhere" call for
+  // completely different fixes.
+  { sources: ['missing'], badge: '[!]', label: '[!] not installed' },
 ]
 
 function sourceBadge(source: ToggleColumnItem['source']): string {
   return SOURCE_BADGE_ITEMS.find(item => item.sources.includes(source))?.badge ?? '[D]'
 }
 
+export function isMissingToggleItem(item: Pick<ToggleColumnItem, 'source'>): boolean {
+  return item.source === 'missing'
+}
+
 export function ToggleItemText({ item }: { item: ToggleColumnItem }) {
-  const dimProps = item.enableLocked && !item.enabled ? { dimColor: true as const } : {}
+  const missing = isMissingToggleItem(item)
+  const dimProps = missing || (item.enableLocked && !item.enabled) ? { dimColor: true as const } : {}
 
   return (
     <>
       <Text {...dimProps} color={item.enabled ? 'green' : 'red'}>{item.enabled ? 'ON ' : 'OFF'}</Text>{' '}
       <Text {...dimProps}>{sourceBadge(item.source)}</Text>{' '}
       <Text {...dimProps}>{item.name}</Text>
-      {item.toggleable === false ? <Text {...dimProps}> (plugin)</Text> : null}
+      {missing
+        ? <Text {...dimProps}> (not installed)</Text>
+        : item.toggleable === false ? <Text {...dimProps}> (plugin)</Text> : null}
     </>
   )
 }
@@ -63,7 +74,7 @@ export function ToggleColumn({
       {...(height === undefined ? {} : { height })}
     >
       {items.map((item, index) => {
-        const lockedOff = Boolean(item.enableLocked && !item.enabled)
+        const lockedOff = Boolean(item.enableLocked && !item.enabled) || isMissingToggleItem(item)
         const focusedLine = focused && index === cursor
         const dimProps = lockedOff ? { dimColor: true as const } : {}
         return (

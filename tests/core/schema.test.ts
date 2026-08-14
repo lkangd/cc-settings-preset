@@ -3,6 +3,7 @@ import {
   ccspConfigSchema,
   createEmptyLaunchPresetIndex,
   lastSettingsSchema,
+  launchPresetIndexSchema,
   parseCcspConfig,
   parseLaunchPresetSettings,
   parseSettings,
@@ -166,5 +167,59 @@ describe('presetIndexSchema', () => {
     })
 
     expect(parsed.presets.base?.type).toBe('base')
+  })
+})
+
+describe('launch preset origin', () => {
+  it('parses an index written before templates existed', () => {
+    expect(launchPresetIndexSchema.parse({
+      version: 1,
+      presets: {
+        web: {
+          name: 'web',
+          fileName: 'web-launch.json',
+          createdAt: '2026-05-19T00:00:00.000Z',
+          updatedAt: '2026-05-19T00:00:00.000Z',
+        },
+      },
+    }).presets.web?.origin).toBeUndefined()
+  })
+
+  it('round-trips an origin through the index', () => {
+    const origin = {
+      kind: 'template' as const,
+      name: 'shared',
+      at: '2026-08-13T00:00:00.000Z',
+    }
+
+    expect(launchPresetIndexSchema.parse({
+      version: 1,
+      presets: {
+        web: {
+          name: 'web',
+          fileName: 'web-launch.json',
+          createdAt: '2026-05-19T00:00:00.000Z',
+          updatedAt: '2026-05-19T00:00:00.000Z',
+          origin,
+        },
+      },
+    }).presets.web?.origin).toEqual(origin)
+  })
+
+  it('keeps the source project path of a cross-project import', () => {
+    const parsed = launchPresetIndexSchema.parse({
+      version: 1,
+      presets: {
+        web: {
+          name: 'web',
+          fileName: 'web-launch.json',
+          createdAt: '2026-05-19T00:00:00.000Z',
+          updatedAt: '2026-05-19T00:00:00.000Z',
+          origin: { kind: 'project', name: 'web-dev', path: '/projects/web', at: '2026-08-13T00:00:00.000Z' },
+        },
+      },
+    })
+
+    expect(parsed.presets.web?.origin?.path).toBe('/projects/web')
   })
 })

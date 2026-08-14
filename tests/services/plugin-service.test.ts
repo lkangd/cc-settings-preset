@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyPluginOverrides,
+  mergeMissingPluginStates,
   pluginStatesToEnabledPlugins,
   resolvePluginRegistryKey,
   resolvePluginRegistryKeys,
@@ -57,5 +58,36 @@ describe('launch plugin helpers', () => {
       { name: 'beta', enabled: true, source: 'project' },
       { name: 'alpha', enabled: false, source: 'user' },
     ])
+  })
+})
+
+describe('missing plugins', () => {
+  it('re-attaches plugins a preset names that this project cannot see', () => {
+    expect(mergeMissingPluginStates(
+      [{ name: 'alpha', enabled: true, source: 'user' }],
+      { alpha: false, ghost: false },
+    )).toEqual([
+      { name: 'alpha', enabled: true, source: 'user' },
+      { name: 'ghost', enabled: false, source: 'missing' },
+    ])
+  })
+
+  it('leaves the states untouched when everything is installed', () => {
+    const states = [{ name: 'alpha', enabled: true, source: 'user' as const }]
+
+    expect(mergeMissingPluginStates(states, { alpha: false })).toBe(states)
+  })
+
+  it('keeps missing plugins in the settings a save writes back', () => {
+    expect(pluginStatesToEnabledPlugins([
+      { name: 'alpha', enabled: true, source: 'user' },
+      { name: 'ghost', enabled: false, source: 'missing' },
+    ])).toEqual({ ghost: false })
+  })
+
+  it('keeps a missing plugin that was asked to be enabled', () => {
+    expect(pluginStatesToEnabledPlugins([
+      { name: 'ghost', enabled: true, source: 'missing' },
+    ])).toEqual({ ghost: true })
   })
 })

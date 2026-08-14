@@ -128,8 +128,12 @@ export function createClaudePluginInstallationService(
 
   return {
     async synchronizeProjectPlugins(projectPath: string, pluginStates: PluginState[]): Promise<PluginInstallationSyncResult> {
+      // `missing` rows are a preset naming something this machine does not have.
+      // They are shown greyed out and cannot be toggled, so installing them here
+      // would be the one thing the user was told would not happen — the promise
+      // is that the preset starts working once *they* install it.
       const pluginNames = [...new Set(pluginStates
-        .filter(plugin => plugin.enabled && plugin.source !== 'user')
+        .filter(plugin => plugin.enabled && plugin.source !== 'user' && plugin.source !== 'missing')
         .map(plugin => plugin.name))]
       if (pluginNames.length === 0) return { failures: [] }
 

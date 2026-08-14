@@ -4,12 +4,7 @@ import { basename } from 'node:path'
 import { CliError } from '../core/errors.js'
 import { asRecord } from '../core/is-plain-object.js'
 import { readJsonFile, readJsonFileOrDefault, writeJsonFile } from '../core/json.js'
-import {
-  buildLaunchPresetFileName,
-  normalizePresetName,
-  parseTempSettingsStem,
-  resolvePresetIndexKey,
-} from '../core/name.js'
+import { parseTempSettingsStem } from '../core/name.js'
 import {
   resolveCcspLaunchLockPath,
   resolveCcspStatuslineUnderlyingCommandPath,
@@ -24,20 +19,17 @@ import {
 } from '../core/paths.js'
 import { currentBootOffsetMs, isPidAlive, ownProcessBootOffsetMs, readProcessBootOffsets } from '../core/process.js'
 import {
-  createEmptyLaunchPresetIndex,
   createEmptySessionIndex,
   lastUsedLaunchPresetSchema,
-  launchPresetIndexSchema,
   parseLaunchPresetSettings,
   parseSettings,
   sessionIndexSchema,
-  type LaunchPresetIndex,
   type LaunchPresetMeta,
-  type LaunchPresetSettings,
   type SessionBinding,
   type SessionIndex,
   type Settings,
 } from '../core/schema.js'
+import { createLaunchPresetStore } from './launch-preset-store.js'
 import { ensureProjectCcspStore } from './project-store-service.js'
 
 const MAX_TEMP_SETTINGS_FILES = 50
@@ -251,39 +243,20 @@ async function readTempSettingsMtime(cwd: string, stem: string): Promise<number>
 }
 
 export function createLaunchPresetService(cwd: string) {
-  const indexPath = resolveProjectLaunchPresetIndexPath(cwd)
   const lastUsedPath = resolveProjectLastUsedPath(cwd)
   const sessionsPath = resolveProjectSessionsPath(cwd)
-  let indexPromise: Promise<LaunchPresetIndex> | undefined
+  const store = createLaunchPresetStore({
+    indexPath: resolveProjectLaunchPresetIndexPath(cwd),
+    resolveFilePath: fileName => resolveProjectLaunchPresetPath(cwd, fileName),
+    ensureStore: () => ensureProjectCcspStore(cwd).then(() => undefined),
+    label: 'Launch preset',
+    notFoundCode: 'launch_preset_not_found',
+    existsCode: 'launch_preset_already_exists',
+  })
   let sessionsPromise: Promise<SessionIndex> | undefined
-
-  function invalidateIndex(): void {
-    indexPromise = undefined
-  }
 
   function invalidateSessions(): void {
     sessionsPromise = undefined
-  }
-
-  async function readIndexUncached(): Promise<LaunchPresetIndex> {
-    return launchPresetIndexSchema.parse(await readJsonFileOrDefault(indexPath, createEmptyLaunchPresetIndex()))
-  }
-
-  async function readIndex(): Promise<LaunchPresetIndex> {
-    if (!indexPromise) {
-      indexPromise = readIndexUncached().catch(error => {
-        indexPromise = undefined
-        throw error
-      })
-    }
-
-    return indexPromise
-  }
-
-  async function writeIndex(index: LaunchPresetIndex): Promise<void> {
-    await ensureProjectCcspStore(cwd)
-    await writeJsonFile(indexPath, launchPresetIndexSchema.parse(index))
-    invalidateIndex()
   }
 
   async function readSessionsUncached(): Promise<SessionIndex> {
@@ -307,21 +280,20 @@ export function createLaunchPresetService(cwd: string) {
     invalidateSessions()
   }
 
-  function getPresetPath(meta: LaunchPresetMeta): string {
-    return resolveProjectLaunchPresetPath(cwd, meta.fileName)
-  }
-
   async function readLastUsed(): Promise<string | undefined> {
     const raw = await readJsonFileOrDefault(lastUsedPath, undefined)
     if (raw === undefined) return undefined
     const parsed = lastUsedLaunchPresetSchema.parse(raw)
-    const index = await readIndex()
+    const index = await store.readIndex()
     return index.presets[parsed.presetName] ? parsed.presetName : undefined
   }
 
+  // Deliberately throws without an error code, unlike the store's own lookups:
+  // `writeProjectLaunchLastUsedIfPresent` in the CLI only swallows coded
+  // not-found errors, so attaching one here would silently change a rethrow
+  // into a no-op.
   async function writeLastUsed(nameInput: string): Promise<void> {
-    const index = await readIndex()
-    const name = resolvePresetIndexKey(index.presets, nameInput)
+    const name = await store.resolveName(nameInput)
     if (!name) throw new CliError(`Launch preset not found: ${nameInput}`)
     await ensureProjectCcspStore(cwd)
     await writeJsonFile(lastUsedPath, { presetName: name, updatedAt: nowIso() })
@@ -378,113 +350,32 @@ export function createLaunchPresetService(cwd: string) {
   }
 
   const service = {
-    async listPresets(): Promise<LaunchPresetMeta[]> {
-      const index = await readIndex()
-      return Object.values(index.presets).sort((a, b) => a.name.localeCompare(b.name))
-    },
+    listPresets: store.listPresets,
 
-    async listPresetsWithSettings(): Promise<Array<{ meta: LaunchPresetMeta; settings: LaunchPresetSettings }>> {
-      const presets = await service.listPresets()
-      return Promise.all(presets.map(async meta => ({
-        meta,
-        settings: parseLaunchPresetSettings(await readJsonFile(getPresetPath(meta))),
-      })))
-    },
+    listPresetsWithSettings: store.listPresetsWithSettings,
 
-    async readPresetSettings(nameInput: string): Promise<LaunchPresetSettings> {
-      const index = await readIndex()
-      const name = resolvePresetIndexKey(index.presets, nameInput)
-      if (!name) throw new CliError(`Launch preset not found: ${nameInput}`, 1, 'launch_preset_not_found')
-      const meta = index.presets[name]
-      if (!meta) throw new CliError(`Launch preset not found: ${nameInput}`)
-      return parseLaunchPresetSettings(await readJsonFile(getPresetPath(meta)))
-    },
+    readPresetSettings: store.readPresetSettings,
 
-    async createPreset(nameInput: string, settingsInput: unknown): Promise<LaunchPresetMeta> {
-      const name = normalizePresetName(nameInput, { preserveCase: true })
-      const settings = parseLaunchPresetSettings(settingsInput)
-      const index = await readIndex()
-      if (resolvePresetIndexKey(index.presets, name)) throw new CliError(`Launch preset already exists: ${name}`, 1, 'launch_preset_already_exists')
+    createPreset: store.createPreset,
 
-      const timestamp = nowIso()
-      const meta: LaunchPresetMeta = {
-        name,
-        fileName: buildLaunchPresetFileName(name, { preserveCase: true }),
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      }
-
-      await ensureProjectCcspStore(cwd)
-      await writeJsonFile(getPresetPath(meta), settings)
-      index.presets[name] = meta
-      await writeIndex(index)
-      return meta
-    },
-
-    async writePresetSettings(nameInput: string, settingsInput: unknown): Promise<LaunchPresetMeta> {
-      const index = await readIndex()
-      const name = resolvePresetIndexKey(index.presets, nameInput)
-      if (!name) throw new CliError(`Launch preset not found: ${nameInput}`, 1, 'launch_preset_not_found')
-      const settings = parseLaunchPresetSettings(settingsInput)
-      const existing = index.presets[name]
-      if (!existing) throw new CliError(`Launch preset not found: ${nameInput}`)
-
-      const updated = { ...existing, updatedAt: nowIso() }
-      await ensureProjectCcspStore(cwd)
-      await writeJsonFile(getPresetPath(updated), settings)
-      index.presets[name] = updated
-      await writeIndex(index)
-      return updated
-    },
+    writePresetSettings: store.writePresetSettings,
 
     async renamePreset(nameInput: string, newNameInput: string): Promise<LaunchPresetMeta> {
-      const newName = normalizePresetName(newNameInput, { preserveCase: true })
-      const index = await readIndex()
-      const name = resolvePresetIndexKey(index.presets, nameInput)
-      if (!name) throw new CliError(`Launch preset not found: ${nameInput}`, 1, 'launch_preset_not_found')
-      const existing = index.presets[name]
-      if (!existing) throw new CliError(`Launch preset not found: ${nameInput}`)
-      if (newName === name) {
-        return { ...existing, updatedAt: nowIso() }
-      }
-      const conflictingKey = resolvePresetIndexKey(index.presets, newName)
-      if (conflictingKey && conflictingKey !== name) throw new CliError(`Launch preset already exists: ${newName}`, 1, 'launch_preset_already_exists')
-
-      const updated = {
-        ...existing,
-        name: newName,
-        fileName: buildLaunchPresetFileName(newName, { preserveCase: true }),
-        updatedAt: nowIso(),
-      }
-
-      await ensureProjectCcspStore(cwd)
-      await fs.rename(getPresetPath(existing), resolveProjectLaunchPresetPath(cwd, updated.fileName))
-      delete index.presets[name]
-      index.presets[newName] = updated
-      await writeIndex(index)
-
+      const existing = await store.requireMeta(nameInput)
+      // Sampled before the rename, not after: `readLastUsed()` validates the
+      // stored name against the index, and the rename removes the old name from
+      // it — so a reading taken afterwards always reports "nothing was last
+      // used" and the pointer is left dangling on a preset that no longer exists.
       const lastUsed = await readLastUsed()
-      if (lastUsed === name) await writeLastUsed(newName)
+      const updated = await store.renamePreset(nameInput, newNameInput)
+      if (updated.name !== existing.name && lastUsed === existing.name) {
+        await writeLastUsed(updated.name)
+      }
 
       return updated
     },
 
-    async deletePreset(nameInput: string): Promise<void> {
-      const index = await readIndex()
-      const name = resolvePresetIndexKey(index.presets, nameInput)
-      if (!name) return
-      const existing = index.presets[name]
-      if (!existing) return
-
-      try {
-        await fs.unlink(getPresetPath(existing))
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-      }
-
-      delete index.presets[name]
-      await writeIndex(index)
-    },
+    deletePreset: store.deletePreset,
 
     writeLastUsed,
 

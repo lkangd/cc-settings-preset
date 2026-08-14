@@ -653,4 +653,334 @@ describe('ProjectManageApp interactions', () => {
     expect(onSubmit).not.toHaveBeenCalled()
     expect(exitMock).not.toHaveBeenCalled()
   })
+
+  it('offers to save the active preset as a global template with its name prefilled', () => {
+    const onPromoteSubmit = vi.fn().mockResolvedValue({ ok: true })
+
+    act(() => {
+      TestRenderer.create(
+        <ProjectManageApp
+          presets={[{ name: 'web', fileName: 'web-launch.json', createdAt: '2026-05-19T00:00:00.000Z', updatedAt: '2026-05-19T00:00:00.000Z' }]}
+          detected={{ plugins: [], skills: [], mcps: [] }}
+          statesByPreset={{ web: { plugins: [], skills: [], mcps: [] } }}
+          lastUsedName="web"
+          onSubmit={vi.fn()}
+          onPromoteSubmit={onPromoteSubmit}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('s', {})
+    })
+
+    expect(textInputProps.at(-1)?.label).toContain('global template')
+    expect(textInputProps.at(-1)?.value).toBe('web')
+  })
+
+  it('promotes the active preset under the name that was confirmed', async () => {
+    const onPromoteSubmit = vi.fn().mockResolvedValue({ ok: true })
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <ProjectManageApp
+          presets={[{ name: 'web', fileName: 'web-launch.json', createdAt: '2026-05-19T00:00:00.000Z', updatedAt: '2026-05-19T00:00:00.000Z' }]}
+          detected={{ plugins: [], skills: [], mcps: [] }}
+          statesByPreset={{ web: { plugins: [], skills: [], mcps: [] } }}
+          lastUsedName="web"
+          onSubmit={vi.fn()}
+          onPromoteSubmit={onPromoteSubmit}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('s', {})
+    })
+    act(() => {
+      textInputProps.at(-1)?.onChange('frontend')
+    })
+    await act(async () => {
+      await textInputProps.at(-1)?.onSubmit()
+    })
+
+    expect(onPromoteSubmit).toHaveBeenCalledWith('web', 'frontend', false)
+    expect(flattenJson(output!.toJSON())).toContain('Saved as global template frontend')
+  })
+
+  it('asks what to do when a template of that name already exists', async () => {
+    const onPromoteSubmit = vi.fn().mockResolvedValue({ ok: false, conflict: true, error: 'exists' })
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <ProjectManageApp
+          presets={[{ name: 'web', fileName: 'web-launch.json', createdAt: '2026-05-19T00:00:00.000Z', updatedAt: '2026-05-19T00:00:00.000Z' }]}
+          detected={{ plugins: [], skills: [], mcps: [] }}
+          statesByPreset={{ web: { plugins: [], skills: [], mcps: [] } }}
+          lastUsedName="web"
+          onSubmit={vi.fn()}
+          onPromoteSubmit={onPromoteSubmit}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('s', {})
+    })
+    await act(async () => {
+      await textInputProps.at(-1)?.onSubmit()
+    })
+
+    const text = flattenJson(output!.toJSON())
+    expect(text).toContain('Overwrite')
+    expect(text).toContain('Rename')
+    expect(text).toContain('Cancel')
+  })
+
+  it('refuses to save Detected as a template', () => {
+    const onPromoteSubmit = vi.fn()
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <ProjectManageApp
+          presets={[]}
+          detected={{ plugins: [], skills: [], mcps: [] }}
+          statesByPreset={{}}
+          onSubmit={vi.fn()}
+          onPromoteSubmit={onPromoteSubmit}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('s', {})
+    })
+
+    expect(onPromoteSubmit).not.toHaveBeenCalled()
+    expect(flattenJson(output!.toJSON())).toContain('Detected cannot be saved as a template')
+  })
+
+  it('refuses to promote a preset whose toggles have not been saved', () => {
+    const onPromoteSubmit = vi.fn().mockResolvedValue({ ok: true })
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <ProjectManageApp
+          presets={[{ name: 'web', fileName: 'web-launch.json', createdAt: '2026-05-19T00:00:00.000Z', updatedAt: '2026-05-19T00:00:00.000Z' }]}
+          detected={{ plugins: [{ name: 'alpha', enabled: true, source: 'user' }], skills: [], mcps: [] }}
+          statesByPreset={{ web: { plugins: [{ name: 'alpha', enabled: true, source: 'user' }], skills: [], mcps: [] } }}
+          lastUsedName="web"
+          onSubmit={vi.fn()}
+          onPromoteSubmit={onPromoteSubmit}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('', { rightArrow: true })
+    })
+    act(() => {
+      latestInputHandler()?.(' ', {})
+    })
+    act(() => {
+      latestInputHandler()?.('s', {})
+    })
+
+    // Promotion reads the preset back from disk, so the template would have
+    // silently been the pre-toggle version.
+    expect(onPromoteSubmit).not.toHaveBeenCalled()
+    expect(flattenJson(output!.toJSON())).toContain('Save this preset before saving it as a template')
+  })
+
+  it('refuses to open the import panel while changes are unsaved', () => {
+    const onSubmit = vi.fn()
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <ProjectManageApp
+          presets={[{ name: 'web', fileName: 'web-launch.json', createdAt: '2026-05-19T00:00:00.000Z', updatedAt: '2026-05-19T00:00:00.000Z' }]}
+          detected={{ plugins: [{ name: 'alpha', enabled: true, source: 'user' }], skills: [], mcps: [] }}
+          statesByPreset={{ web: { plugins: [{ name: 'alpha', enabled: true, source: 'user' }], skills: [], mcps: [] } }}
+          lastUsedName="web"
+          onSubmit={onSubmit}
+          onImportSubmit={vi.fn()}
+          importCandidates={[]}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('', { rightArrow: true })
+    })
+    act(() => {
+      latestInputHandler()?.(' ', {})
+    })
+    act(() => {
+      latestInputHandler()?.('i', {})
+    })
+
+    // A successful import refreshes from disk and exits, which would take the
+    // toggle with it.
+    expect(flattenJson(output!.toJSON())).not.toContain('Import project launch preset')
+    expect(flattenJson(output!.toJSON())).toContain('Save or discard your changes before importing')
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('opens the import panel on i and refreshes once something lands', async () => {
+    const onSubmit = vi.fn()
+    const onImportSubmit = vi.fn().mockResolvedValue({ ok: true })
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <ProjectManageApp
+          presets={[]}
+          detected={{ plugins: [], skills: [], mcps: [] }}
+          statesByPreset={{}}
+          onSubmit={onSubmit}
+          onImportSubmit={onImportSubmit}
+          importCandidates={[{
+            id: 'candidate-0',
+            kind: 'template',
+            presetName: 'shared',
+            counts: { plugins: 1, skills: 0, mcps: 0 },
+            missingCount: 0,
+          }]}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('i', {})
+    })
+
+    expect(flattenJson(output!.toJSON())).toContain('Import project launch preset')
+
+    act(() => {
+      latestInputHandler()?.('', { return: true })
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(onImportSubmit).toHaveBeenCalledWith('candidate-0', 'shared', false)
+    expect(onSubmit).toHaveBeenCalledWith({ type: 'refresh' })
+    expect(exitMock).toHaveBeenCalled()
+  })
+
+  it('leaves the project list alone when the import panel is dismissed', () => {
+    const onSubmit = vi.fn()
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <ProjectManageApp
+          presets={[{ name: 'web', fileName: 'web-launch.json', createdAt: '2026-05-19T00:00:00.000Z', updatedAt: '2026-05-19T00:00:00.000Z' }]}
+          detected={{ plugins: [], skills: [], mcps: [] }}
+          statesByPreset={{ web: { plugins: [], skills: [], mcps: [] } }}
+          onSubmit={onSubmit}
+          onImportSubmit={vi.fn()}
+          importCandidates={[]}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('i', {})
+    })
+    act(() => {
+      latestInputHandler()?.('', { escape: true })
+    })
+
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(flattenJson(output!.toJSON())).toContain('Manage project launch presets')
+  })
+
+  it('marks an imported preset with where it came from', () => {
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <ProjectManageApp
+          presets={[{
+            name: 'web',
+            fileName: 'web-launch.json',
+            createdAt: '2026-05-19T00:00:00.000Z',
+            updatedAt: '2026-05-19T00:00:00.000Z',
+            origin: { kind: 'template', name: 'shared', at: '2026-08-13T00:00:00.000Z' },
+          }]}
+          detected={{ plugins: [], skills: [], mcps: [] }}
+          statesByPreset={{ web: { plugins: [], skills: [], mcps: [] } }}
+          onSubmit={vi.fn()}
+        />,
+      )
+    })
+
+    expect(flattenJson(output!.toJSON())).toContain('← shared')
+  })
+
+  it('leaves a hand-built preset unmarked', () => {
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <ProjectManageApp
+          presets={[{ name: 'web', fileName: 'web-launch.json', createdAt: '2026-05-19T00:00:00.000Z', updatedAt: '2026-05-19T00:00:00.000Z' }]}
+          detected={{ plugins: [], skills: [], mcps: [] }}
+          statesByPreset={{ web: { plugins: [], skills: [], mcps: [] } }}
+          onSubmit={vi.fn()}
+        />,
+      )
+    })
+
+    expect(flattenJson(output!.toJSON())).not.toContain('← ')
+  })
+
+  it('marks a missing toggle item and refuses to switch it', () => {
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <ProjectManageApp
+          presets={[{ name: 'web', fileName: 'web-launch.json', createdAt: '2026-05-19T00:00:00.000Z', updatedAt: '2026-05-19T00:00:00.000Z' }]}
+          detected={{ plugins: [{ name: 'alpha', enabled: true, source: 'user' }], skills: [], mcps: [] }}
+          statesByPreset={{
+            web: {
+              plugins: [
+                { name: 'alpha', enabled: true, source: 'user' },
+                { name: 'ghost', enabled: false, source: 'missing' },
+              ],
+              skills: [],
+              mcps: [],
+            },
+          }}
+          lastUsedName="web"
+          onSubmit={vi.fn()}
+        />,
+      )
+    })
+
+    expect(flattenJson(output!.toJSON())).toContain('(not installed)')
+
+    act(() => {
+      latestInputHandler()?.('', { rightArrow: true })
+    })
+    act(() => {
+      latestInputHandler()?.('j', {})
+    })
+
+    expect(flattenJson(output!.toJSON())).toContain('Not installed in this project')
+
+    act(() => {
+      latestInputHandler()?.(' ', {})
+    })
+
+    expect(flattenJson(output!.toJSON())).toContain('OFF')
+    expect(flattenJson(output!.toJSON())).toContain('Not installed in this project')
+  })
 })

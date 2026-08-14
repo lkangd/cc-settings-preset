@@ -13,6 +13,7 @@ import {
   formatProjectLaunchSortMode,
   getActiveProjectLaunchItem,
   getActiveProjectLaunchState,
+  getFocusedMissingMessage,
   getPendingDisableRemovals,
   reduceProjectLaunchFlow,
   shouldBubbleProjectLaunchEscape,
@@ -86,7 +87,10 @@ export function useProjectLaunchBrowserController({
   const skillItems = annotateToggleItems(state, detectedBaseline, 'skills', state.skills)
   const mcpItems = annotateToggleItems(state, detectedBaseline, 'mcps', state.mcps)
 
-  const message = state.toggleMessage ?? sortMessage
+  // Explicit messages win: both of those are reactions to something the user
+  // just pressed, while the missing-item note is ambient and would otherwise
+  // overwrite the answer to the keystroke.
+  const message = state.toggleMessage ?? sortMessage ?? getFocusedMissingMessage(state)
   const columnsProps: ProjectLaunchColumnsViewProps = {
     presetItems: state.presetItems,
     presetCursor: state.presetCursor,
