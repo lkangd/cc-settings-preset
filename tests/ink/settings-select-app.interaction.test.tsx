@@ -173,6 +173,46 @@ describe('SettingsSelectApp interactions', () => {
     expect(exitMock).toHaveBeenCalledOnce()
   })
 
+  it('reaches the style row on the third quick setting and cycles the discovered styles', () => {
+    const onSubmit = vi.fn()
+
+    act(() => {
+      TestRenderer.create(
+        <SettingsSelectApp
+          items={[{ name: 'alpha', sourcePath: '/tmp/alpha.json', settings: {}, isLastUsed: true }]}
+          outputStyles={['Diagrams first']}
+          onSubmit={onSubmit}
+        />,
+      )
+    })
+
+    act(() => {
+      latestInputHandler()?.('l', {})
+      latestInputHandler()?.('j', {})
+      latestInputHandler()?.('j', {}) // third row: style
+      latestInputHandler()?.(' ', {})
+      latestInputHandler()?.('', { return: true })
+    })
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      settings: { outputStyle: 'Proactive' },
+      changedPresets: { alpha: { outputStyle: 'Proactive' } },
+    }))
+
+    act(() => {
+      // Past the last built-in the ring reaches the style discovered on disk.
+      latestInputHandler()?.(' ', {})
+      latestInputHandler()?.(' ', {})
+      latestInputHandler()?.(' ', {})
+      latestInputHandler()?.(' ', {})
+      latestInputHandler()?.('', { return: true })
+    })
+
+    expect(onSubmit).toHaveBeenLastCalledWith(expect.objectContaining({
+      settings: { outputStyle: 'Diagrams first' },
+    }))
+  })
+
   it('ignores space while the presets column is focused', () => {
     const onSubmit = vi.fn()
 

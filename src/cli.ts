@@ -36,6 +36,7 @@ import {
 } from './flows/settings-select-flow.js'
 import { SettingsSelectApp, type SettingsSelectResult } from './ink/settings-select-app.js'
 import { discoverCachedClaudePlugins } from './services/plugin-cache-service.js'
+import { discoverUserOutputStyles } from './services/output-style-service.js'
 import {
   applyPluginOverrides,
   mergeMissingPluginStates,
@@ -428,6 +429,7 @@ async function renderSettingsSelectApp(
     headerNotice?: string
     headerUpdateNotice?: string
     quickSettingsSources?: QuickSettingsSource[]
+    outputStyles?: string[]
   } = {}
 ): Promise<SettingsSelectResult | undefined> {
   let result: SettingsSelectResult | undefined
@@ -501,11 +503,12 @@ async function resolveInteractiveBaseSettings(
   config?: CcspConfig,
   header?: { headerNotice: string; headerUpdateNotice?: string },
 ): Promise<SettingsSelectResult | undefined> {
-  const [officialItem, rememberedName, managedSettings, settingsSources] = await Promise.all([
+  const [officialItem, rememberedName, managedSettings, settingsSources, outputStyles] = await Promise.all([
     profileStep('claude-official-preset', buildClaudeOfficialPresetItem),
     profileStep('global-last-used', () => globalLastSettingsService.readLastUsed(context.cwd)),
     readManagedSettings(),
     settingsSourceService.discoverSettingsSources(),
+    profileStep('output-styles', () => discoverUserOutputStyles(context.homeDir)),
   ])
   const presetItems = [...(officialItem ? [officialItem] : []), ...(await buildGlobalSettingsPresetItems(rememberedName))]
   if (presetItems.length > 0) {
@@ -523,6 +526,7 @@ async function resolveInteractiveBaseSettings(
       initialEnvOnly: globalPresetEnvOnly,
       displayFormat: settingsDisplayFormat,
       quickSettingsSources,
+      outputStyles,
     })
     if (!selected) return undefined
     const persisted = await persistQuickSettingsChanges(selected, presetItems)

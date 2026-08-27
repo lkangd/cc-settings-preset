@@ -24,6 +24,7 @@ type Props = {
   initialEnvOnly?: boolean
   displayFormat?: SettingsDisplayFormat
   quickSettingsSources?: QuickSettingsSource[]
+  outputStyles?: string[]
   headerNotice?: string
   headerUpdateNotice?: string
   onSubmit: (result: SettingsSelectResult) => void
@@ -35,6 +36,7 @@ export function SettingsSelectApp({
   initialEnvOnly = false,
   displayFormat = 'yaml',
   quickSettingsSources = [],
+  outputStyles = [],
   headerNotice,
   headerUpdateNotice,
   onSubmit,
@@ -43,6 +45,7 @@ export function SettingsSelectApp({
   const [state, setState] = useState(() => createSettingsSelectFlowState({
     items,
     quickSettingsSources,
+    outputStyles,
     ...(initialName ? { initialName } : {}),
   }))
   const stateRef = useRef(state)

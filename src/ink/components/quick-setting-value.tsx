@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Text } from 'ink'
-import type { QuickSettingField } from '../../flows/settings-select-flow.js'
+import type { BuiltInOutputStyle, QuickSettingField } from '../../flows/settings-select-flow.js'
 
 // Solid colors keyed by value. Values without an entry render in the default text color.
 const MODE_COLORS: Record<string, string> = {
@@ -16,6 +16,16 @@ const EFFORT_COLORS: Record<string, string> = {
   medium: '#85F789',
   high: '#B695F3',
 }
+
+// `Default` and every custom style stay uncolored, which is what separates the built-ins from the
+// styles discovered in ~/.claude/output-styles at a glance. Keyed off BuiltInOutputStyle so adding
+// or renaming a built-in fails to compile until it gets a color here.
+const OUTPUT_STYLE_COLORS = {
+  Proactive: '#F4BB78',
+  Concise: '#F5F58A',
+  Explanatory: '#A1E7FA',
+  Learning: '#B695F3',
+} satisfies Record<Exclude<BuiltInOutputStyle, 'Default'>, string>
 
 const XHIGH_BASE = '#85F789'
 const XHIGH_HIGHLIGHT = '#B695F3'
@@ -57,15 +67,20 @@ const sweepColorAt = (length: number) => (index: number, frame: number) =>
 const rainbowColorAt = (index: number, frame: number) =>
   RAINBOW_PALETTE[(index + frame) % RAINBOW_PALETTE.length]!
 
+function ColoredValue({ colors, value }: { colors: Record<string, string>; value: string }) {
+  const color = colors[value]
+  return color ? <Text color={color}>{value}</Text> : <Text>{value}</Text>
+}
+
 export function QuickSettingValue({ field, value }: { field: QuickSettingField; value: string }) {
   if (field === 'effortLevel') {
     if (value === 'xhigh') return <AnimatedText text={value} colorAt={sweepColorAt(value.length)} />
     if (value === 'max') return <AnimatedText text={value} colorAt={rainbowColorAt} />
     if (value === 'ultracode') return <Text backgroundColor={ULTRACODE_BACKGROUND} color="white">{value}</Text>
-    const color = EFFORT_COLORS[value]
-    return color ? <Text color={color}>{value}</Text> : <Text>{value}</Text>
+    return <ColoredValue colors={EFFORT_COLORS} value={value} />
   }
 
-  const color = MODE_COLORS[value]
-  return color ? <Text color={color}>{value}</Text> : <Text>{value}</Text>
+  if (field === 'outputStyle') return <ColoredValue colors={OUTPUT_STYLE_COLORS} value={value} />
+
+  return <ColoredValue colors={MODE_COLORS} value={value} />
 }

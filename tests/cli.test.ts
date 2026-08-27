@@ -679,6 +679,72 @@ describe('run command', () => {
     expectCompactUpdateNotice(renderRawMock.mock.calls[0]?.[0])
   })
 
+  // ~/.claude/settings.json is the `user` scope every other preset falls back to for display, so a
+  // quick setting leaking into it would look like it had been applied to every preset at once.
+  // *Claude Official* is the sole exception: it has no preset file and maps to that path by design.
+  const CLAUDE_OFFICIAL_SETTINGS_PATH = '/tmp/home/.claude/settings.json'
+
+  async function runWithQuickSettingDrafts(changedPresets: Record<string, unknown>): Promise<void> {
+    listPresetsMock.mockResolvedValue([{
+      type: 'base' as const,
+      name: 'base',
+      fileName: 'base-settings.json',
+      createdAt: '2026-05-17T00:00:00.000Z',
+      updatedAt: '2026-05-17T00:00:00.000Z',
+    }])
+    isLoggedInMock.mockResolvedValue(true)
+    buildClaudeOfficialItemMock.mockResolvedValue({
+      name: '*Claude Official*',
+      sourcePath: CLAUDE_OFFICIAL_SETTINGS_PATH,
+      settings: {},
+      temporary: true,
+    })
+
+    renderMock
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          name: 'base',
+          sourcePath: '/tmp/.ccsp/settings/base-settings.json',
+          settings: { outputStyle: 'Concise' },
+          changedPresets,
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+      .mockImplementationOnce((element: React.ReactElement<{ onSubmit: (result: unknown) => void }>) => {
+        element.props.onSubmit({
+          type: 'launch',
+          presetName: 'base',
+          toggles: { plugins: [], skills: [], mcps: [] },
+        })
+        return { waitUntilExit: async () => undefined }
+      })
+
+    const { main } = await import('../src/cli.js')
+    await main(['node', 'cli'])
+  }
+
+  it('keeps a non-official preset out of ~/.claude/settings.json when persisting quick settings', async () => {
+    await runWithQuickSettingDrafts({ base: { outputStyle: 'Concise' } })
+
+    expect(writePresetSettingsByNameMock).toHaveBeenCalledWith('base', { outputStyle: 'Concise' })
+    expect(writeClaudeOfficialSettingsMock).not.toHaveBeenCalled()
+  })
+
+  it('routes only the Claude Official draft to ~/.claude/settings.json', async () => {
+    await runWithQuickSettingDrafts({
+      base: { outputStyle: 'Concise' },
+      '*Claude Official*': { outputStyle: 'Learning' },
+    })
+
+    expect(writeClaudeOfficialSettingsMock).toHaveBeenCalledTimes(1)
+    expect(writeClaudeOfficialSettingsMock).toHaveBeenCalledWith(
+      CLAUDE_OFFICIAL_SETTINGS_PATH,
+      { outputStyle: 'Learning' },
+    )
+    expect(writePresetSettingsByNameMock).toHaveBeenCalledWith('base', { outputStyle: 'Concise' })
+    expect(writePresetSettingsByNameMock).toHaveBeenCalledTimes(1)
+  })
+
   it('selects settings, saves a project launch preset, finalizes settings, and launches Claude', async () => {
     const basePreset = {
       type: 'base' as const,

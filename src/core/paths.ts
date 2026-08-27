@@ -55,6 +55,10 @@ export function resolveUserSkillsDir(homeDir: string): string {
   return join(homeDir, '.claude', 'skills')
 }
 
+export function resolveUserOutputStylesDir(homeDir: string): string {
+  return join(homeDir, '.claude', 'output-styles')
+}
+
 export function resolveProjectSkillsDir(projectDir: string): string {
   return join(projectDir, '.claude', 'skills')
 }

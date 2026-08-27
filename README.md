@@ -261,24 +261,27 @@ claude --settings <temp-file> [your other args]
 - **Non-destructive launch** — inject config via temp files; does not force-overwrite your main settings.
 - **Two-layer split** — global “base environment” vs project “launch delta” for multi-repo work.
 - **Visual toggles** — terminal TUI to browse JSON and flip plugins / skills / MCP.
-- **Quick settings** — cycle `permissions.defaultMode` and `effortLevel` for the selected preset right from the base screen; only fields you touch persist (to the preset, or `~/.claude/settings.json` for Claude Official).
+- **Quick settings** — cycle `permissions.defaultMode`, `effortLevel` and `outputStyle` for the selected preset right from the base screen; only fields you touch persist (to the preset, or `~/.claude/settings.json` for Claude Official).
 - **Direct run** — `-g` / `-p` / `--dry-run` for scripts and CI; combine with `claude -p` for headless agent tasks.
 - **Remembers last choice** — per project directory for base and launch presets.
 - **Resumable sessions** — every launch is bound to its preset/launch config; `ccsp --continue` and `ccsp --resume <id>` restore the original config and resume the matching Claude session in one shot.
 - **Safer defaults** — `.claude/.ccsp/` gets a `.gitignore` that ignores everything on init.
 
-### Quick settings (mode & effort)
+### Quick settings (mode, effort & style)
 
-The base preset selection screen has a middle **Quick Settings** column. Move focus there (`h`/`l` or ←/→) and press `space` to cycle two Claude Code options for the selected preset:
+The base preset selection screen has a middle **Quick Settings** column. Move focus there (`h`/`l` or ←/→) and press `space` to cycle three Claude Code options for the selected preset:
 
 - **mode** — `permissions.defaultMode`: `manual` → `acceptEdits` → `plan` → `auto` → `dontAsk` → `bypassPermissions`.
 - **effort** — `effortLevel`: `low` → `medium` → `high` → `xhigh` → `max` → `ultracode`.
+- **style** — `outputStyle`: the built-ins `Default` → `Proactive` → `Concise` → `Explanatory` → `Learning`, followed by any custom styles found in `~/.claude/output-styles/`.
 
 Fields you don't touch show the effective default resolved by precedence (managed → local → project → user). Only fields you actually cycle are written, and every effort level persists the same way: as `effortLevel` in the preset.
 
 `max` and `ultracode` need one extra step. Claude Code's settings schema only accepts `low` / `medium` / `high` / `xhigh` for `effortLevel`, so it never applies those two from a settings file, and a preset that only stored `effortLevel: "max"` would silently fall back to the `effortLevel` inherited from `~/.claude/settings.json`. CCSP therefore also restates them on the command line: when the effective level — resolved over the same chain the column displays (preset → managed → local → project → user) — is `max` or `ultracode`, the launch appends `--effort max` / `--effort ultracode`, which outranks every settings scope. This applies to direct run and `--resume` too. An explicit `--effort <level>` or `--effort=<level>` in your own args always wins.
 
-Edits are written to the preset file on confirm. Editing the temporary **Claude Official** entry writes straight back to `~/.claude/settings.json`.
+Custom output styles are read from `~/.claude/output-styles/*.md`, using each file's frontmatter `name` and falling back to its file name — the same rule Claude Code applies, so the value written is one Claude Code resolves. Project-level and plugin styles are deliberately not offered: the base screen runs before a project is chosen, so a project style would produce a preset value that stops resolving elsewhere. A style set outside this column (project, managed or plugin) is still shown verbatim, and `space` cycles from the top of the list. Unlike the other two rows, `Default` is written out explicitly rather than removing the key.
+
+Edits are written to the preset file on confirm. Editing the temporary **Claude Official** entry writes straight back to `~/.claude/settings.json` — that path is the `user` scope every other preset falls back to for display, so a value set there shows up as the effective default on every preset that doesn't set its own. No other preset can write to it.
 
 ### Session resume
 

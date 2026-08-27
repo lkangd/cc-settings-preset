@@ -3,6 +3,7 @@ import {
   applyQuickSettingsDraft,
   createSettingsSelectFlowState,
   draftHasPersistableChange,
+  QUICK_SETTING_FIELDS,
   reduceSettingsSelectFlow,
   resolveEffortLaunchArg,
   resolveQuickSettingDisplays,
@@ -74,20 +75,25 @@ describe('settings select flow', () => {
       items: [{ name: 'base', settings, sourcePath: '/tmp/base.json' }],
       quickSettingsSources: [
         { scope: 'managed', settings: { permissions: { defaultMode: 'acceptEdits' }, effortLevel: 'high' } },
-        { scope: 'project-local', settings: { effortLevel: 'medium' } },
+        { scope: 'project-local', settings: { effortLevel: 'medium', outputStyle: 'Explanatory' } },
       ],
     })
 
     expect(resolveQuickSettingDisplays(state)).toEqual([
       { field: 'defaultMode', label: 'mode', value: 'plan', source: 'preset', touched: false },
       { field: 'effortLevel', label: 'effort', value: 'high', source: 'managed', touched: false },
+      { field: 'outputStyle', label: 'style', value: 'Explanatory', source: 'project-local', touched: false },
     ])
     expect(settings).toEqual({ permissions: { defaultMode: 'plan' } })
 
     const fallbackState = createSettingsSelectFlowState({
       items: [{ name: 'empty', settings: {}, sourcePath: '/tmp/empty.json' }],
     })
-    expect(resolveQuickSettingDisplays(fallbackState).map(item => item.value)).toEqual(['manual', 'model default'])
+    expect(resolveQuickSettingDisplays(fallbackState).map(item => item.value)).toEqual([
+      'manual',
+      'model default',
+      'Default',
+    ])
   })
 
   it('cycles quick settings from displayed values and keeps drafts per preset', () => {
@@ -184,6 +190,75 @@ describe('settings select flow', () => {
     expect(applyQuickSettingsDraft(settings, { effortLevel: 'low' })).toEqual({
       ...settings,
       effortLevel: 'low',
+    })
+  })
+
+  it('cycles output styles through the built-ins before the discovered ones', () => {
+    let state = createSettingsSelectFlowState({
+      items: [{ name: 'base', settings: { outputStyle: 'Learning' }, sourcePath: '/tmp/base.json' }],
+      outputStyles: ['Diagrams first'],
+    })
+    state = reduceSettingsSelectFlow(state, { type: 'focus-right' })
+    state = reduceSettingsSelectFlow(state, { type: 'down' })
+    state = reduceSettingsSelectFlow(state, { type: 'down' })
+
+    const values: string[] = []
+    for (let i = 0; i < 6; i++) {
+      state = reduceSettingsSelectFlow(state, { type: 'cycle-current' })
+      values.push(state.draftsByPreset.base!.outputStyle!)
+    }
+
+    expect(values).toEqual(['Diagrams first', 'Default', 'Proactive', 'Concise', 'Explanatory', 'Learning'])
+  })
+
+  it('shows a style set outside this column verbatim and cycles it back to the first candidate', () => {
+    let state = createSettingsSelectFlowState({
+      items: [{ name: 'base', settings: { outputStyle: 'project-only-style' }, sourcePath: '/tmp/base.json' }],
+    })
+    expect(resolveQuickSettingDisplays(state)[2]).toMatchObject({
+      value: 'project-only-style',
+      source: 'preset',
+      touched: false,
+    })
+
+    state = reduceSettingsSelectFlow(state, { type: 'focus-right' })
+    state = reduceSettingsSelectFlow(state, { type: 'down' })
+    state = reduceSettingsSelectFlow(state, { type: 'down' })
+    state = reduceSettingsSelectFlow(state, { type: 'cycle-current' })
+
+    expect(state.draftsByPreset.base).toEqual({ outputStyle: 'Default' })
+  })
+
+  // The cursor bound comes from QUICK_SETTING_FIELDS while the rows come from
+  // resolveQuickSettingDisplays; if the two ever drift, rows become unreachable or the cursor
+  // parks on nothing.
+  it('keeps the rendered rows in step with the field list the cursor is bounded by', () => {
+    const state = createSettingsSelectFlowState({ items })
+
+    expect(resolveQuickSettingDisplays(state).map(display => display.field)).toEqual([...QUICK_SETTING_FIELDS])
+  })
+
+  it('moves the quick settings cursor over all three rows and clamps at the last one', () => {
+    let state = createSettingsSelectFlowState({ items })
+    state = reduceSettingsSelectFlow(state, { type: 'focus-right' })
+
+    const positions: number[] = []
+    for (let i = 0; i < 4; i++) {
+      state = reduceSettingsSelectFlow(state, { type: 'down' })
+      positions.push(state.quickCursor)
+    }
+
+    expect(positions).toEqual([1, 2, 2, 2])
+  })
+
+  it('persists a chosen output style, including the explicit Default', () => {
+    expect(draftHasPersistableChange({ outputStyle: 'Default' })).toBe(true)
+    expect(applyQuickSettingsDraft({ model: 'sonnet' }, { outputStyle: 'Default' })).toEqual({
+      model: 'sonnet',
+      outputStyle: 'Default',
+    })
+    expect(applyQuickSettingsDraft({ outputStyle: 'Learning' }, { outputStyle: 'Concise' })).toEqual({
+      outputStyle: 'Concise',
     })
   })
 
