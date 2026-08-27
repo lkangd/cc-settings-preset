@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.4.1 (2026-08-27)
+
+### Features
+* **settings**: enhance quick settings with output style support
+
+### Code Refactoring
+* **progress-line**: improve handling of terminal resize during plugin installation
+* **settings**: streamline quick settings structure and enhance color mapping
+
 ## 1.4.0 (2026-08-14)
 
 ### Features
