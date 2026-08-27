@@ -4,7 +4,9 @@ import { cycleSortMode, moveListCursor, remapCursorByKey } from './sortable-list
 
 export type SettingsSelectSortMode = 'recent' | 'name' | 'updated'
 export type SettingsSelectFocus = 'presets' | 'quick-settings'
-export type QuickSettingField = 'defaultMode' | 'effortLevel' | 'outputStyle'
+// The draft shape names the fields, so a row cannot exist without somewhere to hold its pending
+// value — and QUICK_SETTINGS below fails to compile until every field here has a descriptor.
+export type QuickSettingField = keyof QuickSettingsDraft
 export type PermissionDefaultMode = 'manual' | 'acceptEdits' | 'plan' | 'auto' | 'dontAsk' | 'bypassPermissions'
 // Every level is persisted the same way: as the `effortLevel` setting of the preset.
 export type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultracode'
@@ -35,14 +37,6 @@ const BUILT_IN_OUTPUT_STYLES = [
 ] as const
 
 export type BuiltInOutputStyle = (typeof BUILT_IN_OUTPUT_STYLES)[number]
-
-// The rows the quick settings column renders, in order. Kept as its own list so the cursor bound
-// does not have to resolve every row's effective value just to count them.
-export const QUICK_SETTING_FIELDS: readonly QuickSettingField[] = [
-  'defaultMode',
-  'effortLevel',
-  'outputStyle',
-]
 
 export type QuickSettingsDraft = {
   defaultMode?: PermissionDefaultMode
@@ -173,6 +167,70 @@ function readOutputStyle(settings: Settings): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value : undefined
 }
 
+// One row of the quick settings column. Everything a row does differently from its neighbours lives
+// in its descriptor, so adding a row is one entry here plus one color entry in quick-setting-value.
+type QuickSettingSpec<F extends QuickSettingField = QuickSettingField> = {
+  field: F
+  label: string
+  // What the row shows when no scope in the chain sets the field.
+  fallback: string
+  read: (settings: Settings) => QuickSettingsDraft[F]
+  // The ring the row cycles through, in order.
+  candidates: (state: SettingsSelectFlowState) => readonly NonNullable<QuickSettingsDraft[F]>[]
+  // Per row rather than a generic key assignment because of `defaultMode`: it merges into the
+  // existing `permissions` object instead of setting a top-level key.
+  apply: (settings: Settings, value: string) => Settings
+}
+
+// Pins `field` to a literal so `read` and `candidates` are checked against that one field's draft
+// type rather than against the union of all of them.
+function defineQuickSetting<F extends QuickSettingField>(spec: QuickSettingSpec<F>): QuickSettingSpec<F> {
+  return spec
+}
+
+// The rows the quick settings column renders, in order, and the only place a field is special-cased.
+export const QUICK_SETTINGS = [
+  defineQuickSetting({
+    field: 'defaultMode',
+    label: 'mode',
+    fallback: 'manual',
+    read: readDefaultMode,
+    candidates: () => PERMISSION_DEFAULT_MODES,
+    apply: (settings, value) => ({
+      ...settings,
+      permissions: {
+        ...(isPlainObject(settings.permissions) ? settings.permissions : {}),
+        defaultMode: value,
+      },
+    }),
+  }),
+  defineQuickSetting({
+    field: 'effortLevel',
+    label: 'effort',
+    fallback: 'model default',
+    read: readEffortLevel,
+    candidates: () => EFFORT_LEVELS,
+    // Every level persists as `effortLevel`; max/ultracode additionally ride the `--effort` launch
+    // arg (see EFFORT_LAUNCH_ARG_REQUIRED).
+    apply: (settings, value) => ({ ...settings, effortLevel: value }),
+  }),
+  defineQuickSetting({
+    field: 'outputStyle',
+    label: 'style',
+    fallback: 'Default',
+    read: readOutputStyle,
+    candidates: state => state.outputStyleCandidates,
+    apply: (settings, value) => ({ ...settings, outputStyle: value }),
+  }),
+] as const
+
+// A field added to QuickSettingField without a descriptor above fails to compile here rather than
+// rendering no row, never persisting, or silently cycling nothing.
+type AssertNoMissingQuickSetting<T extends never> = T
+type _EveryQuickSettingHasASpec = AssertNoMissingQuickSetting<
+  Exclude<QuickSettingField, (typeof QUICK_SETTINGS)[number]['field']>
+>
+
 function findConfiguredValue<T>(
   selected: SettingsSelectItem | undefined,
   sources: QuickSettingsSource[],
@@ -190,36 +248,34 @@ function findConfiguredValue<T>(
   return undefined
 }
 
+// What one row currently reads as: the pending draft, else the nearest scope that sets the field,
+// else the row's fallback. The cycle steps from the same value the row shows, so both go through
+// here rather than each spelling the recipe out.
+function resolveQuickSettingValue(
+  spec: QuickSettingSpec,
+  selected: SettingsSelectItem | undefined,
+  sources: QuickSettingsSource[],
+  draft: QuickSettingsDraft | undefined,
+): { value: string; source: string; touched: boolean } {
+  const drafted = draft?.[spec.field]
+  const configured = findConfiguredValue(selected, sources, spec.read)
+
+  return {
+    value: drafted ?? configured?.value ?? spec.fallback,
+    source: drafted ? 'pending' : configured?.source ?? 'default',
+    touched: drafted !== undefined,
+  }
+}
+
 export function resolveQuickSettingDisplays(state: SettingsSelectFlowState): QuickSettingDisplay[] {
   const selected = state.items[state.cursor]
   const draft = selected ? state.draftsByPreset[selected.name] : undefined
-  const configuredDefaultMode = findConfiguredValue(selected, state.quickSettingsSources, readDefaultMode)
-  const configuredEffortLevel = findConfiguredValue(selected, state.quickSettingsSources, readEffortLevel)
-  const configuredOutputStyle = findConfiguredValue(selected, state.quickSettingsSources, readOutputStyle)
 
-  return [
-    {
-      field: 'defaultMode',
-      label: 'mode',
-      value: draft?.defaultMode ?? configuredDefaultMode?.value ?? 'manual',
-      source: draft?.defaultMode ? 'pending' : configuredDefaultMode?.source ?? 'default',
-      touched: draft?.defaultMode !== undefined,
-    },
-    {
-      field: 'effortLevel',
-      label: 'effort',
-      value: draft?.effortLevel ?? configuredEffortLevel?.value ?? 'model default',
-      source: draft?.effortLevel ? 'pending' : configuredEffortLevel?.source ?? 'default',
-      touched: draft?.effortLevel !== undefined,
-    },
-    {
-      field: 'outputStyle',
-      label: 'style',
-      value: draft?.outputStyle ?? configuredOutputStyle?.value ?? 'Default',
-      source: draft?.outputStyle ? 'pending' : configuredOutputStyle?.source ?? 'default',
-      touched: draft?.outputStyle !== undefined,
-    },
-  ]
+  return QUICK_SETTINGS.map(spec => ({
+    field: spec.field,
+    label: spec.label,
+    ...resolveQuickSettingValue(spec, selected, state.quickSettingsSources, draft),
+  }))
 }
 
 // A value outside `values` lands on index -1, so the next press starts the list over from the top.
@@ -227,28 +283,6 @@ export function resolveQuickSettingDisplays(state: SettingsSelectFlowState): Qui
 function cycleValue<T extends string>(values: readonly T[], current: string | undefined): T {
   const index = current === undefined ? -1 : values.indexOf(current as T)
   return values[(index + 1) % values.length]!
-}
-
-function cycleDraftField(
-  draft: QuickSettingsDraft,
-  field: QuickSettingField,
-  current: string,
-  outputStyleCandidates: readonly string[],
-): QuickSettingsDraft {
-  switch (field) {
-    case 'defaultMode':
-      return { ...draft, defaultMode: cycleValue(PERMISSION_DEFAULT_MODES, current) }
-    case 'effortLevel':
-      return { ...draft, effortLevel: cycleValue(EFFORT_LEVELS, current) }
-    case 'outputStyle':
-      return { ...draft, outputStyle: cycleValue(outputStyleCandidates, current) }
-    default: {
-      // A new field added to QuickSettingField fails to compile here rather than silently
-      // cycling some other field's value.
-      const exhaustive: never = field
-      return exhaustive
-    }
-  }
 }
 
 // The launch-time `--effort` value a launch needs, or undefined when the effective level is one
@@ -267,26 +301,18 @@ export function resolveEffortLaunchArg(settingsChain: readonly unknown[]): Effor
 
 // Whether a draft has any change worth writing to a preset file.
 export function draftHasPersistableChange(draft: QuickSettingsDraft | undefined): boolean {
-  return Boolean(draft && (
-    draft.defaultMode !== undefined
-    || draft.effortLevel !== undefined
-    || draft.outputStyle !== undefined
-  ))
+  return QUICK_SETTINGS.some(spec => draft?.[spec.field] !== undefined)
 }
 
 export function applyQuickSettingsDraft(settings: Settings, draft: QuickSettingsDraft | undefined): Settings {
-  if (!draft || !draftHasPersistableChange(draft)) return settings
+  if (!draft) return settings
 
-  const next: Settings = { ...settings }
-  // Every level persists as `effortLevel`; max/ultracode additionally ride the `--effort` launch arg
-  // (see EFFORT_LAUNCH_ARG_REQUIRED).
-  if (draft.effortLevel !== undefined) next.effortLevel = draft.effortLevel
-  if (draft.outputStyle !== undefined) next.outputStyle = draft.outputStyle
-  if (draft.defaultMode !== undefined) {
-    const permissions = isPlainObject(settings.permissions) ? settings.permissions : {}
-    next.permissions = { ...permissions, defaultMode: draft.defaultMode }
-  }
-  return next
+  // Seeded with `settings` itself, so a draft that sets nothing returns the caller's object
+  // untouched; every `apply` builds a new object, so a draft that sets anything never does.
+  return QUICK_SETTINGS.reduce<Settings>((next, spec) => {
+    const value = draft[spec.field]
+    return value === undefined ? next : spec.apply(next, value)
+  }, settings)
 }
 
 export function reduceSettingsSelectFlow(
@@ -296,7 +322,7 @@ export function reduceSettingsSelectFlow(
   if (event.type === 'up' || event.type === 'down') {
     const direction = event.type === 'up' ? -1 : 1
     if (state.focus === 'quick-settings') {
-      return { ...state, quickCursor: moveListCursor(state.quickCursor, QUICK_SETTING_FIELDS.length, direction) }
+      return { ...state, quickCursor: moveListCursor(state.quickCursor, QUICK_SETTINGS.length, direction) }
     }
     return { ...state, cursor: moveListCursor(state.cursor, state.items.length, direction) }
   }
@@ -311,13 +337,18 @@ export function reduceSettingsSelectFlow(
 
   if (event.type === 'cycle-current') {
     const selected = state.items[state.cursor]
-    if (!selected) return state
+    const spec = QUICK_SETTINGS[state.quickCursor]
+    if (!selected || !spec) return state
 
-    const displays = resolveQuickSettingDisplays(state)
-    const current = displays[state.quickCursor]
-    if (!current) return state
     const draft = state.draftsByPreset[selected.name] ?? {}
-    const nextDraft = cycleDraftField(draft, current.field, current.value, state.outputStyleCandidates)
+    const { value } = resolveQuickSettingValue(spec, selected, state.quickSettingsSources, draft)
+    // The next value comes out of this field's own candidate ring, which `defineQuickSetting` typed
+    // against this field's draft slot — the cast only covers the computed key TypeScript cannot
+    // correlate.
+    const nextDraft = {
+      ...draft,
+      [spec.field]: cycleValue(spec.candidates(state), value),
+    } as QuickSettingsDraft
 
     return {
       ...state,

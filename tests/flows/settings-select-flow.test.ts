@@ -3,7 +3,7 @@ import {
   applyQuickSettingsDraft,
   createSettingsSelectFlowState,
   draftHasPersistableChange,
-  QUICK_SETTING_FIELDS,
+  QUICK_SETTINGS,
   reduceSettingsSelectFlow,
   resolveEffortLaunchArg,
   resolveQuickSettingDisplays,
@@ -229,13 +229,15 @@ describe('settings select flow', () => {
     expect(state.draftsByPreset.base).toEqual({ outputStyle: 'Default' })
   })
 
-  // The cursor bound comes from QUICK_SETTING_FIELDS while the rows come from
-  // resolveQuickSettingDisplays; if the two ever drift, rows become unreachable or the cursor
-  // parks on nothing.
-  it('keeps the rendered rows in step with the field list the cursor is bounded by', () => {
+  // Pinned to a literal rather than to QUICK_SETTINGS: the rows are a map over that table, so
+  // comparing the two would compare the table with itself. The cursor is bounded by the same table,
+  // so a row silently added, dropped or reordered there shows up here.
+  it('renders exactly the three quick setting rows, in order', () => {
     const state = createSettingsSelectFlowState({ items })
 
-    expect(resolveQuickSettingDisplays(state).map(display => display.field)).toEqual([...QUICK_SETTING_FIELDS])
+    expect(resolveQuickSettingDisplays(state).map(display => display.field))
+      .toEqual(['defaultMode', 'effortLevel', 'outputStyle'])
+    expect(QUICK_SETTINGS).toHaveLength(3)
   })
 
   it('moves the quick settings cursor over all three rows and clamps at the last one', () => {
