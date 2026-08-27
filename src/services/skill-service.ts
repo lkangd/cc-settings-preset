@@ -207,6 +207,10 @@ export function skillStatesToOverrides(states: SkillState[]): Record<string, Ski
       if (state.overrideValue) overrides[state.name] = state.overrideValue
       continue
     }
+    // Only `'off'` is ever written here, so a preset's value domain is closed to the two values
+    // this round-trips: a detected skill cannot be carrying `name-only` for this branch to
+    // flatten. Reopening the domain (importing overrides from Claude settings, say) would mean
+    // keeping the preset-declared value on the state so an untouched save writes it back.
     if (state.toggleable && !state.enabled) overrides[state.name] = 'off'
   }
   return overrides

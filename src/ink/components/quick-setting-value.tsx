@@ -7,14 +7,27 @@ import type {
   QuickSettingField,
 } from '../../flows/settings-select-flow.js'
 
+// Every hue this column can render, stated once. The maps below name a token rather than repeating
+// a literal, so a palette tweak is one edit and two rows that look identical today stay identical.
+const PALETTE = {
+  red: '#EC625C',
+  amber: '#F4BB78',
+  yellow: '#F5F58A',
+  green: '#85F789',
+  cyan: '#A1E7FA',
+  blue: '#7DA6FF',
+  violet: '#B695F3',
+  ultracode: '#8B5CF6',
+} as const
+
 // `Default` and every custom style stay uncolored, which is what separates the built-ins from the
 // styles discovered in ~/.claude/output-styles at a glance. Keyed off BuiltInOutputStyle so adding
 // or renaming a built-in fails to compile until it gets a color here.
 const OUTPUT_STYLE_COLORS = {
-  Proactive: '#F4BB78',
-  Concise: '#F5F58A',
-  Explanatory: '#A1E7FA',
-  Learning: '#B695F3',
+  Proactive: PALETTE.amber,
+  Concise: PALETTE.yellow,
+  Explanatory: PALETTE.cyan,
+  Learning: PALETTE.violet,
 } satisfies Record<Exclude<BuiltInOutputStyle, 'Default'>, string>
 
 // Solid colors keyed by row, then by value. Keyed off QuickSettingField so a row added to the
@@ -25,16 +38,16 @@ const QUICK_SETTING_COLORS: Record<QuickSettingField, Record<string, string | un
   defaultMode: {
     // The neutral starting mode, left uncolored so the modes that loosen permissions stand out.
     manual: undefined,
-    acceptEdits: '#85F789',
-    plan: '#A1E7FA',
-    auto: '#F4BB78',
-    dontAsk: '#EC625C',
-    bypassPermissions: '#EC625C',
+    acceptEdits: PALETTE.green,
+    plan: PALETTE.cyan,
+    auto: PALETTE.amber,
+    dontAsk: PALETTE.red,
+    bypassPermissions: PALETTE.red,
   } satisfies Record<PermissionDefaultMode, string | undefined>,
   effortLevel: {
-    low: '#F4BB78',
-    medium: '#85F789',
-    high: '#B695F3',
+    low: PALETTE.amber,
+    medium: PALETTE.green,
+    high: PALETTE.violet,
     // The top three are animated below instead of taking a solid color.
     xhigh: undefined,
     max: undefined,
@@ -43,12 +56,20 @@ const QUICK_SETTING_COLORS: Record<QuickSettingField, Record<string, string | un
   outputStyle: OUTPUT_STYLE_COLORS,
 }
 
-const XHIGH_BASE = '#85F789'
-const XHIGH_HIGHLIGHT = '#B695F3'
-const ULTRACODE_BACKGROUND = '#8B5CF6'
+const XHIGH_BASE = PALETTE.green
+const XHIGH_HIGHLIGHT = PALETTE.violet
+const ULTRACODE_BACKGROUND = PALETTE.ultracode
 const SCROLL_INTERVAL_MS = 150
 
-const RAINBOW_PALETTE = ['#EC625C', '#F4BB78', '#F5F58A', '#85F789', '#A1E7FA', '#7DA6FF', '#B695F3']
+const RAINBOW_PALETTE = [
+  PALETTE.red,
+  PALETTE.amber,
+  PALETTE.yellow,
+  PALETTE.green,
+  PALETTE.cyan,
+  PALETTE.blue,
+  PALETTE.violet,
+]
 
 // Advances a frame counter on a loop; returns 0 for single-character text and in static renders.
 function useScrollFrame(length: number): number {

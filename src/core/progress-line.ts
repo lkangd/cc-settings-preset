@@ -68,7 +68,10 @@ export function createProgressLine(
     const elapsedSeconds = Math.floor((now() - startedAt) / 1000)
     const line = `${SPINNER_FRAMES[frame % SPINNER_FRAMES.length]} ${current}${elapsedSeconds > 0 ? ` ${elapsedSeconds}s` : ''}`
     // Wrapping would leave the overflowed rows behind on the next redraw, since
-    // `CLEAR_LINE` only reaches the row the cursor sits on.
+    // `CLEAR_LINE` only reaches the row the cursor sits on. Truncating to the current
+    // width covers that; a terminal narrowed mid-step can still reflow an already-drawn
+    // line into two rows and strand the top one, which we accept rather than track how
+    // many rows each frame took — the residue is one stale row until the next screenful.
     write(CLEAR_LINE + truncateToDisplayWidth(line, Math.max((stream.columns ?? 80) - 1, 0)))
   }
 

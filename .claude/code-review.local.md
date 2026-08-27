@@ -1,5 +1,5 @@
 ---
-runner: ccsp -g my-gpt-5.6-luna claude
+runner: ccsp -g glm-5.3-flash claude
 concurrency: 0
 max_rounds: 3
 backlog_dir: docs/code-review-backlog

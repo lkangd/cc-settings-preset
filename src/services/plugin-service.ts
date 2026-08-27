@@ -85,6 +85,10 @@ export function pluginStatesToEnabledPlugins(states: PluginState[]): Record<stri
       enabledPlugins[state.name] = state.enabled
       continue
     }
+    // Only `false` is ever written here, so a preset's value domain is closed: once a missing
+    // plugin gets installed there is no richer intent (`true`) for this branch to drop. If a
+    // path that writes `true` is ever added, the entry would need to carry its preset-declared
+    // value so an untouched save can put it back verbatim.
     if (!state.enabled) enabledPlugins[state.name] = false
   }
   return enabledPlugins
