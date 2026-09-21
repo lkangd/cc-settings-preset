@@ -1,6 +1,6 @@
 ---
 runner: ccsp -g glm-5.3-flash claude
-concurrency: 0
+concurrency: 3
 max_rounds: 3
 backlog_dir: docs/code-review-backlog
 ---
