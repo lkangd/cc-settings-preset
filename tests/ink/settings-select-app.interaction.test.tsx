@@ -158,6 +158,7 @@ describe('SettingsSelectApp interactions', () => {
       latestInputHandler()?.('j', {})
       latestInputHandler()?.('l', {})
       latestInputHandler()?.('j', {})
+      latestInputHandler()?.('j', {}) // third row: effort, now that model sits above it
       latestInputHandler()?.(' ', {})
       latestInputHandler()?.('', { return: true })
     })
@@ -173,7 +174,7 @@ describe('SettingsSelectApp interactions', () => {
     expect(exitMock).toHaveBeenCalledOnce()
   })
 
-  it('reaches the style row on the third quick setting and cycles the discovered styles', () => {
+  it('reaches the style row on the fourth quick setting and cycles the discovered styles', () => {
     const onSubmit = vi.fn()
 
     act(() => {
@@ -189,7 +190,8 @@ describe('SettingsSelectApp interactions', () => {
     act(() => {
       latestInputHandler()?.('l', {})
       latestInputHandler()?.('j', {})
-      latestInputHandler()?.('j', {}) // third row: style
+      latestInputHandler()?.('j', {})
+      latestInputHandler()?.('j', {}) // fourth row: style
       latestInputHandler()?.(' ', {})
       latestInputHandler()?.('', { return: true })
     })
@@ -253,5 +255,44 @@ describe('SettingsSelectApp interactions', () => {
       latestInputHandler()?.('', { escape: true })
     })
     expect(exitMock).toHaveBeenCalledOnce()
+  })
+
+  it('shows the model row and ignores space on a row an env variable decides', () => {
+    const onSubmit = vi.fn()
+    let output: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      output = TestRenderer.create(
+        <SettingsSelectApp
+          items={[{
+            name: 'alpha',
+            sourcePath: '/tmp/alpha.json',
+            settings: { env: { ANTHROPIC_MODEL: 'gpt-5.6-sol' } },
+          }]}
+          onSubmit={onSubmit}
+        />,
+      )
+    })
+
+    const view = output!.root.findAll(node => String(node.type) === 'two-column-settings-view')[0]!
+    expect(view.props.quickSettings.items[1]).toMatchObject({
+      field: 'model',
+      value: 'gpt-5.6-sol',
+      source: 'env',
+      readOnly: true,
+    })
+
+    act(() => {
+      latestInputHandler()?.('l', {})
+      latestInputHandler()?.('j', {})
+      latestInputHandler()?.(' ', {})
+      latestInputHandler()?.('', { return: true })
+    })
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'alpha',
+      settings: { env: { ANTHROPIC_MODEL: 'gpt-5.6-sol' } },
+    }))
+    expect(onSubmit.mock.calls[0]![0]).not.toHaveProperty('changedPresets')
   })
 })

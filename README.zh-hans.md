@@ -261,23 +261,34 @@ claude --settings <临时文件> [你传入的其它参数]
 - **非破坏性启动**：通过临时 settings 文件注入配置，不强制覆盖你的主 settings 文件。
 - **两层分离**：全局「基础环境」与项目「启动差异」解耦，适合多仓库并行开发。
 - **可视化开关**：在终端 TUI 中浏览 JSON、切换插件 / Skill / MCP，比手改数组更不易出错。
-- **快捷设置**：在基础预设选择页即可循环切换所选预设的 `permissions.defaultMode`、`effortLevel` 与 `outputStyle`，仅写回你改过的字段（写入预设文件；Claude Official 则写回 `~/.claude/settings.json`）。
+- **快捷设置**：在基础预设选择页即可循环切换所选预设的 `permissions.defaultMode`、`model`、`effortLevel` 与 `outputStyle`，仅写回你改过的字段（写入预设文件；Claude Official 则写回 `~/.claude/settings.json`）。
 - **直接运行**：`-g` / `-p` / `--dry-run` 供脚本与 CI 使用；配合 `claude -p` 做无头 agent 任务。
 - **记忆上次选择**：按项目目录记住上次使用的基础预设与启动预设。
 - **可恢复会话**：每次启动都会把会话与所用预设 / 启动配置绑定，`ccsp --continue` 与 `ccsp --resume <id>` 可一键恢复原配置并续上对应 Claude 会话。
 - **安全默认值**：`.claude/.ccsp/` 初始化时写入 `.gitignore`（忽略全部），降低临时文件与本地预设误提交概率。
 
-### 快捷设置（mode、effort 与 style）
+### 快捷设置（mode、model、effort 与 style）
 
-基础预设选择页中间新增一栏 **Quick Settings**。用 `h`/`l` 或 ←/→ 把焦点切到该栏，按 `space` 循环切换所选预设的三项 Claude Code 配置：
+基础预设选择页中间新增一栏 **Quick Settings**。用 `h`/`l` 或 ←/→ 把焦点切到该栏，按 `space` 循环切换所选预设的四项 Claude Code 配置：
 
 - **mode** —— `permissions.defaultMode`：`manual` → `acceptEdits` → `plan` → `auto` → `dontAsk` → `bypassPermissions`。
-- **effort** —— `effortLevel`：`low` → `medium` → `high` → `xhigh` → `max` → `ultracode`。
+- **model** —— `model`：该预设真正调用得到的模型（见下）。`default` 表示删除该键，把模型选择交还给 Claude Code。
+- **effort** —— 上面那个模型的 effort 等级：`low` → `medium` → `high` → `xhigh` → `max` → `ultracode`。
 - **style** —— `outputStyle`：内置的 `Default` → `Proactive` → `Concise` → `Explanatory` → `Learning`，其后接 `~/.claude/output-styles/` 中扫描到的自定义样式。
 
-未改动的字段会展示按优先级（managed → local → project → user）解析出的有效默认值。只有你**实际切换过**的字段才会被写入，且所有 effort 等级都以同一种方式持久化：作为 `effortLevel` 写入预设。
+未改动的字段会展示按优先级（managed → local → project → user）解析出的有效默认值。只有你**实际切换过**的字段才会被写入。
 
-`max` 与 `ultracode` 多一步处理。Claude Code 的 settings schema 中 `effortLevel` 只接受 `low` / `medium` / `high` / `xhigh`，因此它永远不会从 settings 文件应用这两个值，只写 `effortLevel: "max"` 的预设会静默回落到 `~/.claude/settings.json` 里继承来的 `effortLevel`。为此 CCSP 会在命令行上再声明一次：当按该栏展示的同一条优先级链（preset → managed → local → project → user）解析出的有效等级是 `max` 或 `ultracode` 时，启动就追加 `--effort max` / `--effort ultracode`，其优先级高于所有 settings 作用域；直接运行与 `--resume` 同样适用。若你在自己的参数里显式传了 `--effort <level>` 或 `--effort=<level>`，则以你的为准。
+**模型环**由同一条链上各 `env` 块合并推导，**不掺** `process.env` —— 这一栏描述的是「这个预设会把会话拉起成什么样」，掺进当前 shell 会让同一预设在不同终端显示出不同的环。当 `ANTHROPIC_BASE_URL` 指向 `api.anthropic.com` 以外的主机时，环是 `default` 加上链上通过 `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU,FABLE}_MODEL` 与 `ANTHROPIC_DEFAULT_MODEL` 声明的模型（保序去重）—— 在重命名模型的网关后面，Claude 的别名一个都调不到。否则环是 `default` / `opus` / `sonnet` / `haiku` / `fable` —— 与 Claude Code 自己的 `/model` 选择器一致 —— 后面再接链上被当作**选择**写下的模型（各处 `model` 的值、`availableModels` 条目）。只做转发、不改名的代理仍然沿用官方环。
+
+`modelSettings` 的 key **有意**不作为候选来源：那是一本按模型累积的 effort 账本，所有网关共用同一个 user settings 文件，一个模型出现在里面只说明它曾经跑过，不代表当前这条链调得到它。被链上 env 重定向的别名一律显示为它指向的模型 ID —— 环里如此，行上的当前值也如此，因此这一行永远不会显示一个会话根本不用的名字。`opusplan` 是唯一用另外两个别名定义的别名（计划用 `opus`、执行用 `sonnet`），因此只有当链上把两半都指向同一个模型时它才折叠成那个名字，否则原样保留 `opusplan`。
+
+链上配置出来的值**一定**在环里，哪怕这个环推导不出它：网关预设和其他设置一样会继承 `~/.claude/settings.json` 里的 `model` 键，而该网关没有重定向的别名，仍然是会话真的会去请求的模型。它会原样显示，且循环一圈能回到它。
+
+**effort 跟着 model 走。** Claude Code 把 effort 按模型存在 [`modelSettings`](https://docs.claude.com/zh-CN/docs/claude-code/settings-reference#modelsettings) 下，且同一个文件内模型条目优先于顶层 `effortLevel`。effort 行按同样的规则解析，值来自模型条目时 source 标成 `<scope>·model`。写回同理：model 行是具体模型 ID 时写进 `modelSettings["<model id>"]`，是别名或 `default` 时写进顶层 —— 本工具不去猜别名指向哪个版本。并且只写不删：你手写给其他模型的等级原样保留。
+
+启动时 CCSP 会无条件把解析出的等级再声明一次 `--effort <level>`，它优先于所有 settings 作用域；因此无论哪个文件里藏着该模型的 `modelSettings` 条目，这一栏显示的等级就是会话实际跑的等级。直接运行与 `--resume` 同样适用。若你在自己的参数里显式传了 `--effort <level>` 或 `--effort=<level>`，则以你的为准。
+
+**被 env 决定的行是只读的。** 链上 `env` 块里的 `ANTHROPIC_MODEL` 直接决定会话模型，`CLAUDE_CODE_EFFORT_LEVEL` 直接决定 effort 等级，二者都压过所有 settings 键，后者还压过 `--effort`。这两行会显示变量的值、source 标成 `env`、整行暗色，并且忽略 `space`；光标仍可停在上面，好让你看清值的来源，转而去改 `env` 块。
 
 自定义输出样式读取自 `~/.claude/output-styles/*.md`，优先取文件 frontmatter 中的 `name`，缺失时回落到文件名 —— 与 Claude Code 的规则一致，因此写入的值一定是 Claude Code 能解析的。项目级与插件样式有意不纳入：基础预设页在选定项目之前运行，项目样式会产生一个换个目录就失效的预设值。由该栏之外设定的样式（项目、managed 或插件）仍会原样展示，按 `space` 则从列表首项开始循环。与另外两行不同，`Default` 是显式写入的，而不是删除该键。
 

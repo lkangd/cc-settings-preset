@@ -1029,10 +1029,10 @@ async function launchClaudeWithFinalizedSettings(input: {
   }
 }
 
-// `max` and `ultracode` are persisted as `effortLevel` like every other level, but Claude Code does
-// not apply them from a settings file, so the launch must restate them as `--effort <level>`. The
-// effective level is resolved over the same scope chain the quick settings column displays, so a
-// max/ultracode inherited from a broader scope reaches the session too.
+// The launch restates the effective effort level as `--effort <level>`, whatever it is: the flag
+// outranks every settings scope, which is what stops a `modelSettings` entry in any file from
+// quietly running the session at a level other than the one the quick settings column showed. The
+// level is resolved over the same scope chain that column displays, for the same model.
 // A user-supplied `--effort` (either spelling) always takes priority over what the settings imply.
 function withEffortLaunchArg(
   args: string[],
@@ -1187,7 +1187,7 @@ async function launchFromBinding(binding: SessionBinding, extraArgs: string[]): 
     presetLabel: bindingPresetLabel(binding),
     toggles: binding.toggles as unknown as ProjectLaunchToggleState,
     launchSettings: binding.launchSettings,
-    // A max/ultracode effort persisted in the bound base settings is restored as `--effort` by
+    // An effort level persisted in the bound base settings is restored as `--effort` by
     // launchClaudeWithFinalizedSettings (see withEffortLaunchArg).
     args: ['--resume', binding.sessionId, ...filteredArgs],
   })

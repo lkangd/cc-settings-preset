@@ -149,6 +149,7 @@ export function TwoColumnSettingsView({
                 <TruncateText
                   key={item.field}
                   {...(index === quickSettings.cursor ? { color: 'cyan' as const } : {})}
+                  {...(item.readOnly ? { dimColor: true } : {})}
                 >
                   {quickSettings.focus === 'quick-settings' && index === quickSettings.cursor ? '❯ ' : '  '}
                   {item.label}: <QuickSettingValue field={item.field} value={item.value} /> [{item.source}]{item.touched ? ' *' : ''}

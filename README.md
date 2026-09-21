@@ -261,23 +261,34 @@ claude --settings <temp-file> [your other args]
 - **Non-destructive launch** — inject config via temp files; does not force-overwrite your main settings.
 - **Two-layer split** — global “base environment” vs project “launch delta” for multi-repo work.
 - **Visual toggles** — terminal TUI to browse JSON and flip plugins / skills / MCP.
-- **Quick settings** — cycle `permissions.defaultMode`, `effortLevel` and `outputStyle` for the selected preset right from the base screen; only fields you touch persist (to the preset, or `~/.claude/settings.json` for Claude Official).
+- **Quick settings** — cycle `permissions.defaultMode`, `model`, `effortLevel` and `outputStyle` for the selected preset right from the base screen; only fields you touch persist (to the preset, or `~/.claude/settings.json` for Claude Official).
 - **Direct run** — `-g` / `-p` / `--dry-run` for scripts and CI; combine with `claude -p` for headless agent tasks.
 - **Remembers last choice** — per project directory for base and launch presets.
 - **Resumable sessions** — every launch is bound to its preset/launch config; `ccsp --continue` and `ccsp --resume <id>` restore the original config and resume the matching Claude session in one shot.
 - **Safer defaults** — `.claude/.ccsp/` gets a `.gitignore` that ignores everything on init.
 
-### Quick settings (mode, effort & style)
+### Quick settings (mode, model, effort & style)
 
-The base preset selection screen has a middle **Quick Settings** column. Move focus there (`h`/`l` or ←/→) and press `space` to cycle three Claude Code options for the selected preset:
+The base preset selection screen has a middle **Quick Settings** column. Move focus there (`h`/`l` or ←/→) and press `space` to cycle four Claude Code options for the selected preset:
 
 - **mode** — `permissions.defaultMode`: `manual` → `acceptEdits` → `plan` → `auto` → `dontAsk` → `bypassPermissions`.
-- **effort** — `effortLevel`: `low` → `medium` → `high` → `xhigh` → `max` → `ultracode`.
+- **model** — `model`: the models this preset can actually reach (see below). `default` means the key is removed, leaving the choice to Claude Code.
+- **effort** — the effort level of the model named above: `low` → `medium` → `high` → `xhigh` → `max` → `ultracode`.
 - **style** — `outputStyle`: the built-ins `Default` → `Proactive` → `Concise` → `Explanatory` → `Learning`, followed by any custom styles found in `~/.claude/output-styles/`.
 
-Fields you don't touch show the effective default resolved by precedence (managed → local → project → user). Only fields you actually cycle are written, and every effort level persists the same way: as `effortLevel` in the preset.
+Fields you don't touch show the effective default resolved by precedence (managed → local → project → user). Only fields you actually cycle are written.
 
-`max` and `ultracode` need one extra step. Claude Code's settings schema only accepts `low` / `medium` / `high` / `xhigh` for `effortLevel`, so it never applies those two from a settings file, and a preset that only stored `effortLevel: "max"` would silently fall back to the `effortLevel` inherited from `~/.claude/settings.json`. CCSP therefore also restates them on the command line: when the effective level — resolved over the same chain the column displays (preset → managed → local → project → user) — is `max` or `ultracode`, the launch appends `--effort max` / `--effort ultracode`, which outranks every settings scope. This applies to direct run and `--resume` too. An explicit `--effort <level>` or `--effort=<level>` in your own args always wins.
+**The model ring** is derived from the `env` blocks of the same chain, `process.env` excluded — the column describes what the preset makes of a session, not what your current shell would. When `ANTHROPIC_BASE_URL` points at a host other than `api.anthropic.com`, the ring is `default` plus the models the chain declares through `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU,FABLE}_MODEL` and `ANTHROPIC_DEFAULT_MODEL`, deduplicated — the Claude aliases reach nothing behind a gateway that renames models. Otherwise the ring is `default` / `opus` / `sonnet` / `haiku` / `fable` — the same set Claude Code's own `/model` picker offers — followed by every model the chain names as a choice (`model` values and `availableModels` entries). A gateway that renames nothing is a plain forwarding proxy, so it keeps the official ring.
+
+`modelSettings` keys are deliberately not a source for the ring: that key is a saved-effort ledger that accumulates an entry for every model you have ever used, in the one user settings file, across every gateway — a model is in it because it once ran, not because the current chain can reach it. An alias the chain's env redirects is always shown as the model it points at, both in the ring and in the row's current value, so the row never displays a name the session does not use. `opusplan` is the one alias defined in terms of two others — it plans on `opus` and executes on `sonnet` — so it collapses to a single name only where the chain points both halves at one model, and otherwise stays `opusplan`.
+
+Whatever the chain configures is always in the ring, even when the ring could not derive it: a preset behind a gateway inherits the `model` key from `~/.claude/settings.json` like every other setting, and an alias that gateway does not redirect is still the model the session would ask for. It is shown as it is, and one lap of the ring comes back to it.
+
+**Effort follows the model.** Claude Code saves a level per model under [`modelSettings`](https://docs.claude.com/en/docs/claude-code/settings-reference#modelsettings), and within one file a model's saved level outranks the top-level `effortLevel`. The effort row reads the same way and labels its source `<scope>·model` when the value came from a model entry. Choosing a level writes it back the same way: under `modelSettings["<model id>"]` when the model row names a concrete ID, at the top level when it names an alias or `default` — this tool does not guess which model an alias resolves to. Nothing is ever removed: levels you saved by hand for other models stay put.
+
+At launch CCSP always restates the resolved level as `--effort <level>`, which outranks every settings scope, so the level this column shows is the level the session runs at no matter which file holds a `modelSettings` entry for that model. This applies to direct run and `--resume` too. An explicit `--effort <level>` or `--effort=<level>` in your own args always wins.
+
+**Rows an env variable decides are read-only.** `ANTHROPIC_MODEL` in the chain's `env` block settles the session's model, and `CLAUDE_CODE_EFFORT_LEVEL` settles its effort level, over every settings key and over `--effort`. Those rows show the variable's value with the source `env`, render dimmed, and ignore `space` — the cursor still stops on them, so you can see where the value comes from and edit the `env` block instead.
 
 Custom output styles are read from `~/.claude/output-styles/*.md`, using each file's frontmatter `name` and falling back to its file name — the same rule Claude Code applies, so the value written is one Claude Code resolves. Project-level and plugin styles are deliberately not offered: the base screen runs before a project is chosen, so a project style would produce a preset value that stops resolving elsewhere. A style set outside this column (project, managed or plugin) is still shown verbatim, and `space` cycles from the top of the list. Unlike the other two rows, `Default` is written out explicitly rather than removing the key.
 

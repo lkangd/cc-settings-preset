@@ -1,4 +1,5 @@
 import React from 'react'
+import chalk from 'chalk'
 import { renderToString } from 'ink'
 import { describe, expect, it } from 'vitest'
 import { TwoColumnSettingsView } from '../../src/ink/components/two-column-settings-view.js'
@@ -150,8 +151,8 @@ describe('TwoColumnSettingsView', () => {
           cursor: 1,
           modifiedPresetNames: ['base'],
           items: [
-            { field: 'defaultMode', label: 'mode', value: 'plan', source: 'preset', touched: false },
-            { field: 'effortLevel', label: 'effort', value: 'xhigh', source: 'pending', touched: true },
+            { field: 'defaultMode', label: 'mode', value: 'plan', source: 'preset', touched: false, readOnly: false },
+            { field: 'effortLevel', label: 'effort', value: 'xhigh', source: 'pending', touched: true, readOnly: false },
           ],
         }}
       />,
@@ -177,8 +178,8 @@ describe('TwoColumnSettingsView', () => {
           focus: 'presets',
           cursor: 1,
           items: [
-            { field: 'defaultMode', label: 'mode', value: 'plan', source: 'preset', touched: false },
-            { field: 'effortLevel', label: 'effort', value: 'xhigh', source: 'pending', touched: true },
+            { field: 'defaultMode', label: 'mode', value: 'plan', source: 'preset', touched: false, readOnly: false },
+            { field: 'effortLevel', label: 'effort', value: 'xhigh', source: 'pending', touched: true, readOnly: false },
           ],
         }}
       />,
@@ -200,7 +201,7 @@ describe('TwoColumnSettingsView', () => {
         quickSettings={{
           focus: 'quick-settings',
           cursor: 0,
-          items: [{ field: 'effortLevel', label: 'effort', value, source: 'pending', touched: true }],
+          items: [{ field: 'effortLevel', label: 'effort', value, source: 'pending', touched: true, readOnly: false }],
         }}
       />,
       { columns: 120 },
@@ -208,5 +209,39 @@ describe('TwoColumnSettingsView', () => {
 
     expect(build('max')).toContain('effort: max [pending] *')
     expect(build('ultracode')).toContain('effort: ultracode [pending] *')
+  })
+
+  it('dims a row an env variable decides and shows the model row verbatim', () => {
+    // Tests run without a TTY, so ink emits no styling unless chalk is told colors are available.
+    const previousLevel = chalk.level
+    chalk.level = 3
+    const output = withStdoutColumns(120, () => renderToString(
+      <TwoColumnSettingsView
+        title="Settings"
+        help="space cycle"
+        items={[{ name: 'base', sourcePath: '/tmp/base.json', settings: {} }]}
+        cursor={0}
+        quickSettings={{
+          focus: 'quick-settings',
+          cursor: 0,
+          items: [
+            { field: 'model', label: 'model', value: 'gpt-5.6-sol', source: 'env', touched: false, readOnly: true },
+            { field: 'effortLevel', label: 'effort', value: 'high', source: 'preset·model', touched: false, readOnly: false },
+          ],
+        }}
+      />,
+      { columns: 120 },
+    ))
+    chalk.level = previousLevel
+    // Only the column's own rows, not the resident line above the boxes. Matched on the stripped
+    // text because a colored value splits its own row's text with escape codes.
+    const rows = output.split(/\n/).filter(line => line.includes('│'))
+    const rowFor = (text: string) => rows.find(line => stripAnsi(line).includes(text))
+
+    expect(stripAnsi(output)).toContain('model: gpt-5.6-sol [env]')
+    // The column truncates: what matters is that the source says where the value came from.
+    expect(stripAnsi(output)).toContain('effort: high [preset·mod')
+    expect(rowFor('model: gpt-5.6-sol')).toContain('\u001b[2m')
+    expect(rowFor('effort: high')).not.toContain('\u001b[2m')
   })
 })

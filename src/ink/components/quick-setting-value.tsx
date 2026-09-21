@@ -44,6 +44,9 @@ const QUICK_SETTING_COLORS: Record<QuickSettingField, Record<string, string | un
     dontAsk: PALETTE.red,
     bypassPermissions: PALETTE.red,
   } satisfies Record<PermissionDefaultMode, string | undefined>,
+  // Any string, including a gateway model ID this build has never seen — same open-ended treatment
+  // as `outputStyle`, so no model name renders as a missing color.
+  model: {},
   effortLevel: {
     low: PALETTE.amber,
     medium: PALETTE.green,
